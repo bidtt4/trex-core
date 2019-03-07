@@ -259,6 +259,7 @@ private:
 
     void add_port_duration(double duration,
                            uint8_t port_id,
+                           uint32_t profile_id,
                            int event_id);
 
     void update_mac_addr(TrexStream * stream,

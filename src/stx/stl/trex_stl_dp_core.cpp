@@ -740,11 +740,12 @@ bool TrexStatelessDpPerPort::stop_traffic(uint8_t  port_id,
         }
     }
 
-    for (auto dp_stream : m_active_nodes) {
+    for (auto& dp_stream : m_active_nodes) {
         CGenNodeStateless * node =dp_stream.m_node;
         assert(node->get_port_id() == port_id);
         if (profile_id && (node->get_profile_id() != profile_id))
             continue;
+
         if ( node->get_state() == CGenNodeStateless::ss_ACTIVE) {
             node->mark_for_free();
             m_active_streams--;
@@ -754,7 +755,8 @@ bool TrexStatelessDpPerPort::stop_traffic(uint8_t  port_id,
         }
     }
     /* remove all elements from m_active_nodes */
-    m_active_nodes.erase(std::remove_if(m_active_nodes.begin(), m_active_nodes.end(), [](CDpOneStream& x) {return x.m_node == NULL;}), m_active_nodes.end());
+    auto it = std::remove_if(m_active_nodes.begin(), m_active_nodes.end(), [](CDpOneStream& x) {return x.m_dp_stream == NULL;});
+    m_active_nodes.erase(it, m_active_nodes.end());
 
     /* check for active PCAP node */
     if (m_active_pcap_node) {
@@ -968,6 +970,7 @@ void TrexStatelessDpCore::rx_handle_packet(int dir,
 void
 TrexStatelessDpCore::add_port_duration(double duration,
                                        uint8_t port_id,
+                                       uint32_t profile_id,
                                        int event_id){
     if (duration > 0.0) {
         CGenNodeCommand *node = (CGenNodeCommand *)m_core->create_node() ;
@@ -977,7 +980,7 @@ TrexStatelessDpCore::add_port_duration(double duration,
         /* make sure it will be scheduled after the current node */
         node->m_time = m_core->m_cur_time_sec + duration ;
 
-        TrexStatelessDpStop * cmd=new TrexStatelessDpStop(port_id);
+        TrexStatelessDpStop * cmd=new TrexStatelessDpStop(port_id, profile_id);
 
 
         /* test this */
@@ -1315,7 +1318,7 @@ TrexStatelessDpCore::start_traffic(TrexStreamsCompiledObj *obj,
 
 
     if ( duration > 0.0 ){
-        add_port_duration( duration ,obj->get_port_id(),event_id );
+        add_port_duration( duration ,obj->get_port_id(), profile_id, event_id );
     }
 
 }
@@ -1398,7 +1401,7 @@ TrexStatelessDpCore::push_pcap(uint8_t port_id,
 
 
     if (duration > 0.0) {
-        add_port_duration(duration, port_id, event_id);
+        add_port_duration(duration, port_id, 0, event_id);
     }
 
      m_state = TrexStatelessDpCore::STATE_PCAP_TX;
