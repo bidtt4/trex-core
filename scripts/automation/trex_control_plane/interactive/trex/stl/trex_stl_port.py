@@ -85,7 +85,7 @@ class STLPort(Port):
         elif 'profiles' in rc_data.keys():
             for profile_id, stream_value_list in rc_data['profiles'].items():
                 for stream_id, stream_value in stream_value_list.items():
-                    self.profile_manager.set_stream_id(stream_id, profile_id)
+                    self.profile_manager.set_stream_id(int(stream_id), profile_id)
                     self.streams[int(stream_id)] = STLStream.from_json(stream_value)
         else:
              raise Exception("invalid return from server, %s" % rc_data)
@@ -690,8 +690,42 @@ class STLPort(Port):
         print("Duration              (base / req):   {:^12} / {:^12}".format(format_time(exp_time_base_sec),
                                                                              format_time(exp_time_factor_sec)))
 
+    ################# profiles printout ######################
+    def generate_loaded_profiles(self):
 
-    
+        info_table = text_tables.TRexTextTable()
+        info_table.set_cols_align(["c"] + ["c"] + ["c"])
+        info_table.set_cols_width([15]  + [10]  + [10])
+        info_table.header(["Profile ID", "state", "stream ID"])
+
+        profile_id_list = self.profile_manager.get_all_profiles()
+        for profile_id in profile_id_list:
+            profile_streams = self.profile_manager.get_stream_ids(profile_id) or '-'
+            this_state = self.profile_manager.get_profile_state(profile_id)
+            profile_state = self.__name_from_state(this_state)
+            info_table.add_row([
+                profile_id,
+                profile_state,
+                profile_streams
+                ])
+
+        return info_table
+
+    def __name_from_state(self, profile_state):
+        if profile_state == self.STATE_IDLE:
+            return "IDLE"
+        elif profile_state == self.STATE_STREAMS:
+            return "STREAMS"
+        elif profile_state == self.STATE_TX:
+            return "TX"
+        elif profile_state == self.STATE_PAUSE:
+            return "PAUSE"
+        elif profile_state == self.STATE_PCAP_TX:
+            return "PCAP_TX"
+        ##ASTF is not supported
+        else:
+            return "UNKNOWN"
+
     ################# stream printout ######################
     def generate_loaded_streams_sum(self, stream_id_list, table_format = True):
         self.sync_streams()

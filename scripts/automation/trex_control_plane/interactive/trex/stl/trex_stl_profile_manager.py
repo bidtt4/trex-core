@@ -30,7 +30,8 @@ class STLProfileManager(object):
 
     def set_stream_id (self, stream_id, profile_id = "_", state = STATE_STREAMS):
         self.stream_list.setdefault(profile_id, [])
-        self.stream_list[profile_id].append(stream_id)
+        if stream_id not in self.stream_list.get(profile_id):
+            self.stream_list[profile_id].append(stream_id)
         self.state_list.setdefault(profile_id, state)
         return self.stream_list.get(profile_id)
 

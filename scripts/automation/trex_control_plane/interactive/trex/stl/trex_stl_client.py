@@ -1635,6 +1635,14 @@ class STLClient(TRexClient):
         else:
             raise TRexError('Unhandled stats: %s' % opts.stats)
 
+    def _get_profiles(self, port_id_list):
+        profiles_per_port = OrderedDict()
+        for port_id in port_id_list:
+            data = self.ports[port_id].generate_loaded_profiles()
+            if data:
+                profiles_per_port[port_id] = data
+        return profiles_per_port
+
     def _get_streams(self, port_id_list, streams_mask, table_format):
         streams_per_port = OrderedDict()
         for port_id in port_id_list:
@@ -1642,6 +1650,28 @@ class STLClient(TRexClient):
             if data:
                 streams_per_port[port_id] = data
         return streams_per_port
+
+    @console_api('profiles', 'STL', True, True)
+    def profiles_line(self, line):
+        '''Get loaded to server profiles information'''
+        parser = parsing_opts.gen_parser(self,
+                                         "profiles",
+                                         self.profiles_line.__doc__,
+                                         parsing_opts.PORT_LIST_WITH_ALL)
+
+        opts = parser.parse_args(line.split())
+        if not opts:
+            return opts
+
+        profiles_per_port = self._get_profiles(opts.ports)
+
+        if not profiles_per_port:
+            self.logger.info(format_text("No profiles found with desired filter.\n", "bold", "magenta"))
+
+        for port_id, port_profiles_table in profiles_per_port.items():
+            if port_profiles_table:
+                text_tables.print_table_with_header(port_profiles_table,
+                                                    header = 'Port %s:' % port_id)
 
     @console_api('streams', 'STL', True, True)
     def streams_line(self, line):
