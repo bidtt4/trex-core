@@ -7,7 +7,7 @@ Author:
 """
 
 from .trex_exceptions import TRexError, TRexTypeError
-from .trex_types import listify, STLDynamicProfile
+from .trex_types import listify, PortProfileID
 from ..utils.common import *
 
 
@@ -44,7 +44,7 @@ def check_profile_arg(func):
         if argval is None:
             raise TypeError("%s(...): arg '%s' is null"
                             % (fname, argname))
-        if not isinstance(argval[0], STLDynamicProfile):
+        if not isinstance(argval[0], PortProfileID):
             supermeth = getattr(super(self.__class__, self), fname, None)
             if supermeth is not None:
                 return supermeth(*args, **kwargs)

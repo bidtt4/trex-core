@@ -10,7 +10,6 @@ import cProfile, pstats
 from scapy.utils import *
 from scapy.utils6 import *
 from ..common.trex_types import listify, validate_type
-#from ..common.trex_types import STLDynamicProfile
 
 try:
     import pwd

@@ -11,7 +11,7 @@ from ..common.trex_exceptions import *
 from ..common.trex_logger import Logger
 from ..common.trex_client import TRexClient, PacketBuffer
 from ..common.trex_types import *
-from ..common.trex_types import STLDynamicProfile
+from ..common.trex_types import PortProfileID
 from ..common.trex_psv import *
 from ..common.trex_api_annotators import client_api, console_api
 
@@ -133,9 +133,9 @@ class STLClient(TRexClient):
     def _validate_input_profiles(self, user_input, single = False):
         if single:
             result_profile = user_input
-            validate_type('port', user_input, (int, str, STLDynamicProfile))
-            if not isinstance(user_input, STLDynamicProfile):
-                result_profile = STLDynamicProfile(str(user_input))
+            validate_type('port', user_input, (int, str, PortProfileID))
+            if not isinstance(user_input, PortProfileID):
+                result_profile = PortProfileID(str(user_input))
             if result_profile.profile_id == "*":
                 raise TRexError("Cannot pass %s for this command. You must give one single profile" %result_profile)
             return result_profile
@@ -143,8 +143,8 @@ class STLClient(TRexClient):
         default_profiles = listify(user_input)
         default_profiles = list(default_profiles)
         for idx, val in enumerate(default_profiles):
-            if not isinstance(val, STLDynamicProfile):
-                new_val = STLDynamicProfile(val)
+            if not isinstance(val, PortProfileID):
+                new_val = PortProfileID(val)
                 default_profiles[idx] = new_val
 
         ports = []
@@ -163,7 +163,7 @@ class STLClient(TRexClient):
 
             all_profiles = self.ports[pid].profile_manager.get_all_profiles()
             for key in all_profiles:
-                profile = STLDynamicProfile(str(pid))
+                profile = PortProfileID(str(pid))
                 profile.set_profile_id(key)
                 result_profiles.append(profile)
 
@@ -182,7 +182,7 @@ class STLClient(TRexClient):
             all_profiles = self.ports[port].profile_manager.get_all_profiles()
             for key in all_profiles:
                 if self.ports[port].profile_manager.is_active(key):
-                   profile = STLDynamicProfile(str(port))
+                   profile = PortProfileID(str(port))
                    profile.set_profile_id(key)
                    active_profiles.append(profile)
 
@@ -195,7 +195,7 @@ class STLClient(TRexClient):
             all_profiles = self.ports[port].profile_manager.get_all_profiles()
             for key in all_profiles:
                 if self.ports[port].profile_manager.is_transmitting(key):
-                   profile = STLDynamicProfile(str(port))
+                   profile = PortProfileID(str(port))
                    profile.set_profile_id(key)
                    transmitting_profiles.append(profile)
 
@@ -208,7 +208,7 @@ class STLClient(TRexClient):
             all_profiles = self.ports[port].profile_manager.get_all_profiles()
             for key in all_profiles:
                 if self.ports[port].profile_manager.is_paused(key):
-                   profile = STLDynamicProfile(str(port))
+                   profile = PortProfileID(str(port))
                    profile.set_profile_id(key)
                    paused_profiles.append(profile)
 
@@ -239,7 +239,7 @@ class STLClient(TRexClient):
 
         all_profiles = []
         for port in ports:
-            profile = STLDynamicProfile(port)
+            profile = PortProfileID(port)
             profile.set_profile_id("*")
             all_profiles.append(profile)
     
@@ -520,7 +520,7 @@ class STLClient(TRexClient):
     def __pre_start_check (self, cmd_name, ports, force, streams_per_port = None):
         ports = listify(ports)
         for port in ports:
-            if isinstance(port, STLDynamicProfile):
+            if isinstance(port, PortProfileID):
                 if port.profile_id == "*":
                     err = 'Profile id * is invalid for starting the traffic. Please assign a specific profile id'
                     raise TRexError(err)
@@ -666,9 +666,9 @@ class STLClient(TRexClient):
                 raise TRexError('Must use even number of ports in synchronized mode')
             for port in ports:
                 pair_port = int(port) ^ 0x1
-                if isinstance(port, STLDynamicProfile):
+                if isinstance(port, PortProfileID):
                     pair_port = str(pair_port) + "." + str(port.profile_id)
-                    pair_port = STLDynamicProfile(pair_port)
+                    pair_port = PortProfileID(pair_port)
 
                 if pair_port not in ports:
                     raise TRexError('Must use adjacent ports in synchronized mode. Port "%s" has not pair.' % port)
@@ -720,7 +720,7 @@ class STLClient(TRexClient):
 
         ports = self._validate_input_profiles(ports)
         if ports is None:
-            ports = self.get_active_profiles()
+            ports = self._get_active_profiles()
             if not ports:
                 return
 

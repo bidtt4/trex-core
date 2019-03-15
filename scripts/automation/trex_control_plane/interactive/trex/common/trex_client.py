@@ -22,7 +22,7 @@ from .trex_conn import Connection
 from .trex_ns import NSCmds,NSCmd,NSCmdResult
 from .trex_logger import ScreenLogger
 from .trex_types import *
-from .trex_types import STLDynamicProfile
+from .trex_types import PortProfileID
 from .trex_exceptions import *
 from .trex_psv import *
 from .trex_vlan import VLAN
@@ -384,7 +384,7 @@ class TRexClient(object):
 
             port_id = port
             profile_id = None
-            if isinstance(port, STLDynamicProfile):
+            if isinstance(port, PortProfileID):
                 port_id =  port.port_id
                 profile_id = port.profile_id
 

@@ -18,7 +18,7 @@ __all__ = ["RC", "RC_OK", "RC_ERR", "RC_WARN", "listify", "listify_if_int", "val
 
 
 
-class STLDynamicProfile(object):
+class PortProfileID(object):
     def __init__ (self, port_str):
         try:
             port_str = str(port_str)

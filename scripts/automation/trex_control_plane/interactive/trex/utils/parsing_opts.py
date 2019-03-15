@@ -5,7 +5,7 @@ from .text_opts import format_text
 
 from ..common.trex_vlan import VLAN
 from ..common.trex_types import *
-from ..common.trex_types import STLDynamicProfile
+from ..common.trex_types import PortProfileID
 from ..common.trex_exceptions import TRexError, TRexConsoleNoAction, TRexConsoleError
 from ..common.trex_psv import PSV_ACQUIRED
 
@@ -531,7 +531,7 @@ class OPTIONS_DB_ARGS:
          'dest':'ports',
          'metavar': 'PORT[.PROFILE]',
          'action': 'merge',
-         'type': STLDynamicProfile,
+         'type': PortProfileID,
          'help': dynamic_profile_help,
          'default': []})
 
