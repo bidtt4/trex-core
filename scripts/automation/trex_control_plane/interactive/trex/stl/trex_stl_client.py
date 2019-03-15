@@ -94,7 +94,7 @@ class STLClient(TRexClient):
         self.ports.clear()
         for info in system_info['ports']:
             port_id = info['index']
-            self.ports[port_id] = STLPort(self.ctx, port_id, self.conn.rpc, info)
+            self.ports[port_id] = STLPort(self.ctx, port_id, self.conn.rpc, info, self.is_dynamic)
         return RC_OK()
 
 

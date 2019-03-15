@@ -31,7 +31,7 @@ class STLPort(Port):
 
     MASK_ALL = ((1 << 64) - 1)
 
-    def __init__ (self, ctx, port_id, rpc, info):
+    def __init__ (self, ctx, port_id, rpc, info, dynamic):
         Port.__init__(self, ctx, port_id, rpc, info)
 
         self.has_rx_streams = False
@@ -39,7 +39,7 @@ class STLPort(Port):
         self.profile = None
         self.next_available_id = 1
         self.profile_manager = STLProfileManager(port_id)
-        self.is_dynamic = False
+        self.is_dynamic = dynamic
 
     def __state_from_name_dynamic(self, profile_state):
         if profile_state == "IDLE":
@@ -64,30 +64,33 @@ class STLPort(Port):
         self.state = self.profile_manager.get_port_state()
 
     def sync_port_state(self, rc_state):
-        # dynamic profile server version
-        if type(rc_state) is dict:
-            self.state_from_name_dynamic(rc_state)
-            self.is_dynamic = True
-        # legacy server version
-        elif type(rc_state) is unicode:
-            self.state_from_name(rc_state)
-            self.profile_manager.set_state(self.state)
-        else:
+        try:
+            # dynamic profile server version (rc_state is dictionary)
+            if self.is_dynamic:
+                self.state_from_name_dynamic(rc_state)
+            # legacy server version (rc_state is unicode)
+            else:
+                self.state_from_name(rc_state)
+                self.profile_manager.set_state(self.state)
+        except Exception as e:
+            print(e)
             raise Exception("invalid return from server, %s" % rc_state())
 
     def sync_port_streams(self, rc_data):
-        #Legacy trex server mode
-        if 'streams' in rc_data.keys():
-            for k, v in rc_data['streams'].items():
-                self.streams[int(k)] = STLStream.from_json(v)
-                self.profile_manager.set_stream_id(int(k))
-        #Dynamic port trex server mode
-        elif 'profiles' in rc_data.keys():
-            for profile_id, stream_value_list in rc_data['profiles'].items():
-                for stream_id, stream_value in stream_value_list.items():
-                    self.profile_manager.set_stream_id(int(stream_id), profile_id)
-                    self.streams[int(stream_id)] = STLStream.from_json(stream_value)
-        else:
+        try:
+            # dynamic profile server version (profiles in rc_data.keys())
+            if self.is_dynamic:
+                for profile_id, stream_value_list in rc_data['profiles'].items():
+                    for stream_id, stream_value in stream_value_list.items():
+                        self.profile_manager.set_stream_id(int(stream_id), profile_id)
+                        self.streams[int(stream_id)] = STLStream.from_json(stream_value)
+            # legacy server version (streams in rc_data.keys())
+            else:
+                for k, v in rc_data['streams'].items():
+                    self.streams[int(k)] = STLStream.from_json(v)
+                    self.profile_manager.set_stream_id(int(k))
+        except Exception as e:
+             print(e)
              raise Exception("invalid return from server, %s" % rc_data)
 
     def sync(self):

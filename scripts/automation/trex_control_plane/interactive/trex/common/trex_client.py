@@ -117,6 +117,9 @@ class TRexClient(object):
         # port state checker
         self.psv = PortStateValidator(self)
 
+        # version check for dynamic port additin
+        self.is_dynamic = False
+
 
     def get_mode (self):
         """
@@ -434,6 +437,8 @@ class TRexClient(object):
         rc = self._transmit("get_supported_cmds")
         if not rc:
             return rc
+
+        self.is_dynamic = 'get_profile_list' in rc.data()
 
         self.supported_cmds = sorted(rc.data())
 
