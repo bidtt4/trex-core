@@ -55,10 +55,6 @@ class PortProfileID(object):
         except AttributeError:
             return NotImplemented
 
-    def set_profile_id(self, profile_id):
-        self.profile_id = str(profile_id)
-        self.profile_name = str(self.port_id)  + "." + str(self.profile_id)
-
 class RpcResponseStatus(namedtuple('RpcResponseStatus', ['success', 'id', 'msg'])):
         __slots__ = ()
         def __str__(self):
