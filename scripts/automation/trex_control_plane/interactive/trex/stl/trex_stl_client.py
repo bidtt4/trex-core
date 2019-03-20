@@ -197,6 +197,7 @@ class STLClient(TRexClient):
 
         return result_profiles
 
+    # Get all profiles with the certain state from ports
     # state = {"active", "transmitting", "paused"}
     def get_profiles_with_state(self, state):
         active_ports = self.get_acquired_ports()
@@ -719,10 +720,10 @@ class STLClient(TRexClient):
         """
 
         ports = ports if ports is not None else self.get_profiles_with_state("active")
+        ports = self.psv.validate('STOP', ports, PSV_ACQUIRED)
         if not ports:
             return
 
-        ports = self.psv.validate('STOP', ports, PSV_ACQUIRED)
         port_id_list = parse_ports_from_profiles(ports)
 
         self.ctx.logger.pre_cmd("Stopping traffic on port(s) {0}:".format(ports))
@@ -1832,7 +1833,14 @@ class STLClient(TRexClient):
                                          parsing_opts.SYNCHRONIZED)
 
         opts = parser.parse_args(line.split(), default_ports = self.get_acquired_ports(), verify_acquired = True)
-        port_id_list = parse_ports_from_profiles(opts.ports)
+
+        ports = []
+        for port in opts.ports:
+            if not isinstance(port, PortProfileID):
+                port = PortProfileID(port)
+            ports.append(port)
+
+        port_id_list = parse_ports_from_profiles(ports)
 
         # core mask
         if opts.core_mask is not None:
@@ -1853,7 +1861,7 @@ class STLClient(TRexClient):
         streams_per_port = {}
         # pack the profile
         try:
-            for profile in opts.ports:
+            for profile in ports:
                 profile_name = str(profile)
                 port_id = int(profile)
                 profile = STLProfile.load(opts.file[0],
@@ -1872,8 +1880,8 @@ class STLClient(TRexClient):
             raise TRexError(s)
 
         # for better use experience - check this before any other action on port
-        self.__pre_start_check('START', opts.ports, opts.force, streams_per_port)
-        ports = self.validate_profile_input(opts.ports)
+        self.__pre_start_check('START', ports, opts.force, streams_per_port)
+        ports = self.validate_profile_input(ports)
 
         # stop ports if needed
         active_profiles = list_intersect(self.get_profiles_with_state("active"), ports)

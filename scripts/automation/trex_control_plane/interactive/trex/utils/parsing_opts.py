@@ -67,7 +67,7 @@ match_multiplier_help = """Multiplier should be passed in the following format:
                           """
 
 dynamic_profile_help = """A list of profiles on which to apply the command.
-                          Multiple profile ids are allocated dynamically on the same port.
+                          Multiple profile IDs are allocated dynamically on the same port.
                           Profile expression is used as <port id>.<profile id>.
                           Default profile id is \"_\" when not specified.
                        """

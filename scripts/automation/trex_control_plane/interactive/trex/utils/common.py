@@ -34,6 +34,16 @@ def user_input():
         return raw_input()
 
 def parse_ports_from_profiles(ports):
+    """
+    Parse distinct port ids from profiles
+
+    :parameters:
+        ports : list
+            list of profiles(PortProfileID)
+
+    :return:
+        list of port ids(int)
+    """
     ports = listify(ports)
     port_id_list = []
 

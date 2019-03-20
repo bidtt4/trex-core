@@ -117,7 +117,7 @@ class TRexClient(object):
         # port state checker
         self.psv = PortStateValidator(self)
 
-        # version check for dynamic port additin
+        # server version check for dynamic port addition
         self.is_dynamic = False
 
 
@@ -385,10 +385,9 @@ class TRexClient(object):
 
         for port in port_list:
 
-            port_id = port
+            port_id = int(port)
             profile_id = None
             if isinstance(port, PortProfileID):
-                port_id =  port.port_id
                 profile_id = port.profile_id
 
             # get port specific
@@ -438,6 +437,7 @@ class TRexClient(object):
         if not rc:
             return rc
 
+        # server version check for dynamic port addition
         self.is_dynamic = 'get_profile_list' in rc.data()
 
         self.supported_cmds = sorted(rc.data())
