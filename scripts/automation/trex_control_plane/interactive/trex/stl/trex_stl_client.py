@@ -47,7 +47,7 @@ def validate_port_input(port_arg):
 
         def convert_port_to_profile(port):
             if port is None:
-                raise TypeError("%s(...): arg '%s' is null"% (fname, argname))
+                return port
 
             if isinstance(port, list):
                 result = list(port)
@@ -719,7 +719,11 @@ class STLClient(TRexClient):
 
         """
 
-        ports = ports if ports is not None else self.get_profiles_with_state("active")
+        if ports is None:
+            ports = self.get_profiles_with_state("active")
+            if not ports:
+                return
+
         ports = self.psv.validate('STOP', ports, PSV_ACQUIRED)
         if not ports:
             return

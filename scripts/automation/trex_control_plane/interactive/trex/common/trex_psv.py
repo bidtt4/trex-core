@@ -242,7 +242,7 @@ class PortStateValidator(object):
         '''
         
         # listify
-        if ports:
+        if isinstance(ports, (int, str, PortProfileID)):
             ports = listify(ports)
 
         if not isinstance(ports, (set, list, tuple)):

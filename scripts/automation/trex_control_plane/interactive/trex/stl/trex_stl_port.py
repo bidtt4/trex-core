@@ -126,9 +126,7 @@ class STLPort(Port):
             return self.STATE_TX
         elif profile_state == "PAUSE":
             return self.STATE_PAUSE
-        elif profile_state == "PCAP_TX":
-            return self.STATE_PCAP_TX
-        ##ASTF is not supported
+        ##ASTF and PCAP not supported for profile
         else:
             raise Exception("port {0}: bad state received from server '{1}'".format(self.port_id, profile_state))
 
@@ -137,23 +135,12 @@ class STLPort(Port):
         for profile_id,state in profile_state.items():
             profile_state = self.__state_from_name_dynamic(state)
             self.__set_profile_state(profile_state, profile_id)
-        self.__sync_port_state_from_profile()
+
+        if self.state is not self.STATE_PCAP_TX:
+            self.__sync_port_state_from_profile()
 
 ############################  STL PORT API  #############################
 ############################                #############################
-
-    def sync_port_state(self, rc_state):
-        try:
-            # dynamic profile server version (rc_state is dictionary)
-            if self.is_dynamic:
-                self.state_from_name_dynamic(rc_state)
-            # legacy server version (rc_state is unicode)
-            else:
-                self.state_from_name(rc_state)
-                self.__set_profile_state(self.state)
-        except Exception as e:
-            print(e)
-            raise Exception("invalid return from server, %s" % rc_state())
 
     def sync_port_streams(self, rc_data):
         try:
@@ -181,7 +168,10 @@ class STLPort(Port):
             return self.err(rc.err())
 
         # sync the port
-        self.sync_port_state(rc.data()['state'])
+        self.state_from_name(rc.data()['state'])
+        if self.is_dynamic:
+            self.state_from_name_dynamic(rc.data()['state_profiles'])
+
         self.owner = rc.data()['owner']
 
         # for stateless (hack)
