@@ -170,7 +170,7 @@ class STLPort(Port):
         # sync the port
         self.state_from_name(rc.data()['state'])
         if self.is_dynamic:
-            self.state_from_name_dynamic(rc.data()['state_profiles'])
+            self.state_from_name_dynamic(rc.data()['state_profile'])
 
         self.owner = rc.data()['owner']
 
