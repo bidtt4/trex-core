@@ -1,6 +1,7 @@
 #!/router/bin/python
 from .stl_general_test import CStlGeneral_Test, CTRexScenario
 from trex_stl_lib.api import *
+from trex.stl.api import *
 import os, sys
 import glob
 from nose.tools import nottest
@@ -113,7 +114,7 @@ class STLClient_Test(CStlGeneral_Test):
                            mode = STLTXSingleBurst(total_pkts = 100,
                                                    percentage = self.percentage)
                            )
-
+            print(" STLStream b1 : %s" % b1)
             for i in range(0, 5):
                 self.c.add_streams([b1], ports = [self.tx_port, self.rx_port])
 
@@ -123,6 +124,7 @@ class STLClient_Test(CStlGeneral_Test):
                 self.c.wait_on_traffic(ports = [self.tx_port, self.rx_port])
                 stats = self.c.get_stats()
 
+                print(" Stats  : %s" % stats)
                 assert self.tx_port in stats
                 assert self.rx_port in stats
 
@@ -215,7 +217,6 @@ class STLClient_Test(CStlGeneral_Test):
                     assert get_error_in_percentage(golden, param) < 0.05, 'golden: %s, got: %s' % (golden, param)
 
                 self.c.remove_all_streams(ports = [self.tx_port, self.rx_port])
-
 
 
         except STLError as e:
@@ -705,3 +706,127 @@ class STLClient_Test(CStlGeneral_Test):
         except STLError as e:
             assert False , '{0}'.format(e)
 
+
+    # check pinning with latency
+    def test_basic_cont_dynamic_profile (self):
+
+        pps = 500
+        port_list = [self.tx_port, self.rx_port]
+        profile_list = ["p1", "p2"]
+        golden = pps * len(profile_list) 
+
+        try:
+
+            self.c.reset()
+            assert self.c.is_dynamic, 'Check the server version for dynamic port addition.'
+            profile_file = os.path.join(CTRexScenario.scripts_path, 'stl/udp_1pkt.py')
+
+            print("start")
+            for i in range(0, 5):
+
+                self.c.clear_stats()
+
+                # Start stl/udp_1pkt.py -m 500pps
+                for port in port_list:
+                    for profile in profile_list:
+                        self.c.start_line (" -f %s -p %d.%s -m %dpps" % (profile_file, port, profile, pps))
+
+                assert self.c.ports[self.tx_port].is_transmitting(), 'port should be active'
+                assert self.c.ports[self.rx_port].is_transmitting(), 'port should be active'
+
+                time.sleep(10)
+                stats = self.c.get_stats()
+
+                assert self.tx_port in stats, 'tx port not in stats'
+                assert self.rx_port in stats, 'rx port not in stats'
+
+                # 5% error is relaxed enough
+                check_params = (
+                    stats[self.tx_port]['tx_pps'],
+                    stats[self.rx_port]['tx_pps'],
+                    stats[self.tx_port]['rx_pps'],
+                    stats[self.rx_port]['rx_pps'],
+                    )
+                for param in check_params:
+                    assert get_error_in_percentage(golden, param) < 0.05, 'golden: %s, got: %s' % (golden, param)
+
+                self.c.stop_line ("")
+                self.c.remove_all_streams(ports = [self.tx_port, self.rx_port])
+
+        except STLError as e:
+            assert False , '{0}'.format(e)
+
+
+    def pause_resume_update_profile_iteration(self, params, port_list, profile_list, state):
+        for port in port_list:
+            params['port_id'] = port
+            rc = self.c._transmit("get_port_status", params)
+            for profile in profile_list:
+                profile_state = rc.data()['state_profile'][profile]
+                assert profile_state == state, "%d.%s is not TX but %s" %(port,profile, profile_state)
+
+    def test_pause_resume_update_profile(self):
+
+        pps = 500
+        port_list = [self.tx_port, self.rx_port]
+        profile_list = ["p1", "p2"]
+        golden = pps * len(profile_list) 
+        params = {"port_id" : 0, "profile_id" : "*" }
+
+        try: 
+
+            self.c.reset()
+            assert self.c.is_dynamic, 'is_dynamic is %s' % self.c.is_dynamic
+            profile_file = os.path.join(CTRexScenario.scripts_path, 'stl/udp_1pkt.py')
+
+            print("start")
+            self.c.clear_stats()
+
+            # Start stl/udp_1pkt.py
+            for port in port_list:
+                for profile in profile_list:
+                    self.c.start_line (" -f %s -p %d.%s" % (profile_file, port, profile))
+
+            # Check profile_state TX
+            self.pause_resume_update_profile_iteration(params, port_list, profile_list, "TX")
+
+            # Pause stl/udp_1pkt.py
+            for port in port_list:
+                for profile in profile_list:
+                    self.c.pause_line (" -p %d.%s" % (port, profile))
+
+            # Check profile_state PAUSE
+            self.pause_resume_update_profile_iteration(params, port_list, profile_list, "PAUSE")
+       
+            # Resume stl/udp_1pkt.py
+            for port in port_list:
+                for profile in profile_list:
+                    self.c.resume_line (" -p %d.%s" % (port, profile))
+
+            # Check profile_state TX
+            self.pause_resume_update_profile_iteration(params, port_list, profile_list, "TX")
+
+            self.c.clear_stats()
+            # Update stl/udp_1pkt.py -m 500pps
+            for port in port_list:
+                for profile in profile_list:
+                    self.c.update_line (" -p %d.%s -m %dpps" % (port, profile, pps))
+
+            time.sleep(10)
+            stats = self.c.get_stats()
+
+            # 5% error is relaxed enough
+            check_params = (
+                stats[self.tx_port]['tx_pps'],
+                stats[self.rx_port]['tx_pps'],
+                stats[self.tx_port]['rx_pps'],
+                stats[self.rx_port]['rx_pps'],
+                )
+            for param in check_params:
+                assert get_error_in_percentage(golden, param) < 0.05, 'golden: %s, got: %s' % (golden, param)
+
+            self.c.stop_line ("")
+            self.c.remove_all_streams(ports = [self.tx_port, self.rx_port])
+
+        except STLError as e:
+            assert False , '{0}'.format(e)
