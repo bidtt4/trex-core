@@ -1902,7 +1902,6 @@ class STLClient(TRexClient):
         if opts.dry:
             self.validate(ports, opts.mult, opts.duration, opts.total)
         else:
-
             self.start(ports,
                        opts.mult,
                        opts.force,
