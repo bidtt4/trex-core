@@ -5,7 +5,7 @@ from ..utils.common import list_difference, list_intersect
 from ..utils.text_opts import limit_string
 from ..utils import text_tables
 
-from ..common.trex_types import listify, RpcCmdData, RC, RC_OK, PortProfileID
+from ..common.trex_types import listify, RpcCmdData, RC, RC_OK, PortProfileID, DEFAULT_PROFILE_ID, ALL_PROFILE_ID
 from ..common.trex_port import Port, owned, writeable, up
 
 from .trex_stl_streams import STLStream
@@ -45,7 +45,7 @@ class STLPort(Port):
 ############################   dynamic profile   #############################
 ############################   helper functions  #############################
 
-    def __set_profile_stream_id (self, stream_id, profile_id = "_", state = None):
+    def __set_profile_stream_id (self, stream_id, profile_id = DEFAULT_PROFILE_ID, state = None):
         if not state:
             state = self.STATE_STREAMS
         self.profile_stream_list.setdefault(profile_id, [])
@@ -55,9 +55,9 @@ class STLPort(Port):
         return self.profile_stream_list.get(profile_id)
 
 
-    def __set_profile_state (self, state, profile_id = "_"):
+    def __set_profile_state (self, state, profile_id = DEFAULT_PROFILE_ID):
         if state:
-            if profile_id == "*":
+            if profile_id == ALL_PROFILE_ID:
                 for key in self.profile_state_list.keys():
                     self.profile_state_list[key] = state
             elif type(profile_id) == list:
@@ -69,9 +69,9 @@ class STLPort(Port):
         return self.profile_state_list
 
 
-    def __delete_profile (self, profile_id = "_"):
+    def __delete_profile (self, profile_id = DEFAULT_PROFILE_ID):
         stream_ids = self.profile_stream_list.get(profile_id)
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             stream_ids = self.profile_stream_list.keys()
             self.profile_stream_list.clear()
             self.profile_state_list.clear()
@@ -84,7 +84,7 @@ class STLPort(Port):
         return stream_ids
 
 
-    def __delete_profile_stream (self, stream_id, profile_id = "_"):
+    def __delete_profile_stream (self, stream_id, profile_id = DEFAULT_PROFILE_ID):
         if self.profile_stream_list.get(profile_id):
             self.profile_stream_list[profile_id].remove(stream_id)
         #if empty, make it idle
@@ -161,7 +161,7 @@ class STLPort(Port):
 
     def sync(self):
         params = {"port_id": self.port_id,
-                  "profile_id": "*"}
+                  "profile_id": ALL_PROFILE_ID}
 
         rc = self.transmit("get_port_status", params)
         if rc.bad():
@@ -194,7 +194,7 @@ class STLPort(Port):
         self.streams = {}
         
         params = {"port_id": self.port_id,
-                  "profile_id": "*"}
+                  "profile_id": ALL_PROFILE_ID}
 
         rc = self.transmit("get_all_streams", params)
         if rc.bad():
@@ -205,9 +205,9 @@ class STLPort(Port):
 
 
     @owned
-    def pause_streams(self, stream_ids, profile_id = "_"):
+    def pause_streams(self, stream_ids, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("invalid profile_id [%s]" % profile_id)
 
         profile_state = self.profile_state_list.get(profile_id)
@@ -233,9 +233,9 @@ class STLPort(Port):
 
 
     @owned
-    def resume_streams(self, stream_ids, profile_id = "_"):
+    def resume_streams(self, stream_ids, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("Invalid profile_id [%s]" % profile_id)
 
         profile_state = self.profile_state_list.get(profile_id)
@@ -261,9 +261,9 @@ class STLPort(Port):
 
     
     @owned
-    def update_streams(self, mul, force, stream_ids, profile_id = "_"):
+    def update_streams(self, mul, force, stream_ids, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("Invalid profile_id [%s]" % profile_id)
 
         profile_state = self.profile_state_list.get(profile_id)
@@ -297,9 +297,9 @@ class STLPort(Port):
 
     # add streams
     @writeable
-    def add_streams (self, streams_list, profile_id = "_"):
+    def add_streams (self, streams_list, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("Invalid profile_id [%s]" % profile_id)
 
         # listify
@@ -371,9 +371,9 @@ class STLPort(Port):
 
     # remove stream from port
     @writeable
-    def remove_streams (self, stream_id_list, profile_id = "_"):
+    def remove_streams (self, stream_id_list, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("Invalid profile_id [%s]" % profile_id)
 
         # single element to list
@@ -421,7 +421,7 @@ class STLPort(Port):
 
     # remove all the streams
     @writeable
-    def remove_all_streams (self, profile_id = "_"):
+    def remove_all_streams (self, profile_id = DEFAULT_PROFILE_ID):
 
         params = {"handler": self.handler,
                   "port_id": self.port_id,
@@ -504,9 +504,9 @@ class STLPort(Port):
             return self.err(rc.err())
 
     @writeable
-    def start (self, mul, duration, force, mask, start_at_ts = 0, profile_id = "_"):
+    def start (self, mul, duration, force, mask, start_at_ts = 0, profile_id = DEFAULT_PROFILE_ID):
 
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             return self.err("Invalid profile_id [%s]" % profile_id)
 
         profile_state = self.profile_state_list.get(profile_id)
@@ -552,7 +552,7 @@ class STLPort(Port):
     # stop traffic
     # with force ignores the cached state and sends the command
     @owned
-    def stop (self, force = False, profile_id = "_"):
+    def stop (self, force = False, profile_id = DEFAULT_PROFILE_ID):
 
         # if not is not active and not force - go back
         if not self.is_active() and not force:
@@ -577,10 +577,10 @@ class STLPort(Port):
 
 
     @owned
-    def pause (self, profile_id = "_"):
+    def pause (self, profile_id = DEFAULT_PROFILE_ID):
 
         profile_list = []
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             profile_list = self.__get_profiles_from_state(self.STATE_TX)
         else:
             profile_state = self.profile_state_list.get(profile_id)
@@ -608,9 +608,9 @@ class STLPort(Port):
         return self.ok()
 
     @owned
-    def resume (self, profile_id = "_"):
+    def resume (self, profile_id = DEFAULT_PROFILE_ID):
         profile_list = []
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             profile_list = self.__get_profiles_from_state(self.STATE_PAUSE)
         else:
             profile_state = self.profile_state_list.get(profile_id)
@@ -641,10 +641,10 @@ class STLPort(Port):
 
 
     @owned
-    def update (self, mul, force, profile_id = "_"):
+    def update (self, mul, force, profile_id = DEFAULT_PROFILE_ID):
 
         profile_list = []
-        if profile_id == "*":
+        if profile_id == ALL_PROFILE_ID:
             profile_list = self.__get_profiles_from_state(self.STATE_TX)
         else:
             profile_state = self.profile_state_list.get(profile_id)

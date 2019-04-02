@@ -12,7 +12,7 @@ from ..common.trex_exceptions import *
 from ..common.trex_logger import Logger
 from ..common.trex_client import TRexClient, PacketBuffer
 from ..common.trex_types import *
-from ..common.trex_types import PortProfileID
+from ..common.trex_types import PortProfileID, ALL_PROFILE_ID
 from ..common.trex_psv import *
 from ..common.trex_api_annotators import client_api, console_api
 
@@ -176,7 +176,7 @@ class STLClient(TRexClient):
         ports = []
         result_profiles = []
         for profile in input_profiles:
-            if profile.profile_id == "*":
+            if profile.profile_id == ALL_PROFILE_ID:
                 if int(profile) not in ports:
                     ports.append(int(profile))
                 else:
@@ -184,14 +184,14 @@ class STLClient(TRexClient):
 
         for pid in ports:
             for profile in input_profiles:
-                if int(profile) == pid and profile.profile_id != "*":
+                if int(profile) == pid and profile.profile_id != ALL_PROFILE_ID:
                     raise TRexError("Cannot have %d.* and %s passed together as --ports" %(int(profile), str(profile)))
 
             port_profiles = self.ports[pid].get_port_profiles("all")
             result_profiles.extend(port_profiles)
 
         for profile in input_profiles:
-            if profile.profile_id != "*":
+            if profile.profile_id != ALL_PROFILE_ID:
                 if profile not in result_profiles:
                     result_profiles.append(profile)
 
@@ -513,7 +513,7 @@ class STLClient(TRexClient):
         ports = listify(ports)
         for port in ports:
             if isinstance(port, PortProfileID):
-                if port.profile_id == "*":
+                if port.profile_id == ALL_PROFILE_ID:
                     err = 'Profile id * is invalid for starting the traffic. Please assign a specific profile id'
                     raise TRexError(err)
 

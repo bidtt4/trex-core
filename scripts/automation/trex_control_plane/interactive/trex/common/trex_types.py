@@ -16,6 +16,8 @@ except NameError:
 
 __all__ = ["RC", "RC_OK", "RC_ERR", "RC_WARN", "listify", "listify_if_int", "validate_type", "is_integer", "basestring", "LRU_cache"]
 
+DEFAULT_PROFILE_ID = "_"
+ALL_PROFILE_ID = "*"
 
 # class to represent a profile that belongs to a port
 # used for dynamic port allocation in STL
@@ -26,12 +28,12 @@ class PortProfileID(object):
             port_info = port_str.split(".")
             if len(port_info) == 1 :
                  self.port_id =  int(port_str)
-                 self.profile_id = "_"
+                 self.profile_id = DEFAULT_PROFILE_ID
             elif len(port_info) == 2 :
                  self.port_id = int(port_info[0])
                  self.profile_id = str(port_info[1])
                  if not self.profile_id:
-                     self.profile_id = "_"
+                     self.profile_id = DEFAULT_PROFILE_ID
             else:
                  raise TRexTypeError("Wrong profile value %s. Should be in the format PORT[.PROFILE]" % port_str)
         except ValueError:

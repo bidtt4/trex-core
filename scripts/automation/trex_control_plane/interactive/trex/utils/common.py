@@ -45,16 +45,7 @@ def parse_ports_from_profiles(ports):
         list of port ids(int)
     """
     ports = listify(ports)
-    port_id_list = []
-
-    try:
-        for port in ports :
-            port_id = int(port)
-            if port_id not in port_id_list:
-                port_id_list.append(port_id)
-    except TypeError:
-        raise TypeError('Wrong value for the port parameter: {0}'.format(ports))
-
+    port_id_list = list(set([int(port) for port in ports]))
     return port_id_list
 
 class random_id_gen:
