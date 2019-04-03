@@ -155,9 +155,9 @@ uint16_t CFlowGenListPerThread::handle_rx_pkts(bool is_idle) {
     int dir;
     uint16_t cnt;
 
-    CTcpPerThreadCtx  * mctx_dir[2]={
-        m_c_tcp,
-        m_s_tcp
+    std::unordered_map<uint32_t, CTcpPerThreadCtx*> * mctx_map_dir[2]={
+        &m_c_tcp_map,
+        &m_s_tcp_map
     };
 
     tvpid_t   ports_id[2];
@@ -167,7 +167,7 @@ uint16_t CFlowGenListPerThread::handle_rx_pkts(bool is_idle) {
     get_port_ids(ports_id[0], ports_id[1]);
 
     for (dir=0; dir<CS_NUM; dir++) {
-        CTcpPerThreadCtx  * ctx=mctx_dir[dir];
+        CTcpPerThreadCtx  * ctx;
         sum=0;
         while (true) {
             cnt=v_if->rx_burst(dir,rx_pkts,64);
@@ -195,6 +195,11 @@ uint16_t CFlowGenListPerThread::handle_rx_pkts(bool is_idle) {
                     #endif
                 }
 #endif
+                /* jsmoon-TODO: implement find_id_from_rx_pkt() */
+                #define find_profile_id_from_rx_pkt(x)  0
+                uint32_t profile_id = find_profile_id_from_rx_pkt(m);
+                ctx = (*mctx_map_dir[dir])[profile_id];
+
                 ctx->m_ft.rx_handle_packet(ctx, m, is_idle,ports_id[dir]);
             }
             sum+=cnt;
@@ -390,6 +395,9 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     m_cur_time_sec =node->m_time;
     #endif
 
+    /* jsmoon-TODO: node should contain its ctx id(=profile_id) */
+    switch_tcp_ctx(0);
+
     bool done;
     m_node_gen.m_p_queue.pop();
     if ( on_terminate == false ) {
@@ -425,20 +433,22 @@ void CFlowGenListPerThread::handle_tw(CGenNode * node,
         m_node_gen.m_p_queue.push(node);
     }
 
-    CTcpPerThreadCtx  * mctx_dir[2]={
-        m_c_tcp,
-        m_s_tcp
+    std::unordered_map<uint32_t, CTcpPerThreadCtx*> * mctx_map_dir[2]={
+        &m_c_tcp_map,
+        &m_s_tcp_map
     };
 
     int dir;
     bool any_event=false;
     for (dir=0; dir<CS_NUM; dir++) {
-        CTcpPerThreadCtx  * ctx=mctx_dir[dir];
-        ctx->maintain_resouce();
-        ctx->timer_w_on_tick();
-        if(ctx->timer_w_any_events()){
-            any_event=true;
-        } 
+        for (auto iter : *mctx_map_dir[dir]) {
+            CTcpPerThreadCtx  * ctx = iter.second;
+            ctx->maintain_resouce();
+            ctx->timer_w_on_tick();
+            if(ctx->timer_w_any_events()){
+                any_event=true;
+            }
+        }
     }
 
     if ( on_terminate == true ){
@@ -458,14 +468,12 @@ double CFlowGenListPerThread::tcp_get_tw_tick_in_sec(){
     return(TCP_TIME_TICK_SEC);
 }
 
-void CFlowGenListPerThread::Create_tcp_ctx(void) {
-    assert(!m_c_tcp);
-    assert(!m_s_tcp);
-    assert(!m_c_tcp_io);
-    assert(!m_s_tcp_io);
+void CFlowGenListPerThread::Create_tcp_ctx(uint32_t profile_id) {
+    assert(m_c_tcp_map.find(profile_id) == m_c_tcp_map.end());
+    assert(m_s_tcp_map.find(profile_id) == m_s_tcp_map.end());
 
-    m_c_tcp = new CTcpPerThreadCtx();
-    m_s_tcp = new CTcpPerThreadCtx();
+    m_c_tcp = m_c_tcp_map[profile_id] = new CTcpPerThreadCtx();
+    m_s_tcp = m_s_tcp_map[profile_id] = new CTcpPerThreadCtx();
 
     CTcpIOCb * c_tcp_io = new CTcpIOCb();
     CTcpIOCb * s_tcp_io = new CTcpIOCb();
@@ -475,9 +483,6 @@ void CFlowGenListPerThread::Create_tcp_ctx(void) {
     s_tcp_io->m_dir =1;
     s_tcp_io->m_p   = this;
 
-    m_c_tcp_io =c_tcp_io;
-    m_s_tcp_io =s_tcp_io;
-
     uint32_t active_flows = get_max_active_flows_per_core_tcp()/2 ;
     if (active_flows<100000) {
         active_flows=100000;
@@ -485,8 +490,8 @@ void CFlowGenListPerThread::Create_tcp_ctx(void) {
 
     m_c_tcp->Create(active_flows,true);
     m_s_tcp->Create(active_flows,false);
-    m_c_tcp->set_cb(m_c_tcp_io);
-    m_s_tcp->set_cb(m_s_tcp_io);
+    m_c_tcp->set_cb(c_tcp_io);
+    m_s_tcp->set_cb(s_tcp_io);
 
     uint8_t mem_socket_id = get_memory_socket_id();
 
@@ -519,9 +524,19 @@ void CFlowGenListPerThread::Create_tcp_ctx(void) {
     m_s_tcp->m_ft.set_udp_api(&m_udp_bh_api_impl_c);
 }
 
-void CFlowGenListPerThread::load_tcp_profile() {
+void CFlowGenListPerThread::switch_tcp_ctx(uint32_t profile_id) {
+    assert(m_c_tcp_map.find(profile_id) != m_c_tcp_map.end());
+    assert(m_s_tcp_map.find(profile_id) != m_s_tcp_map.end());
+
+    m_c_tcp = m_c_tcp_map[profile_id];
+    m_s_tcp = m_s_tcp_map[profile_id];
+}
+
+void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
+    switch_tcp_ctx(profile_id);
+
     uint8_t mem_socket_id = get_memory_socket_id();
-    CAstfDbRO *template_db = CAstfDB::instance()->get_db_ro(mem_socket_id);
+    CAstfDbRO *template_db = CAstfDB::instance(profile_id)->get_db_ro(mem_socket_id);
     if ( !template_db ) {
         throw TrexException("Could not create RO template database");
     }
@@ -529,9 +544,9 @@ void CFlowGenListPerThread::load_tcp_profile() {
     m_c_tcp->resize_stats();
     m_s_tcp->set_template_ro(template_db);
     m_s_tcp->resize_stats();
-    CAstfTemplatesRW * rw = CAstfDB::instance()->get_db_template_rw(
+    CAstfTemplatesRW * rw = CAstfDB::instance(profile_id)->get_db_template_rw(
             mem_socket_id,
-            &m_smart_gen,
+            nullptr,    /* use per CAstfDB generator */
             m_thread_id,
             m_max_threads,
             getDualPortId());
@@ -555,38 +570,50 @@ void CFlowGenListPerThread::load_tcp_profile() {
     m_s_tcp->call_startup();
 }
 
-void CFlowGenListPerThread::unload_tcp_profile() {
-    if ( CAstfDB::has_instance() ) {
-        CAstfDB::instance()->clear_db_ro_rw(&m_smart_gen);
+void CFlowGenListPerThread::unload_tcp_profile(uint32_t profile_id) {
+    switch_tcp_ctx(profile_id);
+
+    if ( CAstfDB::has_instance(profile_id) ) {
+        CAstfDB::instance(profile_id)->clear_db_ro_rw(nullptr);
     }
     m_c_tcp->reset_tuneables();
     m_s_tcp->reset_tuneables();
-    m_sched_accurate = false;
-    m_tcp_terminate=false;
-    m_tcp_terminate_cnt=0;
+    if ((m_c_tcp_map.size() == 1) && (m_s_tcp_map.size() == 1)) {
+        /* jsmoon-TODO: m_sched_accurate may needs to be summarized by remained ctx */
+        m_sched_accurate = false;
+        m_tcp_terminate=false;
+        m_tcp_terminate_cnt=0;
+    }
 }
 
-void CFlowGenListPerThread::Delete_tcp_ctx(){
+void CFlowGenListPerThread::Delete_tcp_ctx(uint32_t profile_id){
+    /* prevent fault from double call */
+    if ((m_c_tcp_map.find(profile_id) == m_c_tcp_map.end()) &&
+        (m_c_tcp_map.find(profile_id) == m_c_tcp_map.end())) {
+        return;
+    }
+
+    switch_tcp_ctx(profile_id);
+    m_c_tcp_map.erase(profile_id);
+    m_s_tcp_map.erase(profile_id);
+
     if (m_c_tcp) {
+        CTcpIOCb * c_tcp_io = (CTcpIOCb *)m_c_tcp->get_cb();
+        if (c_tcp_io) {
+            delete c_tcp_io;
+        }
         m_c_tcp->Delete();
         delete m_c_tcp;
         m_c_tcp=0;
     }
     if (m_s_tcp) {
+        CTcpIOCb * s_tcp_io = (CTcpIOCb *)m_s_tcp->get_cb();
+        if (s_tcp_io) {
+            delete s_tcp_io;
+        }
         m_s_tcp->Delete();
         delete m_s_tcp;
         m_s_tcp=0;
-    }
-
-    CTcpIOCb * c_tcp_io = (CTcpIOCb *)m_c_tcp_io;
-    if (c_tcp_io) {
-        delete c_tcp_io;
-        m_c_tcp_io=0;
-    }
-    CTcpIOCb * s_tcp_io = (CTcpIOCb *)m_s_tcp_io;
-    if (s_tcp_io) {
-        delete s_tcp_io;
-        m_s_tcp_io=0;
     }
 }
 

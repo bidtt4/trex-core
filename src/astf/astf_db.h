@@ -367,23 +367,23 @@ class CAstfDB  : public CTRexDummyCommand  {
 
  public:
     // make the class singelton
-    static CAstfDB *instance() {
-        if (! m_pInstance) {
-            m_pInstance = new CAstfDB();
-            m_pInstance->m_json_initiated = false;
+    static CAstfDB *instance(uint32_t profile_id = 0) {
+        if (m_pInstances.find(profile_id) == m_pInstances.end()) {
+            m_pInstances[profile_id] = new CAstfDB();
+            m_pInstances[profile_id]->m_json_initiated = false;
         }
-        return m_pInstance;
+        return m_pInstances[profile_id];
     }
 
-    static void free_instance(){
-        if (m_pInstance){
-            delete m_pInstance;
-            m_pInstance=0;
+    static void free_instance(uint32_t profile_id = 0){
+        if (m_pInstances.find(profile_id) != m_pInstances.end()){
+            delete m_pInstances[profile_id];
+            m_pInstances.erase(profile_id);
         }
     }
 
-    static bool has_instance() {
-        return m_pInstance != nullptr;
+    static bool has_instance(uint32_t profile_id = 0) {
+        return m_pInstances.find(profile_id) != m_pInstances.end();
     }
 
     TopoMngr* get_topo() {
@@ -437,6 +437,7 @@ class CAstfDB  : public CTRexDummyCommand  {
     void set_client_cfg_db(ClientCfgDB * client_config_info){
         m_client_config_info = client_config_info;
     }
+    ClientCfgDB  *get_client_cfg_db();
 
     // called *once* by each core, using socket_id associated with the core 
     // multi-threaded need to be protected / per socket read-only data 
@@ -476,7 +477,6 @@ private:
     float get_expected_bps() {return m_exp_bps;}
     bool is_initiated() {return m_json_initiated;}
     void dump();
-    ClientCfgDB  *get_client_db();
     std::string get_buf(uint32_t temp_index, uint32_t cmd_index, int side);
     bool convert_from_json(uint8_t socket_id);
     uint32_t get_buf_index(uint32_t program_index, uint32_t cmd_index);
@@ -569,7 +569,7 @@ private:
 
  private:
     bool m_json_initiated;
-    static CAstfDB *m_pInstance;
+    static std::unordered_map<uint32_t, CAstfDB*> m_pInstances;
     Json::Value  m_val;
     Json::Value  m_buffers;
 
@@ -581,6 +581,9 @@ private:
     // Data duplicated per memory socket
     CAstfDbRO           m_tcp_data[MAX_SOCKETS_SUPPORTED];
 
+    CTupleGeneratorSmart    m_smart_gen;
+
+    ClientCfgDB         m_client_config_db;
     ClientCfgDB        *m_client_config_info;
     CAstfJsonValidator *m_validator;
     TopoMngr           *m_topo_mngr;

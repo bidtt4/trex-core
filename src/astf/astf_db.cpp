@@ -36,7 +36,7 @@ inline std::string methodName(const std::string& prettyFunction)
 #define __METHOD_NAME__ methodName(__PRETTY_FUNCTION__)
 
 // make the class singelton
-CAstfDB* CAstfDB::m_pInstance = NULL;
+std::unordered_map<uint32_t, CAstfDB*> CAstfDB::m_pInstances;
 
 
 CAstfDB::CAstfDB(){
@@ -897,10 +897,9 @@ bool CAstfDB::read_tunables(CTcpTuneables *tune, Json::Value tune_json) {
     return true;
 }
 
-ClientCfgDB  *CAstfDB::get_client_db() {
-    static ClientCfgDB g_dummy;
+ClientCfgDB  *CAstfDB::get_client_cfg_db() {
     if (m_client_config_info==0) {
-        return  &g_dummy;
+        return  &m_client_config_db;
     }else{
         return m_client_config_info;
     }
@@ -1016,6 +1015,9 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
     // json data should not be accessed by multiple threads in parallel
     std::unique_lock<std::mutex> my_lock(m_global_mtx);
 
+    if (g_gen == nullptr) {
+        g_gen = &m_smart_gen;
+    }
     g_gen->Create(0, thread_id);
 
     uint16_t rss_thread_id, rss_thread_max;
@@ -1066,7 +1068,7 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
         if (ip_gen_list[i]["dir"] == "c") {
             gen_idx_trans.push_back(last_c_idx);
             last_c_idx++;
-            ClientCfgDB  * cdb=get_client_db();
+            ClientCfgDB  * cdb=get_client_cfg_db();
             g_gen->add_client_pool(dist, portion.m_ip_start, portion.m_ip_end, active_flows_per_core, *cdb, 0, 0);
         } else {
             gen_idx_trans.push_back(last_s_idx);
@@ -1125,8 +1127,7 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
         CTcpTuneables *s_tuneable;
         CTcpTuneables *c_tuneable = new CTcpTuneables();
         assert(c_tuneable);
-        assert(CAstfDB::m_pInstance);
-        s_tuneable = CAstfDB::m_pInstance->get_s_tune(index);
+        s_tuneable = get_s_tune(index);
         assert(s_tuneable);
 
         if (!read_tunables(c_tuneable, m_val["templates"][index]["client_template"]["glob_info"])){
@@ -1453,6 +1454,9 @@ void CAstfDB::clear_db_ro_rw(CTupleGeneratorSmart *g_gen) {
 
     for (auto &tcp_data : m_tcp_data) {
         tcp_data.Delete();
+    }
+    if (g_gen == nullptr) {
+        g_gen = &m_smart_gen;
     }
     g_gen->Delete();
     m_json_initiated = false;

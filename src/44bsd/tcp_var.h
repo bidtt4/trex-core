@@ -899,6 +899,7 @@ public:
     void set_cb(CTcpCtxCb    * cb){
         m_cb=cb;
     }
+    CTcpCtxCb *get_cb() {return m_cb;}
 
     void set_memory_socket(uint8_t socket){
         m_mbuf_socket= socket;
@@ -978,7 +979,6 @@ public:
 
     CFlowTable           m_ft;
     struct  tcpiphdr tcp_saveti;
-         
 };
 
 
