@@ -2778,9 +2778,9 @@ bool CFlowGenListPerThread::Create(uint32_t           thread_id,
     m_thread_id=thread_id;
 
     m_c_tcp=0;
-    m_c_tcp_io =0;
     m_s_tcp=0;
-    m_s_tcp_io=0;
+    m_c_tcp_map.clear();
+    m_s_tcp_map.clear();
     m_tcp_terminate=false;
     m_tcp_terminate_cnt=0;
     m_sched_accurate=false;

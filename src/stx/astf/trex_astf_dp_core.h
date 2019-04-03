@@ -42,21 +42,25 @@ public:
      */
     virtual bool is_port_active(uint8_t port_id);
 
-    void start_transmit();
-    void stop_transmit();
-    void update_rate(double ratio);
-    void create_tcp_batch();
-    void delete_tcp_batch();
-    void parse_astf_json(std::string *profile_buffer, std::string *topo_buffer);
+    void start_transmit(uint32_t profile_id, double duration);
+    void stop_transmit(uint32_t profile_id);
+    void update_rate(uint32_t profile_id, double ratio);
+    void create_tcp_batch(uint32_t profile_id);
+    void delete_tcp_batch(uint32_t profile_id);
+    void parse_astf_json(uint32_t profile_id, std::string *profile_buffer, std::string *topo_buffer);
 
 protected:
     virtual bool rx_for_idle();
-    void report_finished();
-    void report_error(const std::string &error);
+    void report_finished(uint32_t profile_id = 0);
+    void report_error(uint32_t profile_id, const std::string &error);
     bool sync_barrier();
     CFlowGenListPerThread *m_flow_gen;
+    std::unordered_map<uint32_t, state_e>   m_state_profiles;
 
     virtual void start_scheduler() override;
+
+    void get_scheduler_options(bool& disable_client, double& d_time_flow, double& d_phase);
+    void start_tx_fif(uint32_t profile_id, double duration);
 };
 
 #endif /* __TREX_ASTF_DP_CORE_H__ */

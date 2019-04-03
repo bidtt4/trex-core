@@ -54,15 +54,10 @@ bool TrexAstfDpCore::is_port_active(uint8_t port_id) {
     return m_state != STATE_IDLE;
 }
 
-
-void TrexAstfDpCore::start_scheduler() {
-
-    dsec_t d_time_flow;
-
+void TrexAstfDpCore::get_scheduler_options(bool& disable_client, dsec_t& d_time_flow, double& d_phase) {
     CParserOption *go = &CGlobalInfo::m_options;
 
     /* do we need to disable this tread client port */
-    bool disable_client = false;
     if ( go->m_astf_mode == CParserOption::OP_ASTF_MODE_SERVR_ONLY ) {
         disable_client = true;
     } else {
@@ -78,13 +73,28 @@ void TrexAstfDpCore::start_scheduler() {
 
     d_time_flow = m_flow_gen->m_c_tcp->m_fif_d_time; /* set by Create_tcp function */
 
-    double d_phase = 0.01 + (double)m_flow_gen->m_thread_id * d_time_flow / (double)m_flow_gen->m_max_threads;
+    d_phase = 0.01 + (double)m_flow_gen->m_thread_id * d_time_flow / (double)m_flow_gen->m_max_threads;
 
     if ( CGlobalInfo::is_realtime() ) {
         if (d_phase > 0.2 ) {
             d_phase =  0.01 + m_flow_gen->m_thread_id * 0.01;
         }
     }
+}
+
+/* jsmoon-TODO: start parameters(profile_id,duration) needed */
+#define STARTUP_ID    0
+
+void TrexAstfDpCore::start_scheduler() {
+
+    dsec_t d_time_flow;
+    bool disable_client = false;
+    double d_phase;
+
+    m_flow_gen->switch_tcp_ctx(STARTUP_ID);
+    get_scheduler_options(disable_client, d_time_flow, d_phase);
+
+    CParserOption *go = &CGlobalInfo::m_options;
 
     double old_offset = 0.0;
     CGenNode *node;
@@ -93,6 +103,7 @@ void TrexAstfDpCore::start_scheduler() {
     if ( sync_barrier() ) {
         dsec_t now = now_sec();
         dsec_t c_stop_sec = -1;
+        /* jsmoon-TODO: duration should be set per profile */
         if ( m_flow_gen->m_yaml_info.m_duration_sec > 0 ) {
             c_stop_sec = now + d_phase + m_flow_gen->m_yaml_info.m_duration_sec;
         }
@@ -131,20 +142,42 @@ void TrexAstfDpCore::start_scheduler() {
         m_flow_gen->m_c_tcp->cleanup_flows();
         m_flow_gen->m_s_tcp->cleanup_flows();
     } else {
-        report_error("Could not sync DP thread for start, core ID: " + to_string(m_flow_gen->m_thread_id));
+        report_error(STARTUP_ID, "Could not sync DP thread for start, core ID: " + to_string(m_flow_gen->m_thread_id));
     }
 
     if ( m_state != STATE_TERMINATE ) {
-        report_finished();
+        report_finished(STARTUP_ID);
         m_state = STATE_IDLE;
     }
 }
 
-void TrexAstfDpCore::parse_astf_json(string *profile_buffer, string *topo_buffer) {
+void TrexAstfDpCore::start_tx_fif(uint32_t profile_id, double duration) {
+
+    dsec_t d_time_flow;
+    bool disable_client = false;
+    double d_phase;
+
+    m_flow_gen->switch_tcp_ctx(profile_id);
+    get_scheduler_options(disable_client, d_time_flow, d_phase);
+
+    CGenNode *node;
+
+    if ( !disable_client ) {
+        dsec_t now = now_sec();
+        (void) duration;
+
+        node = m_flow_gen->create_node();
+        node->m_type = CGenNode::TCP_TX_FIF;
+        node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
+        m_flow_gen->m_node_gen.add_node(node);
+    }
+}
+
+void TrexAstfDpCore::parse_astf_json(uint32_t profile_id, string *profile_buffer, string *topo_buffer) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
-    CAstfDB *db = CAstfDB::instance();
+    CAstfDB *db = CAstfDB::instance(profile_id);
     string err = "";
     bool rc;
 
@@ -152,24 +185,23 @@ void TrexAstfDpCore::parse_astf_json(string *profile_buffer, string *topo_buffer
         try {
             TopoMngr *topo_mngr = db->get_topo();
             topo_mngr->from_json_str(*topo_buffer);
-            ClientCfgDB &m_cc_db = m_flow_gen->m_flow_list->m_client_config_info;
-            m_cc_db.load_from_topo(topo_mngr);
-            db->set_client_cfg_db(&m_cc_db);
+            ClientCfgDB *m_cc_db = db->get_client_cfg_db();
+            m_cc_db->load_from_topo(topo_mngr);
             //topo_mngr->dump();
         } catch (const TopoError &ex) {
-            report_error(ex.what());
+            report_error(profile_id, ex.what());
             return;
         }
     }
 
     if ( !profile_buffer ) {
-        report_finished();
+        report_finished(profile_id);
         return;
     }
 
     rc = db->set_profile_one_msg(*profile_buffer, err);
     if ( !rc ) {
-        report_error("Profile parsing error: " + err);
+        report_error(profile_id, "Profile parsing error: " + err);
         return;
     }
 
@@ -179,54 +211,65 @@ void TrexAstfDpCore::parse_astf_json(string *profile_buffer, string *topo_buffer
     CJsonData_err err_obj = db->verify_data(num_dp_cores);
 
     if ( err_obj.is_error() ) {
-        report_error("Profile split to DP cores error: " + err_obj.description());
+        report_error(profile_id, "Profile split to DP cores error: " + err_obj.description());
     } else {
-        report_finished();
+        report_finished(profile_id);
     }
 }
 
-void TrexAstfDpCore::create_tcp_batch() {
+void TrexAstfDpCore::create_tcp_batch(uint32_t profile_id) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
-    CParserOption *go = &CGlobalInfo::m_options;
+    /* jsmoon-TODO: duration should be set by profile_id */
+    if (profile_id == 0) {
+        CParserOption *go = &CGlobalInfo::m_options;
 
-    m_flow_gen->m_cur_flow_id = 1;
-    m_flow_gen->m_stats.clear();
-    m_flow_gen->m_yaml_info.m_duration_sec = go->m_duration;
+        m_flow_gen->m_cur_flow_id = 1;
+        m_flow_gen->m_stats.clear();
+        m_flow_gen->m_yaml_info.m_duration_sec = go->m_duration;
+    }
 
     try {
-        m_flow_gen->load_tcp_profile();
+        m_flow_gen->load_tcp_profile(profile_id);
     } catch (const TrexException &ex) {
-        report_error("Could not create ASTF batch: " + string(ex.what()));
+        report_error(profile_id, "Could not create ASTF batch: " + string(ex.what()));
         return;
     }
 
-    report_finished();
+    report_finished(profile_id);
 }
 
-void TrexAstfDpCore::delete_tcp_batch() {
+void TrexAstfDpCore::delete_tcp_batch(uint32_t profile_id) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
-    m_flow_gen->unload_tcp_profile();
-    report_finished();
+    m_flow_gen->unload_tcp_profile(profile_id);
+    report_finished(profile_id);
 }
 
-void TrexAstfDpCore::start_transmit() {
-    assert(m_state==STATE_IDLE);
-    m_state = STATE_TRANSMITTING;
+void TrexAstfDpCore::start_transmit(uint32_t profile_id, double duration) {
+    assert((m_state==STATE_IDLE) || (m_state==STATE_TRANSMITTING));
+    if (m_state == STATE_IDLE) {
+        m_state = STATE_TRANSMITTING;
+        /* jsmoon-TODO: save profile_id/duration as start_scheduler() parameters */
+    }
+    else {
+        start_tx_fif(profile_id, duration);
+    }
 }
 
-void TrexAstfDpCore::stop_transmit() {
+void TrexAstfDpCore::stop_transmit(uint32_t profile_id) {
     if ( m_state == STATE_IDLE ) { // is stopped, just ack
         return;
     }
+    /* jsmoon-TODO: trigger stopping TCP_TX_FIF only */
 
     add_global_duration(0.0001);
 }
 
-void TrexAstfDpCore::update_rate(double old_new_ratio) {
+void TrexAstfDpCore::update_rate(uint32_t profile_id, double old_new_ratio) {
+    m_flow_gen->switch_tcp_ctx(profile_id);
     m_flow_gen->m_c_tcp->m_fif_d_time *= old_new_ratio;
 }
 
@@ -234,13 +277,13 @@ bool TrexAstfDpCore::sync_barrier() {
     return (m_flow_gen->get_sync_b()->sync_barrier(m_flow_gen->m_thread_id) == 0);
 }
 
-void TrexAstfDpCore::report_finished() {
-    TrexDpToCpMsgBase *msg = new TrexDpCoreStopped(m_flow_gen->m_thread_id);
+void TrexAstfDpCore::report_finished(uint32_t profile_id) {
+    TrexDpToCpMsgBase *msg = new TrexDpCoreStopped(m_flow_gen->m_thread_id, profile_id);
     m_ring_to_cp->Enqueue((CGenNode *)msg);
 }
 
-void TrexAstfDpCore::report_error(const string &error) {
-    TrexDpToCpMsgBase *msg = new TrexDpCoreError(m_flow_gen->m_thread_id, error);
+void TrexAstfDpCore::report_error(uint32_t profile_id, const string &error) {
+    TrexDpToCpMsgBase *msg = new TrexDpCoreError(m_flow_gen->m_thread_id, profile_id, error);
     m_ring_to_cp->Enqueue((CGenNode *)msg);
 }
 
