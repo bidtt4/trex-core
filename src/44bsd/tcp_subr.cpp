@@ -687,6 +687,7 @@ bool CTcpPerThreadCtx::Create(uint32_t size,
     m_template_ro = NULL;
     reset_tuneables();
     memset(&tcp_saveti,0,sizeof(tcp_saveti));
+    m_active = false;
 
     RC_HTW_t tw_res;
     tw_res = m_timer_w.Create(1024,TCP_TIMER_LEVEL1_DIV);
