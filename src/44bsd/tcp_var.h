@@ -839,6 +839,7 @@ public:
 class CAstfDbRO;
 class CAstfTemplatesRW;
 class CTcpTuneables;
+class CGenNode;
 
 static inline uint16_t _update_initwnd(uint16_t mss,uint16_t initwnd){
     uint32_t calc =mss*initwnd;
@@ -979,6 +980,13 @@ public:
 
     CFlowTable           m_ft;
     struct  tcpiphdr tcp_saveti;
+
+    void activate() { m_active = true; }
+    void deactivate() { m_active = false; }
+    bool is_active() { return m_active; }
+
+private:
+    bool        m_active;       /* active or idle */
 };
 
 

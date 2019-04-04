@@ -25,6 +25,7 @@ limitations under the License.
 #include "stt_cp.h"
 #include "utl_sync_barrier.h"
 #include "trex_messaging.h"
+#include "trex_astf_messaging.h"    /* TrexAstfDpStop */
 
 #include "trex_astf.h"
 #include "trex_astf_dp_core.h"
@@ -36,6 +37,7 @@ using namespace std;
 
 TrexAstfDpCore::TrexAstfDpCore(uint8_t thread_id, CFlowGenListPerThread *core) :
                 TrexDpCore(thread_id, core, STATE_IDLE) {
+    m_start_param.m_flag = false;
     CSyncBarrier *sync_barrier = get_astf_object()->get_barrier();
     m_flow_gen = m_core;
     m_flow_gen->set_sync_barrier(sync_barrier);
@@ -52,6 +54,26 @@ bool TrexAstfDpCore::are_all_ports_idle() {
 
 bool TrexAstfDpCore::is_port_active(uint8_t port_id) {
     return m_state != STATE_IDLE;
+}
+
+void TrexAstfDpCore::add_profile_duration(uint32_t profile_id, double duration) {
+    if (duration > 0.0) {
+        CGenNodeCommand * node = (CGenNodeCommand*)m_core->create_node() ;
+
+        node->m_type = CGenNode::COMMAND;
+
+        /* make sure it will be scheduled after the current node */
+        node->m_time = m_core->m_cur_time_sec + duration ;
+
+        TrexAstfDpStop * cmd = new TrexAstfDpStop(profile_id);
+
+        /* test this */
+        m_core->m_non_active_nodes++;
+        node->m_cmd = cmd;
+        cmd->set_core_ptr(m_core);
+
+        m_core->m_node_gen.add_node((CGenNode *)node);
+    }
 }
 
 void TrexAstfDpCore::get_scheduler_options(bool& disable_client, dsec_t& d_time_flow, double& d_phase) {
@@ -82,16 +104,21 @@ void TrexAstfDpCore::get_scheduler_options(bool& disable_client, dsec_t& d_time_
     }
 }
 
-/* jsmoon-TODO: start parameters(profile_id,duration) needed */
-#define STARTUP_ID    0
-
 void TrexAstfDpCore::start_scheduler() {
+
+    uint32_t profile_id = 0;
+    double duration = -1;
+
+    if (m_start_param.m_flag) { /* set by start_transmit function */
+        profile_id = m_start_param.m_profile_id;
+        duration = m_start_param.m_duration;
+    }
 
     dsec_t d_time_flow;
     bool disable_client = false;
     double d_phase;
 
-    m_flow_gen->switch_tcp_ctx(STARTUP_ID);
+    m_flow_gen->switch_tcp_ctx(profile_id);
     get_scheduler_options(disable_client, d_time_flow, d_phase);
 
     CParserOption *go = &CGlobalInfo::m_options;
@@ -103,8 +130,10 @@ void TrexAstfDpCore::start_scheduler() {
     if ( sync_barrier() ) {
         dsec_t now = now_sec();
         dsec_t c_stop_sec = -1;
-        /* jsmoon-TODO: duration should be set per profile */
-        if ( m_flow_gen->m_yaml_info.m_duration_sec > 0 ) {
+        if ( duration > 0.0 ) {
+            c_stop_sec = now + d_phase + duration;
+        }
+        else if ( m_flow_gen->m_yaml_info.m_duration_sec > 0 ) {
             c_stop_sec = now + d_phase + m_flow_gen->m_yaml_info.m_duration_sec;
         }
 
@@ -114,7 +143,14 @@ void TrexAstfDpCore::start_scheduler() {
             node = m_flow_gen->create_node();
             node->m_type = CGenNode::TCP_TX_FIF;
             node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
+            node->m_ctx_id = profile_id; /* = tcp ctx id */
             m_flow_gen->m_node_gen.add_node(node);
+        }
+
+        m_flow_gen->m_c_tcp->activate();
+        m_flow_gen->m_s_tcp->activate();
+        if (c_stop_sec > 0.0) {
+            add_profile_duration(profile_id, c_stop_sec - now);
         }
 
         node = m_flow_gen->create_node() ;
@@ -132,7 +168,7 @@ void TrexAstfDpCore::start_scheduler() {
         node->m_time = now;
         m_flow_gen->m_node_gen.add_node(node);
 
-        m_flow_gen->m_node_gen.flush_file(c_stop_sec, d_time_flow, false, m_flow_gen, old_offset);
+        m_flow_gen->m_node_gen.flush_file(-1, d_time_flow, false, m_flow_gen, old_offset);
 
         if ( !m_flow_gen->is_terminated_by_master() && !go->preview.getNoCleanFlowClose() ) { // close gracefully
             m_flow_gen->m_node_gen.flush_file(-1, d_time_flow, true, m_flow_gen, old_offset);
@@ -142,16 +178,16 @@ void TrexAstfDpCore::start_scheduler() {
         m_flow_gen->m_c_tcp->cleanup_flows();
         m_flow_gen->m_s_tcp->cleanup_flows();
     } else {
-        report_error(STARTUP_ID, "Could not sync DP thread for start, core ID: " + to_string(m_flow_gen->m_thread_id));
+        report_error(profile_id, "Could not sync DP thread for start, core ID: " + to_string(m_flow_gen->m_thread_id));
     }
 
     if ( m_state != STATE_TERMINATE ) {
-        report_finished(STARTUP_ID);
+        //report_finished(profile_id);
         m_state = STATE_IDLE;
     }
 }
 
-void TrexAstfDpCore::start_tx_fif(uint32_t profile_id, double duration) {
+void TrexAstfDpCore::start_tcp_ctx(uint32_t profile_id, double duration) {
 
     dsec_t d_time_flow;
     bool disable_client = false;
@@ -160,16 +196,41 @@ void TrexAstfDpCore::start_tx_fif(uint32_t profile_id, double duration) {
     m_flow_gen->switch_tcp_ctx(profile_id);
     get_scheduler_options(disable_client, d_time_flow, d_phase);
 
-    CGenNode *node;
+    dsec_t now = now_sec();
+
+    m_flow_gen->m_cur_time_sec = now;
 
     if ( !disable_client ) {
-        dsec_t now = now_sec();
-        (void) duration;
+        CGenNode *node = m_flow_gen->create_node();
 
-        node = m_flow_gen->create_node();
         node->m_type = CGenNode::TCP_TX_FIF;
         node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
+        node->m_ctx_id = profile_id; /* = tcp ctx id */
         m_flow_gen->m_node_gen.add_node(node);
+    }
+
+    m_flow_gen->m_c_tcp->activate();
+    m_flow_gen->m_s_tcp->activate();
+    if ( duration > 0 ) {
+        add_profile_duration(profile_id, d_phase + duration);
+    }
+}
+
+void TrexAstfDpCore::stop_tcp_ctx(uint32_t profile_id) {
+    m_flow_gen->switch_tcp_ctx(profile_id);
+
+    m_flow_gen->flush_tx_queue();
+
+    m_flow_gen->m_c_tcp->cleanup_flows();
+    m_flow_gen->m_s_tcp->cleanup_flows();
+
+    m_flow_gen->m_c_tcp->deactivate();
+    m_flow_gen->m_s_tcp->deactivate();
+
+    report_finished(profile_id);
+
+    if (m_flow_gen->active_tcp_ctx_cnt() == 0) {
+        add_global_duration(0.0001);
     }
 }
 
@@ -221,16 +282,18 @@ void TrexAstfDpCore::create_tcp_batch(uint32_t profile_id) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
-    /* jsmoon-TODO: duration should be set by profile_id */
-    if (profile_id == 0) {
-        CParserOption *go = &CGlobalInfo::m_options;
+    CParserOption *go = &CGlobalInfo::m_options;
 
-        m_flow_gen->m_cur_flow_id = 1;
-        m_flow_gen->m_stats.clear();
-        m_flow_gen->m_yaml_info.m_duration_sec = go->m_duration;
-    }
+#if 0
+    m_flow_gen->m_cur_flow_id = 1;      /* not used in ASTF mode */
+    m_flow_gen->m_stats.clear();        /* needs to be global */
+#endif
+    m_flow_gen->m_yaml_info.m_duration_sec = go->m_duration;
 
     try {
+        if (!m_flow_gen->is_tcp_ctx_active(profile_id)) {
+            m_flow_gen->Create_tcp_ctx(profile_id);
+        }
         m_flow_gen->load_tcp_profile(profile_id);
     } catch (const TrexException &ex) {
         report_error(profile_id, "Could not create ASTF batch: " + string(ex.what()));
@@ -245,6 +308,7 @@ void TrexAstfDpCore::delete_tcp_batch(uint32_t profile_id) {
     (void)dummy;
 
     m_flow_gen->unload_tcp_profile(profile_id);
+    m_flow_gen->Delete_tcp_ctx(profile_id);
     report_finished(profile_id);
 }
 
@@ -252,10 +316,14 @@ void TrexAstfDpCore::start_transmit(uint32_t profile_id, double duration) {
     assert((m_state==STATE_IDLE) || (m_state==STATE_TRANSMITTING));
     if (m_state == STATE_IDLE) {
         m_state = STATE_TRANSMITTING;
-        /* jsmoon-TODO: save profile_id/duration as start_scheduler() parameters */
+
+        /* save profile_id/duration as start_scheduler() parameters */
+        m_start_param.m_flag = true;
+        m_start_param.m_profile_id = profile_id;
+        m_start_param.m_duration = duration;
     }
     else {
-        start_tx_fif(profile_id, duration);
+        start_tcp_ctx(profile_id, duration);
     }
 }
 
@@ -263,9 +331,7 @@ void TrexAstfDpCore::stop_transmit(uint32_t profile_id) {
     if ( m_state == STATE_IDLE ) { // is stopped, just ack
         return;
     }
-    /* jsmoon-TODO: trigger stopping TCP_TX_FIF only */
-
-    add_global_duration(0.0001);
+    stop_tcp_ctx(profile_id);
 }
 
 void TrexAstfDpCore::update_rate(uint32_t profile_id, double old_new_ratio) {

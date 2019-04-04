@@ -601,6 +601,22 @@ public:
 };
 
 
+struct CGenNodeCommand : public CGenNodeBase  {
+
+public:
+    TrexCpToDpMsgBase  *m_cmd;
+
+    uint8_t             m_pad_end[104];
+
+    /* CACHE_LINE */
+    uint64_t            m_pad3[8];
+
+public:
+    void free_command();
+
+} __rte_cache_aligned;;
+
+
 struct CGenNode : public CGenNodeBase  {
 
 public:
@@ -635,7 +651,8 @@ public:
     const ClientCfgBase *m_client_cfg;
     uint32_t            m_src_idx;
     uint32_t            m_dest_idx;
-    uint32_t            m_end_of_cache_line[6];
+    uint32_t            m_ctx_id; // tcp ctx
+    uint32_t            m_end_of_cache_line[5];
 
 
 public:
@@ -3092,6 +3109,8 @@ public:
     void Delete_tcp_ctx(uint32_t profile_id = 0);
 
     void switch_tcp_ctx(uint32_t profile_id = 0);
+    bool is_tcp_ctx_active(uint32_t profile_id);
+    int active_tcp_ctx_cnt();
 
     void generate_flow(bool &done);
 
@@ -3366,6 +3385,7 @@ class CRXCoreIgnoreStat {
     uint64_t m_tot_bytes;
 };
 
+static_assert(sizeof(CGenNodeCommand) == sizeof(CGenNode), "sizeof(CGenNodeCommand) != sizeof(CGenNode)" );
 static_assert(sizeof(CGenNodeNatInfo) == sizeof(CGenNode), "sizeof(CGenNodeNatInfo) != sizeof(CGenNode)" );
 static_assert(sizeof(CGenNodeLatencyPktInfo) == sizeof(CGenNode), "sizeof(CGenNodeLatencyPktInfo) != sizeof(CGenNode)" );
 

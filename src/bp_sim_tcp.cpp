@@ -195,11 +195,9 @@ uint16_t CFlowGenListPerThread::handle_rx_pkts(bool is_idle) {
                     #endif
                 }
 #endif
-                /* jsmoon-TODO: implement find_id_from_rx_pkt() */
-                #define find_profile_id_from_rx_pkt(x)  0
-                uint32_t profile_id = find_profile_id_from_rx_pkt(m);
-                ctx = (*mctx_map_dir[dir])[profile_id];
-
+                /* jsmoon-TODO: implement find_ctx_from_rx_pkt() */
+                #define find_ctx_from_rx_pkt(x, ctx_map)  (*ctx_map)[0]
+                ctx = find_ctx_from_rx_pkt(m, mctx_map_dir[dir]);
                 ctx->m_ft.rx_handle_packet(ctx, m, is_idle,ports_id[dir]);
             }
             sum+=cnt;
@@ -395,8 +393,12 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     m_cur_time_sec =node->m_time;
     #endif
 
-    /* jsmoon-TODO: node should contain its ctx id(=profile_id) */
-    switch_tcp_ctx(0);
+    if (is_tcp_ctx_active(node->m_ctx_id)) {
+        switch_tcp_ctx(node->m_ctx_id);
+    }
+    else {
+        on_terminate = true;
+    }
 
     bool done;
     m_node_gen.m_p_queue.pop();
@@ -409,6 +411,7 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
             CVirtualIF * v_if=m_node_gen.m_v_if;
             v_if->flush_tx_queue();
         }
+
 
         if (!done) {
             node->m_time += m_c_tcp->m_fif_d_time;
@@ -530,6 +533,20 @@ void CFlowGenListPerThread::switch_tcp_ctx(uint32_t profile_id) {
 
     m_c_tcp = m_c_tcp_map[profile_id];
     m_s_tcp = m_s_tcp_map[profile_id];
+}
+
+bool CFlowGenListPerThread::is_tcp_ctx_active(uint32_t profile_id) {
+    if ((m_c_tcp_map.find(profile_id) == m_c_tcp_map.end()) ||
+        (m_s_tcp_map.find(profile_id) == m_s_tcp_map.end())) {
+        return false;
+    }
+    return (m_c_tcp_map[profile_id]->is_active() && m_s_tcp_map[profile_id]->is_active());
+}
+
+int CFlowGenListPerThread::active_tcp_ctx_cnt() {
+    return std::count_if(m_c_tcp_map.begin(),
+                         m_c_tcp_map.end(),
+                         [](std::pair<uint32_t,CTcpPerThreadCtx*> it) { return it.second->is_active(); });
 }
 
 void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {

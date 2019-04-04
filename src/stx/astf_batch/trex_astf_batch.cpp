@@ -99,8 +99,12 @@ TrexDpCoreAstfBatch::start_astf() {
         node = m_core->create_node();
         node->m_type = CGenNode::TCP_TX_FIF;
         node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
+        node->m_ctx_id = 0;
         m_core->m_node_gen.add_node(node);
     }
+
+    m_core->m_c_tcp->activate();
+    m_core->m_s_tcp->activate();
 
     node = m_core->create_node() ;
     node->m_type = CGenNode::TCP_RX_FLUSH;

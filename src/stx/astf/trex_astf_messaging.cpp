@@ -54,11 +54,19 @@ TrexCpToDpMsgBase* TrexAstfDpStart::clone() {
  ************************/
 TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id) {
     m_profile_id = profile_id;
+    m_core = NULL;
 }
 
 bool TrexAstfDpStop::handle(TrexDpCore *dp_core) {
     astf_core(dp_core)->stop_transmit(m_profile_id);
     return true;
+}
+
+void TrexAstfDpStop::on_node_remove() {
+    if (m_core) {
+        assert(m_core->m_non_active_nodes>0);
+        m_core->m_non_active_nodes--;
+    }
 }
 
 TrexCpToDpMsgBase* TrexAstfDpStop::clone() {

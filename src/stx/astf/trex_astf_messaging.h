@@ -73,7 +73,10 @@ public:
     TrexAstfDpStop() : TrexAstfDpStop(0) {}
     virtual TrexCpToDpMsgBase* clone();
     virtual bool handle(TrexDpCore *dp_core);
+    virtual void on_node_remove();
+    void set_core_ptr(CFlowGenListPerThread* core) { m_core = core; }
 private:
+    CFlowGenListPerThread* m_core;
     uint32_t m_profile_id;
 };
 

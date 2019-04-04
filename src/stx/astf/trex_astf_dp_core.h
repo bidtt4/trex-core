@@ -55,12 +55,20 @@ protected:
     void report_error(uint32_t profile_id, const std::string &error);
     bool sync_barrier();
     CFlowGenListPerThread *m_flow_gen;
-    std::unordered_map<uint32_t, state_e>   m_state_profiles;
+    std::unordered_map<uint32_t, state_e>   m_states;
 
     virtual void start_scheduler() override;
 
+    void add_profile_duration(uint32_t profile_id, double duration);
     void get_scheduler_options(bool& disable_client, double& d_time_flow, double& d_phase);
-    void start_tx_fif(uint32_t profile_id, double duration);
+    void start_tcp_ctx(uint32_t profile_id, double duration);
+    void stop_tcp_ctx(uint32_t profile_id);
+
+    struct {
+        bool        m_flag;
+        uint32_t    m_profile_id;
+        double      m_duration;
+    } m_start_param;
 };
 
 #endif /* __TREX_ASTF_DP_CORE_H__ */
