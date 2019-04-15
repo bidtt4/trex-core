@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <functional>
 #include "sch_rampup.h"
+#include <algorithm>
 /*
  * Copyright (c) 1982, 1986, 1993, 1994, 1995
  *  The Regents of the University of California.  All rights reserved.
@@ -480,7 +481,7 @@ public:
 
     void learn_ipv6_headers_from_network(IPv6Header * net_ipv6);
 
-    void build_template(CTcpPerThreadCtx * ctx);
+    void build_template(CTcpPerThreadCtx * ctx, uint32_t profile_id);
 
     void set_offload_mask(uint8_t flags){
         m_offload_flags=flags;
@@ -516,7 +517,7 @@ private:
         }
     }
 
-    void build_template_ip(CTcpPerThreadCtx * ctx);
+    void build_template_ip(CTcpPerThreadCtx * ctx, uint32_t profile_id);
     void build_template_tcp(CTcpPerThreadCtx * ctx);
     void build_template_udp(CTcpPerThreadCtx * ctx);
 
@@ -552,7 +553,7 @@ inline bool CFlowTemplate::is_tcp_tso(){
 class CFlowBase {
 
 public:
-    void Create(CTcpPerThreadCtx *ctx, uint16_t tg_id=0);
+    void Create(CTcpPerThreadCtx *ctx, uint32_t profile_id, uint16_t tg_id=0);
     void Delete();
 
     void set_tuple(uint32_t src,
@@ -572,6 +573,12 @@ public:
         return (lp2);
     }
 
+    static CFlowBase * cast_from_list_obj(flow_list_ent_t *p){
+        UNSAFE_CONTAINER_OF_PUSH
+        CFlowBase * lp2 =(CFlowBase *)((uint8_t*)p-offsetof (CFlowBase,m_list));
+        UNSAFE_CONTAINER_OF_POP
+        return (lp2);
+    }
 
     bool is_udp(){
         return(m_template.m_proto==IPHeader::Protocol::UDP);
@@ -616,7 +623,9 @@ public:
     uint16_t          m_tg_id;
 
     CTcpPerThreadCtx *m_ctx;
+    uint32_t          m_profile_id;  /* profile id in m_ctx */
     flow_hash_ent_t   m_hash;  /* hash object - 64bit  */
+    flow_list_ent_t   m_list;  /* list object - 64bit  */
     CEmulApp          m_app;   
     CFlowTemplate     m_template;  /* 128+32 bytes */
 };
@@ -656,13 +665,14 @@ public:
 };
 
 
-#define INC_UDP_STAT(ctx, tg_id, p) {ctx->m_udpstat.m_sts.p++; ctx->m_udpstat.m_sts_tg_id[tg_id].p++; }
-#define INC_UDP_STAT_CNT(ctx, tg_id, p, cnt) {ctx->m_udpstat.m_sts.p += cnt; ctx->m_udpstat.m_sts_tg_id[tg_id].p += cnt; }
+#define INC_UDP_STAT(ctx, id, tg_id, p) {ctx->get_udpstat(id)->m_sts.p++; ctx->get_udpstat(id)->m_sts_tg_id[tg_id].p++; }
+#define INC_UDP_STAT_CNT(ctx, id, tg_id, p, cnt) {ctx->get_udpstat(id)->m_sts.p += cnt; ctx->get_udpstat(id)->m_sts_tg_id[tg_id].p += cnt; }
 
 class CUdpFlow : public CFlowBase {
 
 public:
-    void Create(CTcpPerThreadCtx *ctx,bool client, uint16_t tg_id=0);
+    void Create(CTcpPerThreadCtx *ctx, uint32_t profile_id, bool client, uint16_t tg_id=0);
+    void Create(CTcpPerThreadCtx *ctx, bool client, uint16_t tg_id=0) { Create(ctx, 0, client, tg_id); }
     void Delete();
 
     static CUdpFlow * cast_from_hash_obj(flow_hash_ent_t *p){
@@ -728,7 +738,8 @@ public:
 class CTcpFlow : public CFlowBase {
 
 public:
-    void Create(CTcpPerThreadCtx *ctx, uint16_t tg_id=0);
+    void Create(CTcpPerThreadCtx *ctx, uint32_t profile_id, uint16_t tg_id=0);
+    void Create(CTcpPerThreadCtx *ctx, uint16_t tg_id = 0) { Create(ctx, 0, tg_id); }
     void Delete();
 
     void init();
@@ -850,6 +861,20 @@ static inline uint16_t _update_initwnd(uint16_t mss,uint16_t initwnd){
     return((uint16_t)calc);
 }
 
+class CPerProfileCtx {
+public:
+    CAstfFifRampup    * m_sch_rampup; /* rampup for CPS */
+    double              m_fif_d_time;
+
+    CAstfTemplatesRW  * m_template_rw;
+    CAstfDbRO         * m_template_ro;
+
+    struct tcpstat      m_tcpstat; /* tcp statistics */
+    struct CUdpStats    m_udpstat; /* udp statistics */
+
+    bool                m_active; /* active or idle */
+};
+
 class CTcpPerThreadCtx {
 public:
     bool Create(uint32_t size,
@@ -857,10 +882,11 @@ public:
     void Delete();
 
     /* called after init */
-    void call_startup();
+    void call_startup(uint32_t id = 0);
 
     /* cleanup m_timer_w from left flows */
-    void cleanup_flows(void);
+    void cleanup_flows();
+    void cleanup_flows(uint32_t id);
 
 public:
     RC_HTW_t timer_w_start(CTcpFlow * flow){
@@ -893,10 +919,6 @@ public:
         return(m_timer_w.is_any_events_left());
     }
 
-    CAstfDbRO *get_template_ro() {return m_template_ro;}
-    CAstfTemplatesRW *get_template_rw() {return m_template_rw;}
-    void set_template_ro(CAstfDbRO *t) {m_template_ro = t;}
-    void set_template_rw(CAstfTemplatesRW *t) {m_template_rw = t;}
     void set_cb(CTcpCtxCb    * cb){
         m_cb=cb;
     }
@@ -926,17 +948,14 @@ public:
         return (m_ft.is_client_side());
     }
 
-    void resize_stats();
+    void resize_stats(uint32_t id = 0);
 
 private:
-    void delete_startup();
+    void delete_startup(uint32_t id);
 
-    void init_sch_rampup();
+    void init_sch_rampup(uint32_t id);
 
 public:
-    CAstfFifRampup  *    m_sch_rampup; /* rampup for CPS */
-    double               m_fif_d_time;
-
     /* TUNABLEs */
     uint32_t  tcp_tx_socket_bsize;
     uint32_t  tcp_rx_socket_bsize;
@@ -962,8 +981,6 @@ public:
     int tcp_ttl;            /* time to live for TCP segs */
 
     //struct    inpcb tcb;      /* head of queue of active tcpcb's */
-    struct      tcpstat m_tcpstat;  /* tcp statistics */
-    struct      CUdpStats m_udpstat; /* udp statistics */
     uint32_t    tcp_now;        /* for RFC 1323 timestamps */
     tcp_seq     tcp_iss;            /* tcp initial send seq # */
     uint32_t    m_tick;
@@ -972,8 +989,6 @@ public:
     uint8_t     m_disable_new_flow;
     uint8_t     m_pad;
 
-    CAstfTemplatesRW  *  m_template_rw;
-    CAstfDbRO         *  m_template_ro;
     KxuLCRand         *  m_rand; /* per context */
     CTcpCtxCb         *  m_cb;
     CNATimerWheel        m_timer_w; /* TBD-FIXME one timer , should be pointer */
@@ -981,12 +996,67 @@ public:
     CFlowTable           m_ft;
     struct  tcpiphdr tcp_saveti;
 
-    void activate() { m_active = true; }
-    void deactivate() { m_active = false; }
-    bool is_active() { return m_active; }
-
+    /* server port management */
 private:
-    bool        m_active;       /* active or idle */
+    std::unordered_map<uint16_t,uint32_t>   m_udp_server_ports;
+    std::unordered_map<uint16_t,uint32_t>   m_tcp_server_ports;
+public:
+    void append_server_ports(uint32_t profile_id);
+    void remove_server_ports(uint32_t profile_id);
+    uint32_t get_profile_by_server_port(uint16_t port, bool stream);
+
+    /* profile management */
+private:
+    //uint32_t            m_active_id;
+    std::unordered_map<uint32_t, CPerProfileCtx*>   m_profiles;
+
+    bool is_profile_ctx(uint32_t id) { return m_profiles.find(id) != m_profiles.end(); }
+    CPerProfileCtx* get_profile_ctx(uint32_t id) {
+        if (!is_profile_ctx(id)) {
+            m_profiles[id] = new CPerProfileCtx();
+        }
+        return m_profiles[id];
+    }
+    //CPerProfileCtx* get_profile_ctx() { return get_profile_ctx(m_active_id); }
+public:
+    //void set_active_id(uint32_t id) { m_active_id = id; }
+    //uint32_t get_active_id() { return m_active_id; }
+    int get_profile_cnt() { return m_profiles.size(); }
+    int active_profile_cnt() {
+        return std::count_if(m_profiles.begin(), m_profiles.end(),
+                             [](std::pair<uint32_t,CPerProfileCtx*> it) { return it.second->m_active; });
+    }
+    void remove_profile_ctx(uint32_t id) {
+        assert(is_profile_ctx(id));
+        delete m_profiles[id];
+        m_profiles.erase(id);
+    }
+
+public:
+    CAstfFifRampup* get_sch_rampup(uint32_t id) { return get_profile_ctx(id)->m_sch_rampup; }
+    void set_sch_rampup(CAstfFifRampup* t, uint32_t id) { get_profile_ctx(id)->m_sch_rampup = t; }
+    double get_fif_d_time(uint32_t id) { return get_profile_ctx(id)->m_fif_d_time; }
+    void set_fif_d_time(double t, uint32_t id) { get_profile_ctx(id)->m_fif_d_time = t; }
+
+#if 0
+    CAstfDbRO* get_template_ro() { return get_profile_ctx()->m_template_ro; }
+    CAstfTemplatesRW* get_template_rw() { return get_profile_ctx()->m_template_rw; }
+#endif
+    CAstfDbRO* get_template_ro(uint32_t id) { return get_profile_ctx(id)->m_template_ro; }
+    CAstfTemplatesRW* get_template_rw(uint32_t id) { return get_profile_ctx(id)->m_template_rw; }
+#if 0
+    void set_template_ro(CAstfDbRO* t) { get_profile_ctx()->m_template_ro = t; }
+    void set_template_rw(CAstfTemplatesRW* t) { get_profile_ctx()->m_template_rw = t; }
+#endif
+    void set_template_ro(CAstfDbRO* t, uint32_t id=0) { get_profile_ctx(id)->m_template_ro = t; }
+    void set_template_rw(CAstfTemplatesRW* t, uint32_t id) { get_profile_ctx(id)->m_template_rw = t; }
+
+    struct tcpstat* get_tcpstat(uint32_t id=0) { return &get_profile_ctx(id)->m_tcpstat; }
+    struct CUdpStats* get_udpstat(uint32_t id=0) { return &get_profile_ctx(id)->m_udpstat; }
+
+    void activate(uint32_t id) { get_profile_ctx(id)->m_active = true; }
+    void deactivate(uint32_t id) { get_profile_ctx(id)->m_active = false; }
+    bool is_active(uint32_t id) { return get_profile_ctx(id)->m_active; }
 };
 
 
@@ -1042,8 +1112,8 @@ private:
 
 
 
-#define INC_STAT(ctx, tg_id, p) {ctx->m_tcpstat.m_sts.p++; ctx->m_tcpstat.m_sts_tg_id[tg_id].p++; }
-#define INC_STAT_CNT(ctx, tg_id, p, cnt) {ctx->m_tcpstat.m_sts.p += cnt; ctx->m_tcpstat.m_sts_tg_id[tg_id].p += cnt; }
+#define INC_STAT(ctx, id, tg_id, p) {ctx->get_tcpstat(id)->m_sts.p++; ctx->get_tcpstat(id)->m_sts_tg_id[tg_id].p++; }
+#define INC_STAT_CNT(ctx, id, tg_id, p, cnt) {ctx->get_tcpstat(id)->m_sts.p += cnt; ctx->get_tcpstat(id)->m_sts_tg_id[tg_id].p += cnt; }
 
 
 void tcp_fasttimo(CTcpPerThreadCtx * ctx, struct tcpcb *tp);
@@ -1116,13 +1186,13 @@ inline bool tcp_reass_is_exists(struct tcpcb *tp){
 
 inline void tcp_reass_alloc(CTcpPerThreadCtx * ctx,
                             struct tcpcb *tp){
-    INC_STAT(ctx, tp->m_flow->m_tg_id, tcps_reasalloc);
+    INC_STAT(ctx, tp->m_flow->m_profile_id, tp->m_flow->m_tg_id, tcps_reasalloc);
     tp->m_tpc_reass = new CTcpReass();
 }
 
 inline void tcp_reass_free(CTcpPerThreadCtx * ctx,
                             struct tcpcb *tp){
-    INC_STAT(ctx, tp->m_flow->m_tg_id, tcps_reasfree);
+    INC_STAT(ctx, tp->m_flow->m_profile_id, tp->m_flow->m_tg_id, tcps_reasfree);
     delete tp->m_tpc_reass;
     tp->m_tpc_reass=(CTcpReass *)0;
 }
@@ -1160,7 +1230,7 @@ public:
 
     /* add bytes to tx queue */
     virtual void tx_sbappend(CTcpFlow * flow,uint32_t bytes){
-        INC_STAT_CNT(flow->m_ctx, flow->m_tg_id, tcps_sndbyte,bytes);
+        INC_STAT_CNT(flow->m_ctx, flow->m_profile_id, flow->m_tg_id, tcps_sndbyte,bytes);
         flow->m_tcp.m_socket.so_snd.sbappend(bytes);
     }
 

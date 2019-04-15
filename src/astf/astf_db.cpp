@@ -35,7 +35,7 @@ inline std::string methodName(const std::string& prettyFunction)
 
 #define __METHOD_NAME__ methodName(__PRETTY_FUNCTION__)
 
-// make the class singelton
+// make the class singleton
 std::unordered_map<uint32_t, CAstfDB*> CAstfDB::m_pInstances;
 
 
@@ -130,6 +130,19 @@ void CTcpDataAssocTranslation::clear() {
     }
     m_map.clear();
     m_vec.clear();
+}
+
+void CTcpDataAssocTranslation::enumerate_server_ports(std::vector<uint16_t>& ports, bool is_stream) {
+    for (CTcpDataAssocTransHelp& trans_help : m_vec) {
+        if (trans_help.m_params.m_stream == is_stream) {
+            ports.push_back(trans_help.m_params.m_port);
+        }
+    }
+    for (assoc_map_it_t it = m_map.begin(); it != m_map.end(); it++) {
+        if (it->first.m_stream == is_stream) {
+            ports.push_back(it->first.m_port);
+        }
+    }
 }
 
 bool CAstfDB::start_profile_no_buffer(Json::Value msg){

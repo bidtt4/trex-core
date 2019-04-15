@@ -63,7 +63,7 @@ TrexDpCoreAstfBatch::start_astf() {
         return;
     }
 
-    d_time_flow = m_core->m_c_tcp->m_fif_d_time; /* set by Create_tcp function */
+    d_time_flow = m_core->m_c_tcp->get_fif_d_time(0); /* set by Create_tcp function */
 
     double d_phase= 0.01 + (double)m_core->m_thread_id * d_time_flow / (double)m_core->m_max_threads;
 
@@ -102,9 +102,8 @@ TrexDpCoreAstfBatch::start_astf() {
         node->m_ctx_id = 0;
         m_core->m_node_gen.add_node(node);
     }
-
-    m_core->m_c_tcp->activate();
-    m_core->m_s_tcp->activate();
+    m_core->m_c_tcp->activate(0);
+    m_core->m_s_tcp->activate(0);
 
     node = m_core->create_node() ;
     node->m_type = CGenNode::TCP_RX_FLUSH;
