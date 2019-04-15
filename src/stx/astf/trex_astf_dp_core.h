@@ -60,7 +60,7 @@ protected:
     virtual void start_scheduler() override;
 
     void add_profile_duration(uint32_t profile_id, double duration);
-    void get_scheduler_options(bool& disable_client, double& d_time_flow, double& d_phase);
+    void get_scheduler_options(uint32_t profile_id, bool& disable_client, double& d_time_flow, double& d_phase);
     void start_tcp_ctx(uint32_t profile_id, double duration);
     void stop_tcp_ctx(uint32_t profile_id);
 

@@ -3093,8 +3093,6 @@ public:
     /* TCP stack memory */
     CTcpPerThreadCtx      *         m_c_tcp;        /* active tcp client ctx */
     CTcpPerThreadCtx      *         m_s_tcp;        /* active tcp server ctx */
-    std::unordered_map<uint32_t, CTcpPerThreadCtx*>   m_c_tcp_map;
-    std::unordered_map<uint32_t, CTcpPerThreadCtx*>   m_s_tcp_map;
     bool                            m_tcp_terminate;
     bool                            m_sched_accurate;
     uint32_t                        m_tcp_terminate_cnt;
@@ -3103,16 +3101,12 @@ private:
 public:
     double tcp_get_tw_tick_in_sec();
 
-    void Create_tcp_ctx(uint32_t profile_id = 0);
+    void Create_tcp_ctx();
     void load_tcp_profile(uint32_t profile_id = 0);
     void unload_tcp_profile(uint32_t profile_id = 0);
-    void Delete_tcp_ctx(uint32_t profile_id = 0);
+    void Delete_tcp_ctx();
 
-    void switch_tcp_ctx(uint32_t profile_id = 0);
-    bool is_tcp_ctx_active(uint32_t profile_id);
-    int active_tcp_ctx_cnt();
-
-    void generate_flow(bool &done);
+    void generate_flow(bool &done, uint32_t profile_id);
 
     void handle_rx_flush(CGenNode * node,bool on_terminate);
     void handle_tx_fif(CGenNode * node,bool on_terminate);

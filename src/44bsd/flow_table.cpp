@@ -229,16 +229,29 @@ static void on_flow_free_cb(void *userdata,void  *obh){
 
 void CFlowTable::terminate_flow(CTcpPerThreadCtx * ctx,
                                 CFlowBase * flow){
+    uint32_t profile_id = flow->m_profile_id;
     uint16_t tg_id = flow->m_tg_id;
     if ( !flow->is_udp() ){
-        INC_STAT(ctx, tg_id, tcps_testdrops);
-        INC_STAT(ctx, tg_id, tcps_closed); 
+        INC_STAT(ctx, profile_id, tg_id, tcps_testdrops);
+        INC_STAT(ctx, profile_id, tg_id, tcps_closed);
     }
     handle_close(ctx,flow,false);
 }
 
 void CFlowTable::terminate_all_flows(){
     m_ft.detach_all(this,on_flow_free_cb);
+}
+
+void CFlowTable::terminate_profile_flows(uint32_t profile_id) {
+    if (m_profile_flows.find(profile_id) != m_profile_flows.end()) {
+        TCGenDListIterator iter(m_profile_flows[profile_id]);
+        flow_list_ent_t* flow_ent;
+        while((flow_ent = (flow_list_ent_t*)iter.node())) {
+            CFlowBase * flow = CFlowBase::cast_from_list_obj(flow_ent);
+            iter++; /* terminate_flow() will break the iter's cursor */
+            terminate_flow(flow->m_ctx, flow);
+        }
+    }
 }
 
 void CFlowTable::handle_close(CTcpPerThreadCtx * ctx,
@@ -298,6 +311,7 @@ void       CFlowTable::generate_rst_pkt(CTcpPerThreadCtx * ctx,
 
     // This is intentionally left without tg_id
     CTcpFlow * flow=alloc_flow(ctx,
+                                 0, /* will not be used */
                                  src,
                                  dst,
                                  src_port,
@@ -349,6 +363,7 @@ void       CFlowTable::generate_rst_pkt(CTcpPerThreadCtx * ctx,
 }
 
 CUdpFlow * CFlowTable::alloc_flow_udp(CTcpPerThreadCtx * ctx,
+                                  uint32_t profile_id,
                                   uint32_t src,
                                   uint32_t dst,
                                   uint16_t src_port,
@@ -362,13 +377,15 @@ CUdpFlow * CFlowTable::alloc_flow_udp(CTcpPerThreadCtx * ctx,
         FT_INC_SCNT(m_err_no_memory);
         return((CUdpFlow *)0);
     }
-    flow->Create(ctx, client, tg_id);
+    flow->Create(ctx, profile_id, client, tg_id);
     flow->m_template.set_tuple(src,dst,src_port,dst_port,vlan,IPHeader::Protocol::UDP,is_ipv6);
     flow->init();
+    append_flow_to_profile(flow);
     return(flow);
 }
 
 CTcpFlow * CFlowTable::alloc_flow(CTcpPerThreadCtx * ctx,
+                                  uint32_t profile_id,
                                   uint32_t src,
                                   uint32_t dst,
                                   uint16_t src_port,
@@ -381,14 +398,16 @@ CTcpFlow * CFlowTable::alloc_flow(CTcpPerThreadCtx * ctx,
         FT_INC_SCNT(m_err_no_memory);
         return((CTcpFlow *)0);
     }
-    flow->Create(ctx, tg_id);
+    flow->Create(ctx, profile_id, tg_id);
     flow->m_template.set_tuple(src,dst,src_port,dst_port,vlan,IPHeader::Protocol::TCP,is_ipv6);
     flow->init();
+    append_flow_to_profile(flow);
     return(flow);
 }
 
 void CFlowTable::free_flow(CFlowBase * flow){
     assert(flow);
+    remove_flow_from_profile(flow);
 
     if ( flow->is_udp() ){
         CUdpFlow * udp_flow=(CUdpFlow *)flow;
@@ -398,6 +417,29 @@ void CFlowTable::free_flow(CFlowBase * flow){
         CTcpFlow * tcp_flow=(CTcpFlow *)flow;
         tcp_flow->Delete();
         delete tcp_flow;
+    }
+}
+
+void CFlowTable::append_flow_to_profile(CFlowBase * flow) {
+    flow_list_t* p_flow_list;
+
+    if (m_profile_flows.find(flow->m_profile_id) == m_profile_flows.end()) {
+        m_profile_flows[flow->m_profile_id] = flow_list_t();
+        m_profile_flows[flow->m_profile_id].Create();
+    }
+
+    p_flow_list = &m_profile_flows[flow->m_profile_id];
+    p_flow_list->append(&flow->m_list);
+}
+
+void CFlowTable::remove_flow_from_profile(CFlowBase * flow) {
+    flow->m_list.detach(); /* remove from flow list of profile */
+
+    assert(m_profile_flows.find(flow->m_profile_id) != m_profile_flows.end());
+
+    flow_list_t* p_flow_list = &m_profile_flows[flow->m_profile_id];
+    if (p_flow_list->is_empty()) {
+        m_profile_flows.erase(flow->m_profile_id);
     }
 }
 
@@ -498,7 +540,8 @@ bool CFlowTable::rx_handle_packet_udp_no_flow(CTcpPerThreadCtx * ctx,
 
     uint16_t dst_port = lpUDP->getDestPort();
 
-    CAstfDbRO *tcp_data_ro = ctx->get_template_ro();
+    uint32_t profile_id = ctx->get_profile_by_server_port(dst_port,false);
+    CAstfDbRO *tcp_data_ro = ctx->get_template_ro(profile_id);
     CTcpServreInfo *server_info = tcp_data_ro->get_server_info_by_port(dst_port,false);
 
     if (! server_info) {
@@ -520,6 +563,7 @@ bool CFlowTable::rx_handle_packet_udp_no_flow(CTcpPerThreadCtx * ctx,
     //CTcpTuneables *s_tune = server_info->get_tuneables();
 
     flow = ctx->m_ft.alloc_flow_udp(ctx,
+                                   profile_id,
                                    dest_ip,
                                    tuple.get_ip(),
                                    dst_port,
@@ -657,7 +701,8 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
         return(false);
     }
 
-    CAstfDbRO *tcp_data_ro = ctx->get_template_ro();
+    uint32_t profile_id = ctx->get_profile_by_server_port(dst_port,true);
+    CAstfDbRO *tcp_data_ro = ctx->get_template_ro(profile_id);
     CTcpServreInfo *server_info = tcp_data_ro->get_server_info_by_port(dst_port,true);
 
     if (! server_info) {
@@ -692,6 +737,7 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
     CTcpTuneables *s_tune = server_info->get_tuneables();
 
     lptflow = ctx->m_ft.alloc_flow(ctx,
+                                   profile_id,
                                    dest_ip,
                                    tuple.get_ip(),
                                    dst_port,
