@@ -872,7 +872,7 @@ public:
     struct tcpstat      m_tcpstat; /* tcp statistics */
     struct CUdpStats    m_udpstat; /* udp statistics */
 
-    bool                m_active; /* active or idle */
+    bool                m_active; /* active or idle in scheduling */
 };
 
 class CTcpPerThreadCtx {
@@ -980,6 +980,8 @@ public:
     uint16_t tcp_slow_fast_ratio;
     int tcp_ttl;            /* time to live for TCP segs */
 
+    bool        m_tuneables;    /* TUNEABLEs are updated by profile */
+
     //struct    inpcb tcb;      /* head of queue of active tcpcb's */
     uint32_t    tcp_now;        /* for RFC 1323 timestamps */
     tcp_seq     tcp_iss;            /* tcp initial send seq # */
@@ -1007,7 +1009,6 @@ public:
 
     /* profile management */
 private:
-    //uint32_t            m_active_id;
     std::unordered_map<uint32_t, CPerProfileCtx*>   m_profiles;
 
     bool is_profile_ctx(uint32_t id) { return m_profiles.find(id) != m_profiles.end(); }
@@ -1017,10 +1018,7 @@ private:
         }
         return m_profiles[id];
     }
-    //CPerProfileCtx* get_profile_ctx() { return get_profile_ctx(m_active_id); }
 public:
-    //void set_active_id(uint32_t id) { m_active_id = id; }
-    //uint32_t get_active_id() { return m_active_id; }
     int get_profile_cnt() { return m_profiles.size(); }
     int active_profile_cnt() {
         return std::count_if(m_profiles.begin(), m_profiles.end(),
@@ -1038,16 +1036,8 @@ public:
     double get_fif_d_time(uint32_t id) { return get_profile_ctx(id)->m_fif_d_time; }
     void set_fif_d_time(double t, uint32_t id) { get_profile_ctx(id)->m_fif_d_time = t; }
 
-#if 0
-    CAstfDbRO* get_template_ro() { return get_profile_ctx()->m_template_ro; }
-    CAstfTemplatesRW* get_template_rw() { return get_profile_ctx()->m_template_rw; }
-#endif
     CAstfDbRO* get_template_ro(uint32_t id) { return get_profile_ctx(id)->m_template_ro; }
     CAstfTemplatesRW* get_template_rw(uint32_t id) { return get_profile_ctx(id)->m_template_rw; }
-#if 0
-    void set_template_ro(CAstfDbRO* t) { get_profile_ctx()->m_template_ro = t; }
-    void set_template_rw(CAstfTemplatesRW* t) { get_profile_ctx()->m_template_rw = t; }
-#endif
     void set_template_ro(CAstfDbRO* t, uint32_t id=0) { get_profile_ctx(id)->m_template_ro = t; }
     void set_template_rw(CAstfTemplatesRW* t, uint32_t id) { get_profile_ctx(id)->m_template_rw = t; }
 

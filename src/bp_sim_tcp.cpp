@@ -393,6 +393,7 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     if (!m_c_tcp->is_active(node->m_ctx_id) || !m_s_tcp->is_active(node->m_ctx_id)) {
         on_terminate = true;
     }
+    std::cout << "handle_tx_fif: " << node->m_ctx_id << ", " << on_terminate << std::endl;
 
     bool done;
     m_node_gen.m_p_queue.pop();
@@ -543,7 +544,6 @@ void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
     m_c_tcp->set_template_rw(rw, profile_id);
     m_s_tcp->set_template_rw(rw, profile_id);
 
-    /* jsmoon-TODO: should be updated only when the first time. */
     m_c_tcp->update_tuneables(rw->get_c_tuneables());
     m_s_tcp->update_tuneables(rw->get_s_tuneables());
 

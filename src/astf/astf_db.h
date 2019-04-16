@@ -323,7 +323,7 @@ class CAstfDbRO {
     // for tests in simulation
     void set_test_assoc_table(uint16_t port, CEmulAppProgram *prog, CTcpTuneables *tune);
 
-    void enumerate_server_ports(std::vector<uint16_t> ports, bool is_stream) {
+    void enumerate_server_ports(std::vector<uint16_t>& ports, bool is_stream) {
         m_assoc_trans.enumerate_server_ports(ports, is_stream);
     }
  private:
@@ -375,7 +375,6 @@ class CAstfDB  : public CTRexDummyCommand  {
     static CAstfDB *instance(uint32_t profile_id = 0) {
         if (m_pInstances.find(profile_id) == m_pInstances.end()) {
             m_pInstances[profile_id] = new CAstfDB();
-            m_pInstances[profile_id]->m_profile_id = profile_id;
             m_pInstances[profile_id]->m_json_initiated = false;
         }
         return m_pInstances[profile_id];
@@ -576,7 +575,6 @@ private:
  private:
     bool m_json_initiated;
     static std::unordered_map<uint32_t, CAstfDB*> m_pInstances;
-    uint32_t m_profile_id;
     Json::Value  m_val;
     Json::Value  m_buffers;
 
