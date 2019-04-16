@@ -421,24 +421,20 @@ void CFlowTable::free_flow(CFlowBase * flow){
 }
 
 void CFlowTable::append_flow_to_profile(CFlowBase * flow) {
-    flow_list_t* p_flow_list;
-
     if (m_profile_flows.find(flow->m_profile_id) == m_profile_flows.end()) {
         m_profile_flows[flow->m_profile_id] = flow_list_t();
         m_profile_flows[flow->m_profile_id].Create();
     }
 
-    p_flow_list = &m_profile_flows[flow->m_profile_id];
-    p_flow_list->append(&flow->m_list);
+    m_profile_flows[flow->m_profile_id].append(&flow->m_list);
 }
 
 void CFlowTable::remove_flow_from_profile(CFlowBase * flow) {
-    flow->m_list.detach(); /* remove from flow list of profile */
+    flow->m_list.detach(); /* remove from profile's flow list */
 
     assert(m_profile_flows.find(flow->m_profile_id) != m_profile_flows.end());
 
-    flow_list_t* p_flow_list = &m_profile_flows[flow->m_profile_id];
-    if (p_flow_list->is_empty()) {
+    if (m_profile_flows[flow->m_profile_id].is_empty()) {
         m_profile_flows.erase(flow->m_profile_id);
     }
 }

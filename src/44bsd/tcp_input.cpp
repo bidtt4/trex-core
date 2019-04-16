@@ -327,7 +327,7 @@ int tcp_reass(CTcpPerThreadCtx * ctx,
              (ti->ti_seq == tp->rcv_nxt) && 
              (tp->t_state > TCPS_ESTABLISHED) && 
              (ti->ti_len==0) ) {
-            INC_STAT(ctx, tp->m_flow->m_tg_id, tp->m_flow->m_tg_id, tcps_rcvpack);
+            INC_STAT(ctx, tp->m_flow->m_profile_id, tp->m_flow->m_tg_id, tcps_rcvpack);
             if (m) {
                 rte_pktmbuf_free(m);
             }

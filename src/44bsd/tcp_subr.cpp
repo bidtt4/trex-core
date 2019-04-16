@@ -589,6 +589,8 @@ void CTcpPerThreadCtx::reset_tuneables() {
     tcp_slow_fast_ratio = TCP_SLOW_FAST_RATIO_;
     tcp_tx_socket_bsize = 32*1024;
     tcprexmtthresh = 3;
+
+    m_tuneables = false;
 }
 
 void CTcpPerThreadCtx::update_tuneables(CTcpTuneables *tune) {
@@ -596,6 +598,10 @@ void CTcpPerThreadCtx::update_tuneables(CTcpTuneables *tune) {
         return;
 
     if (tune->is_empty())
+        return;
+
+    /* update tuneables only for the first time */
+    if (m_tuneables)
         return;
 
     if (tune->is_valid_field(CTcpTuneables::tcp_mss_bit)) {
@@ -650,6 +656,8 @@ void CTcpPerThreadCtx::update_tuneables(CTcpTuneables *tune) {
         tcp_slow_fast_ratio = _update_slow_fast_ratio(tcp_fast_tick_msec);
     }
     #endif
+
+    m_tuneables = true;
 }
 
 void CTcpPerThreadCtx::resize_stats(uint32_t id) {
@@ -684,18 +692,11 @@ bool CTcpPerThreadCtx::Create(uint32_t size,
     m_disable_new_flow=0;
     m_pad=0;
     tcp_iss = rand();   /* wrong, but better than a constant */
-    //m_tcpstat.Clear();
-    //m_udpstat.Clear();
     m_tick=0;
     tcp_now=timestamp;
-    //m_fif_d_time=0.0;
     m_cb = NULL;
-    //m_template_rw = NULL;
-    //m_template_ro = NULL;
     reset_tuneables();
     memset(&tcp_saveti,0,sizeof(tcp_saveti));
-    //m_active = false;
-    //m_active_id = 0;
 
     RC_HTW_t tw_res;
     tw_res = m_timer_w.Create(1024,TCP_TIMER_LEVEL1_DIV);
@@ -771,6 +772,7 @@ void CTcpPerThreadCtx::append_server_ports(uint32_t id) {
         if (m_tcp_server_ports.find(port) != m_tcp_server_ports.end()) {
             throw TrexException("Two TCP servers with port " + std::to_string(port));
         }
+        //std::cout << "TCP port " << port << " added" << std::endl;
         m_tcp_server_ports[port] = id;
     }
     server_ports.clear();
@@ -779,25 +781,29 @@ void CTcpPerThreadCtx::append_server_ports(uint32_t id) {
         if (m_udp_server_ports.find(port) != m_udp_server_ports.end()) {
             throw TrexException("Two UDP servers with port " + std::to_string(port));
         }
+        //std::cout << "UDP port " << port << " added" << std::endl;
         m_udp_server_ports[port] = id;
     }
 }
 
 void CTcpPerThreadCtx::remove_server_ports(uint32_t id) {
-    for (auto it = m_tcp_server_ports.begin(); it != m_tcp_server_ports.end();) {
-        if (it->second == id) {
-            it = m_tcp_server_ports.erase(it);
-        }
-        else {
-            it++;
+    CAstfDbRO * template_db = get_template_ro(id);
+    std::vector<uint16_t> server_ports;
+
+    server_ports.clear();
+    template_db->enumerate_server_ports(server_ports, true);
+    for (auto port: server_ports) {
+        auto it = m_tcp_server_ports.find(port);
+        if ((it != m_tcp_server_ports.end()) && (it->second == id)) {
+            m_tcp_server_ports.erase(port);
         }
     }
-    for (auto it = m_udp_server_ports.begin(); it != m_udp_server_ports.end();) {
-        if (it->second == id) {
-            it = m_udp_server_ports.erase(it);
-        }
-        else {
-            it++;
+    server_ports.clear();
+    template_db->enumerate_server_ports(server_ports, false);
+    for (auto port: server_ports) {
+        auto it = m_udp_server_ports.find(port);
+        if ((it != m_udp_server_ports.end()) && (it->second == id)) {
+            m_udp_server_ports.erase(port);
         }
     }
 }
