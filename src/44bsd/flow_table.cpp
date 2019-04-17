@@ -224,18 +224,19 @@ void CFlowTable::parse_packet(struct rte_mbuf * mbuf,
 static void on_flow_free_cb(void *userdata,void  *obh){
     CFlowTable * ft = (CFlowTable *)userdata;
     CFlowBase * flow = CFlowBase::cast_from_hash_obj((flow_hash_ent_t *)obh);
-    ft->terminate_flow(flow->m_ctx,flow);
+    ft->terminate_flow(flow->m_ctx, flow, false);
 }
 
 void CFlowTable::terminate_flow(CTcpPerThreadCtx * ctx,
-                                CFlowBase * flow){
+                                CFlowBase * flow,
+                                bool remove_from_ft){
     uint32_t profile_id = flow->m_profile_id;
     uint16_t tg_id = flow->m_tg_id;
     if ( !flow->is_udp() ){
         INC_STAT(ctx, profile_id, tg_id, tcps_testdrops);
         INC_STAT(ctx, profile_id, tg_id, tcps_closed);
     }
-    handle_close(ctx,flow,false);
+    handle_close(ctx, flow, remove_from_ft);
 }
 
 void CFlowTable::terminate_all_flows(){
@@ -249,7 +250,7 @@ void CFlowTable::terminate_profile_flows(uint32_t profile_id) {
         while((flow_ent = (flow_list_ent_t*)iter.node())) {
             CFlowBase * flow = CFlowBase::cast_from_list_obj(flow_ent);
             iter++; /* terminate_flow() will break the iter's cursor */
-            terminate_flow(flow->m_ctx, flow);
+            terminate_flow(flow->m_ctx, flow, true);
         }
     }
 }
