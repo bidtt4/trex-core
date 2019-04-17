@@ -337,7 +337,8 @@ public:
     void terminate_all_flows();
     void terminate_profile_flows(uint32_t profile_id);
     void terminate_flow(CTcpPerThreadCtx * ctx,
-                        CFlowBase * flow);
+                        CFlowBase  * flow,
+                        bool remove_from_ft);
 
 
 private:
@@ -349,7 +350,7 @@ private:
                                                           struct rte_mbuf * mbuf);
 
 
-private: 
+public:
     void reset_stats();
 public:
       CSttFlowTableStats m_sts;

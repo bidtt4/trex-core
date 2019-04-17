@@ -567,6 +567,9 @@ void CFlowGenListPerThread::unload_tcp_profile(uint32_t profile_id) {
     m_s_tcp->remove_profile_ctx(profile_id);
 
     if ((m_c_tcp->get_profile_cnt() == 0) && (m_s_tcp->get_profile_cnt() == 0)) {
+        m_c_tcp->m_ft.reset_stats();
+        m_s_tcp->m_ft.reset_stats();
+
         m_c_tcp->reset_tuneables();
         m_s_tcp->reset_tuneables();
 
