@@ -452,7 +452,7 @@ class CAstfDB  : public CTRexDummyCommand  {
     // multi-threaded need to be protected 
     CAstfTemplatesRW *get_db_template_rw(uint8_t socket_id, CTupleGeneratorSmart *g_gen,
                                              uint16_t thread_id, uint16_t max_threads, uint16_t dual_port_id);
-    void clear_db_ro_rw(CTupleGeneratorSmart *g_gen);
+    void clear_db_ro_rw(CTupleGeneratorSmart *g_gen, uint16_t thread_id=0);
     void get_latency_params(CTcpLatency &lat);
     CJsonData_err verify_data(uint16_t max_threads);
     CTcpTuneables *get_s_tune(uint32_t index) {return m_s_tuneables[index];}
@@ -586,8 +586,6 @@ private:
     // Data duplicated per memory socket
     CAstfDbRO           m_tcp_data[MAX_SOCKETS_SUPPORTED];
 
-    CTupleGeneratorSmart    m_smart_gen;
-
     ClientCfgDB         m_client_config_db;
     ClientCfgDB        *m_client_config_info;
     CAstfJsonValidator *m_validator;
@@ -596,6 +594,25 @@ private:
     uint16_t m_num_of_tg_ids;
     std::vector<std::string> m_tg_names; /* A vector that contains the names of the tg_ids 
     starting from tg_id = 1,2... . Remember that tg_id = 0 is unnamed */
+
+    std::unordered_map<uint16_t,CTupleGeneratorSmart*> m_smart_gen;
+public:
+    bool is_smart_gen(uint16_t thread_id) {
+        return (m_smart_gen.find(thread_id) != m_smart_gen.end());
+    }
+    CTupleGeneratorSmart* get_smart_gen(uint16_t thread_id) {
+        if (!is_smart_gen(thread_id)) {
+            m_smart_gen[thread_id] = new CTupleGeneratorSmart();
+        }
+        return m_smart_gen[thread_id];
+    }
+    void remove_smart_gen(uint16_t thread_id) {
+        if (is_smart_gen(thread_id)) {
+            m_smart_gen[thread_id]->Delete();
+            delete m_smart_gen[thread_id];
+            m_smart_gen.erase(thread_id);
+        }
+    }
 };
 
 #endif
