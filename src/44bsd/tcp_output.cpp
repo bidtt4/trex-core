@@ -654,7 +654,7 @@ send:
      * be transmitted, and initialize the header from
      * the template for sends on this connection.
      */
-    uint32_t profile_id = tp->m_flow->m_profile_id; 
+    uint32_t profile_id = tp->m_flow->m_profile_id;
     uint16_t tg_id = tp->m_flow->m_tg_id; 
     if (len) {
         if (tp->t_force && len == 1){

@@ -188,6 +188,17 @@ TEST_F(gt_astf_inter, astf_positive_7) {
     }
     EXPECT_EQ(success, true);
 
+    lpt->unload_tcp_profile(profile_id_1);
+
+    try {
+        lpt->load_tcp_profile(profile_id_1); // DB 1 loaded
+        success = true;
+    } catch (const TrexException &ex) {
+        std::cerr << "ERROR in ASTF object creation: " << ex.what();
+        success = false;
+    }
+    EXPECT_EQ(success, true);
+
     uint32_t profile_id_2 = 0xfedcba98;
 
     lpastf = CAstfDB::instance(profile_id_2);

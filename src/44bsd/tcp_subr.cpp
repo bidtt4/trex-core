@@ -312,7 +312,7 @@ void CFlowBase::learn_ipv6_headers_from_network(IPv6Header * net_ipv6){
 
 
 
-void CTcpFlow::Create(CTcpPerThreadCtx *ctx, uint32_t profile_id, uint16_t tg_id){ 
+void CTcpFlow::Create(CTcpPerThreadCtx *ctx, uint32_t profile_id, uint16_t tg_id){
     CFlowBase::Create(ctx, profile_id, tg_id);
     m_tick=0;
     m_timer.reset();

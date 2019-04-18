@@ -533,7 +533,7 @@ void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
     m_s_tcp->append_server_ports(profile_id);
     CAstfTemplatesRW * rw = CAstfDB::instance(profile_id)->get_db_template_rw(
             mem_socket_id,
-            nullptr,    /* use CAstfDB internal generator */
+            nullptr, /* use CAstfDB's internal generator */
             m_thread_id,
             m_max_threads,
             getDualPortId());
@@ -558,10 +558,11 @@ void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
 }
 
 void CFlowGenListPerThread::unload_tcp_profile(uint32_t profile_id) {
-    if ( CAstfDB::has_instance(profile_id) ) {
-        CAstfDB::instance(profile_id)->clear_db_ro_rw(nullptr);
-    }
     m_s_tcp->remove_server_ports(profile_id);
+
+    if ( CAstfDB::has_instance(profile_id) ) {
+        CAstfDB::instance(profile_id)->clear_db_ro_rw(nullptr, m_thread_id);
+    }
 
     m_c_tcp->remove_profile_ctx(profile_id);
     m_s_tcp->remove_profile_ctx(profile_id);

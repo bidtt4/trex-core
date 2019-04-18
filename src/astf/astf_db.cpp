@@ -57,6 +57,10 @@ CAstfDB::~CAstfDB(){
         delete m_validator;
     }
     delete m_topo_mngr;
+    for (auto it : m_smart_gen) {
+        delete it.second;
+    }
+    m_smart_gen.clear();
 }
 
 
@@ -1029,7 +1033,7 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
     std::unique_lock<std::mutex> my_lock(m_global_mtx);
 
     if (g_gen == nullptr) {
-        g_gen = &m_smart_gen;
+        g_gen = get_smart_gen(thread_id);
     }
     g_gen->Create(0, thread_id);
 
@@ -1449,30 +1453,35 @@ const std::vector<std::string>& CAstfDB::get_tg_names() {
     return m_tg_names;
 }
 
-void CAstfDB::clear_db_ro_rw(CTupleGeneratorSmart *g_gen) {
+void CAstfDB::clear_db_ro_rw(CTupleGeneratorSmart *g_gen, uint16_t thread_id) {
     std::unique_lock<std::mutex> my_lock(m_global_mtx);
-    for ( auto &rw_db : m_rw_db) {
-        if ( !rw_db ) {
-            continue;
-        }
-        rw_db->Delete();
-        delete rw_db;
-    }
-    m_rw_db.clear();
-    for (auto &s_tuneables : m_s_tuneables) {
-        delete s_tuneables;
-    }
-    m_s_tuneables.clear();
-    m_prog_lens.clear();
-
-    for (auto &tcp_data : m_tcp_data) {
-        tcp_data.Delete();
-    }
     if (g_gen == nullptr) {
-        g_gen = &m_smart_gen;
+        remove_smart_gen(thread_id);
     }
-    g_gen->Delete();
-    m_json_initiated = false;
+    else {
+        g_gen->Delete();
+    }
+    /* to clear only when there is no thread generator */
+    if (m_smart_gen.size() == 0) {
+        for ( auto &rw_db : m_rw_db) {
+            if ( !rw_db ) {
+                continue;
+            }
+            rw_db->Delete();
+            delete rw_db;
+        }
+        m_rw_db.clear();
+        for (auto &s_tuneables : m_s_tuneables) {
+            delete s_tuneables;
+        }
+        m_s_tuneables.clear();
+        m_prog_lens.clear();
+
+        for (auto &tcp_data : m_tcp_data) {
+            tcp_data.Delete();
+        }
+        m_json_initiated = false;
+    }
     my_lock.unlock();
 }
 
