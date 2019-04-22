@@ -678,7 +678,6 @@ bool CTcpPerThreadCtx::Create(uint32_t size,
     seed=rand();
     timestamp=seed;
     #endif
-    //m_sch_rampup = 0;
     m_rand = new KxuLCRand(seed);
     sb_max = SB_MAX;        /* patchable, not used  */
     m_mbuf_socket=0;
@@ -772,7 +771,6 @@ void CTcpPerThreadCtx::append_server_ports(uint32_t id) {
         if (m_tcp_server_ports.find(port) != m_tcp_server_ports.end()) {
             throw TrexException("Two TCP servers with port " + std::to_string(port));
         }
-        //std::cout << "TCP port " << port << " added" << std::endl;
         m_tcp_server_ports[port] = id;
     }
     server_ports.clear();
@@ -781,7 +779,6 @@ void CTcpPerThreadCtx::append_server_ports(uint32_t id) {
         if (m_udp_server_ports.find(port) != m_udp_server_ports.end()) {
             throw TrexException("Two UDP servers with port " + std::to_string(port));
         }
-        //std::cout << "UDP port " << port << " added" << std::endl;
         m_udp_server_ports[port] = id;
     }
 }

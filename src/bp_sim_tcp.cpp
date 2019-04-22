@@ -219,10 +219,11 @@ uint16_t get_client_side_vlan(CVirtualIF * _ifs);
 #endif
 void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
 
-  if ( m_c_tcp->is_open_flow_enabled()==false ){
-       m_c_tcp->m_ft.inc_err_c_new_flow_throttled_cnt();
-       return;
-  }
+    if ( m_c_tcp->is_open_flow_enabled()==false ){
+        m_c_tcp->m_ft.inc_err_c_new_flow_throttled_cnt();
+        done=true;
+        return;
+    }
 
     done=false;
 
@@ -390,10 +391,9 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     m_cur_time_sec =node->m_time;
     #endif
 
-    if (!m_c_tcp->is_active(node->m_ctx_id) || !m_s_tcp->is_active(node->m_ctx_id)) {
+    if (!m_c_tcp->is_active(node->m_ctx_id)) {
         on_terminate = true;
     }
-    std::cout << "handle_tx_fif: " << node->m_ctx_id << ", " << on_terminate << std::endl;
 
     bool done;
     m_node_gen.m_p_queue.pop();
@@ -521,6 +521,14 @@ void CFlowGenListPerThread::Create_tcp_ctx(void) {
 }
 
 void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
+    /* clear global statistics when new profile is started only */
+    if ((m_c_tcp->get_profile_cnt() == 0) && (m_s_tcp->get_profile_cnt() == 0)) {
+        m_stats.clear();    // moved from TrexAstfDpCore::create_tcp_batch()
+
+        m_c_tcp->m_ft.reset_stats();
+        m_s_tcp->m_ft.reset_stats();
+    }
+
     uint8_t mem_socket_id = get_memory_socket_id();
     CAstfDbRO *template_db = CAstfDB::instance(profile_id)->get_db_ro(mem_socket_id);
     if ( !template_db ) {
@@ -568,9 +576,6 @@ void CFlowGenListPerThread::unload_tcp_profile(uint32_t profile_id) {
     m_s_tcp->remove_profile_ctx(profile_id);
 
     if ((m_c_tcp->get_profile_cnt() == 0) && (m_s_tcp->get_profile_cnt() == 0)) {
-        m_c_tcp->m_ft.reset_stats();
-        m_s_tcp->m_ft.reset_stats();
-
         m_c_tcp->reset_tuneables();
         m_s_tcp->reset_tuneables();
 

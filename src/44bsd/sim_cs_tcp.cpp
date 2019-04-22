@@ -1141,9 +1141,9 @@ int CClientServerTcp::simple_http_generic(method_program_cb_t cb){
                                          (int)RX_BYTES );
 
     if (m_check_counters){
-        if (m_s_ctx.get_tcpstat()->m_sts.tcps_sndbyte>0 && 
+        if (m_s_ctx.get_tcpstat()->m_sts.tcps_sndbyte>0 &&
             m_s_ctx.get_tcpstat()->m_sts.tcps_rcvbyte>0) {
-            if ( (m_c_ctx.get_tcpstat()->m_sts.tcps_drops ==0) && 
+            if ( (m_c_ctx.get_tcpstat()->m_sts.tcps_drops ==0) &&
                  (m_s_ctx.get_tcpstat()->m_sts.tcps_drops ==0) ){
                             /* flow wasn't initiated due to drop of SYN too many times */
             assert(m_c_ctx.get_tcpstat()->m_sts.tcps_sndbyte==TX_BYTES);

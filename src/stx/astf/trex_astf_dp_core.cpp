@@ -282,7 +282,7 @@ void TrexAstfDpCore::create_tcp_batch(uint32_t profile_id) {
 
 #if 0
     m_flow_gen->m_cur_flow_id = 1;      /* not used in ASTF mode */
-    m_flow_gen->m_stats.clear();        /* needs to be global */
+    m_flow_gen->m_stats.clear();        /* need to be global operation */
 #endif
     m_flow_gen->m_yaml_info.m_duration_sec = go->m_duration;
 
