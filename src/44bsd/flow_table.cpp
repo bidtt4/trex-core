@@ -249,7 +249,7 @@ void CFlowTable::terminate_profile_flows(uint32_t profile_id) {
         flow_list_ent_t* flow_ent;
         while((flow_ent = (flow_list_ent_t*)iter.node())) {
             CFlowBase * flow = CFlowBase::cast_from_list_obj(flow_ent);
-            iter++; /* terminate_flow() will break the iter's cursor */
+            iter++; /* terminate_flow() can break the iter's cursor */
             terminate_flow(flow->m_ctx, flow, true);
         }
     }

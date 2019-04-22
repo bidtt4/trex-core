@@ -41,7 +41,6 @@ TrexAstfDpStart::TrexAstfDpStart(uint32_t profile_id, double duration) {
 
 
 bool TrexAstfDpStart::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpStart(" << m_profile_id << ", " << m_duration << ")" << std::endl;
     astf_core(dp_core)->start_transmit(m_profile_id, m_duration);
     return true;
 }
@@ -59,7 +58,6 @@ TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id) {
 }
 
 bool TrexAstfDpStop::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpStop(" << m_profile_id << ")" << std::endl;
     astf_core(dp_core)->stop_transmit(m_profile_id);
     return true;
 }
@@ -84,7 +82,6 @@ TrexAstfDpUpdate::TrexAstfDpUpdate(uint32_t profile_id, double old_new_ratio) {
 }
 
 bool TrexAstfDpUpdate::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpUpdate(" << m_profile_id << ", " << m_old_new_ratio << ")" << std::endl;
     astf_core(dp_core)->update_rate(m_profile_id, m_old_new_ratio);
     return true;
 }
