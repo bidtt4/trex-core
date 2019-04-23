@@ -68,7 +68,7 @@ protected:
         bool        m_flag;
         uint32_t    m_profile_id;
         double      m_duration;
-    } m_start_param;
+    } m_sched_param;
 };
 
 #endif /* __TREX_ASTF_DP_CORE_H__ */
