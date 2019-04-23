@@ -37,7 +37,7 @@ using namespace std;
 
 TrexAstfDpCore::TrexAstfDpCore(uint8_t thread_id, CFlowGenListPerThread *core) :
                 TrexDpCore(thread_id, core, STATE_IDLE) {
-    m_start_param.m_flag = false;
+    m_sched_param.m_flag = false;
     CSyncBarrier *sync_barrier = get_astf_object()->get_barrier();
     m_flow_gen = m_core;
     m_flow_gen->set_sync_barrier(sync_barrier);
@@ -109,9 +109,9 @@ void TrexAstfDpCore::start_scheduler() {
     uint32_t profile_id = 0;
     double duration = -1;
 
-    if (m_start_param.m_flag) { /* set by start_transmit function */
-        profile_id = m_start_param.m_profile_id;
-        duration = m_start_param.m_duration;
+    if (m_sched_param.m_flag) { /* set by start_transmit function */
+        profile_id = m_sched_param.m_profile_id;
+        duration = m_sched_param.m_duration;
     }
 
     dsec_t d_time_flow;
@@ -181,7 +181,7 @@ void TrexAstfDpCore::start_scheduler() {
     }
 
     if ( m_state != STATE_TERMINATE ) {
-        //report_finished(profile_id);
+        report_finished(m_sched_param.m_profile_id);
         m_state = STATE_IDLE;
     }
 }
@@ -223,10 +223,14 @@ void TrexAstfDpCore::stop_tcp_ctx(uint32_t profile_id) {
     m_flow_gen->m_c_tcp->deactivate(profile_id);
     m_flow_gen->m_s_tcp->deactivate(profile_id);
 
-    report_finished(profile_id);
-
     if (m_flow_gen->m_c_tcp->active_profile_cnt() == 0) {
         add_global_duration(0.0001);
+        /* last profile will be reported at start_scheduler() */
+        m_sched_param.m_flag = false;
+        m_sched_param.m_profile_id = profile_id;
+    }
+    else {
+        report_finished(profile_id);
     }
 }
 
@@ -310,9 +314,9 @@ void TrexAstfDpCore::start_transmit(uint32_t profile_id, double duration) {
         m_state = STATE_TRANSMITTING;
 
         /* save profile_id/duration as start_scheduler() parameters */
-        m_start_param.m_flag = true;
-        m_start_param.m_profile_id = profile_id;
-        m_start_param.m_duration = duration;
+        m_sched_param.m_flag = true;
+        m_sched_param.m_profile_id = profile_id;
+        m_sched_param.m_duration = duration;
     }
     else {
         start_tcp_ctx(profile_id, duration);
