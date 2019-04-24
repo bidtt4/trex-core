@@ -1014,7 +1014,7 @@ private:
     bool is_profile_ctx(uint32_t id) { return m_profiles.find(id) != m_profiles.end(); }
     CPerProfileCtx* get_profile_ctx(uint32_t id) {
         if (!is_profile_ctx(id)) {
-            m_profiles[id] = new CPerProfileCtx();
+            create_profile_ctx(id);
         }
         return m_profiles[id];
     }
@@ -1024,10 +1024,16 @@ public:
         return std::count_if(m_profiles.begin(), m_profiles.end(),
                              [](std::pair<uint32_t,CPerProfileCtx*> it) { return it.second->m_active; });
     }
+    void create_profile_ctx(uint32_t id) {
+        if (is_profile_ctx(id)) {
+            delete m_profiles[id];
+        }
+        m_profiles[id] = new CPerProfileCtx();
+    }
     void remove_profile_ctx(uint32_t id) {
         assert(is_profile_ctx(id));
-        delete m_profiles[id];
-        m_profiles.erase(id);
+        //delete m_profiles[id];
+        //m_profiles.erase(id);
     }
 
 public:

@@ -522,12 +522,14 @@ void CFlowGenListPerThread::Create_tcp_ctx(void) {
 
 void CFlowGenListPerThread::load_tcp_profile(uint32_t profile_id) {
     /* clear global statistics when new profile is started only */
-    if ((m_c_tcp->get_profile_cnt() == 0) && (m_s_tcp->get_profile_cnt() == 0)) {
+    if ((m_c_tcp->active_profile_cnt() == 0) && (m_s_tcp->active_profile_cnt() == 0)) {
         m_stats.clear();    // moved from TrexAstfDpCore::create_tcp_batch()
 
         m_c_tcp->m_ft.reset_stats();
         m_s_tcp->m_ft.reset_stats();
     }
+    m_c_tcp->create_profile_ctx(profile_id);
+    m_s_tcp->create_profile_ctx(profile_id);
 
     uint8_t mem_socket_id = get_memory_socket_id();
     CAstfDbRO *template_db = CAstfDB::instance(profile_id)->get_db_ro(mem_socket_id);
@@ -575,7 +577,7 @@ void CFlowGenListPerThread::unload_tcp_profile(uint32_t profile_id) {
     m_c_tcp->remove_profile_ctx(profile_id);
     m_s_tcp->remove_profile_ctx(profile_id);
 
-    if ((m_c_tcp->get_profile_cnt() == 0) && (m_s_tcp->get_profile_cnt() == 0)) {
+    if ((m_c_tcp->active_profile_cnt() == 0) && (m_s_tcp->active_profile_cnt() == 0)) {
         m_c_tcp->reset_tuneables();
         m_s_tcp->reset_tuneables();
 
