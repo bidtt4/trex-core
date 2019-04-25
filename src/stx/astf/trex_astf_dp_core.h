@@ -55,7 +55,6 @@ protected:
     void report_error(uint32_t profile_id, const std::string &error);
     bool sync_barrier();
     CFlowGenListPerThread *m_flow_gen;
-    std::unordered_map<uint32_t, state_e>   m_states;
 
     virtual void start_scheduler() override;
 
