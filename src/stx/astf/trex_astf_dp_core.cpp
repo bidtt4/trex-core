@@ -215,13 +215,17 @@ void TrexAstfDpCore::start_tcp_ctx(uint32_t profile_id, double duration) {
 }
 
 void TrexAstfDpCore::stop_tcp_ctx(uint32_t profile_id) {
-    m_flow_gen->flush_tx_queue();
+    CParserOption *go = &CGlobalInfo::m_options;
+    bool immediate_stop = true;
 
-    m_flow_gen->m_c_tcp->cleanup_flows(profile_id);
-    m_flow_gen->m_s_tcp->cleanup_flows(profile_id);
-
-    m_flow_gen->m_c_tcp->deactivate(profile_id);
-    m_flow_gen->m_s_tcp->deactivate(profile_id);
+    if (m_flow_gen->m_c_tcp->is_active(profile_id)) {
+        m_flow_gen->m_c_tcp->deactivate(profile_id);
+        immediate_stop = false;
+    }
+    if (m_flow_gen->m_s_tcp->is_active(profile_id)) {
+        m_flow_gen->m_s_tcp->deactivate(profile_id);
+        immediate_stop = false;
+    }
 
     if (m_flow_gen->m_c_tcp->active_profile_cnt() == 0) {
         add_global_duration(0.0001);
@@ -229,8 +233,17 @@ void TrexAstfDpCore::stop_tcp_ctx(uint32_t profile_id) {
         m_sched_param.m_flag = false;
         m_sched_param.m_profile_id = profile_id;
     }
-    else {
+    else if ( immediate_stop || m_flow_gen->is_terminated_by_master() || go->preview.getNoCleanFlowClose() ) {
+        m_flow_gen->flush_tx_queue();
+
+        m_flow_gen->m_c_tcp->cleanup_flows(profile_id);
+        m_flow_gen->m_s_tcp->cleanup_flows(profile_id);
+
         report_finished(profile_id);
+    }
+    else {
+        // stop profile gracefully, second stop will be done immediately
+        add_profile_duration(profile_id, 2.0);  // wait 2.0 sec, aligned to handle_rx_flush()
     }
 }
 
