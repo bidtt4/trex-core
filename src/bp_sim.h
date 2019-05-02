@@ -617,6 +617,8 @@ public:
 } __rte_cache_aligned;;
 
 
+class CPerProfileCtx;
+
 struct CGenNode : public CGenNodeBase  {
 
 public:
@@ -649,10 +651,10 @@ public:
     uint16_t            m_nat_external_port; // NAT client port
     uint16_t            m_nat_pad[1];
     const ClientCfgBase *m_client_cfg;
+    CPerProfileCtx      *m_ctx;
     uint32_t            m_src_idx;
     uint32_t            m_dest_idx;
-    uint32_t            m_ctx_id; // tcp ctx
-    uint32_t            m_end_of_cache_line[5];
+    uint32_t            m_end_of_cache_line[4];
 
 
 public:
@@ -3106,7 +3108,7 @@ public:
     void unload_tcp_profile(uint32_t profile_id = 0);
     void Delete_tcp_ctx();
 
-    void generate_flow(bool &done, uint32_t profile_id);
+    void generate_flow(bool &done, CPerProfileCtx * ctx);
 
     void handle_rx_flush(CGenNode * node,bool on_terminate);
     void handle_tx_fif(CGenNode * node,bool on_terminate);

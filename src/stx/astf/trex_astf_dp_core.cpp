@@ -112,6 +112,7 @@ void TrexAstfDpCore::start_scheduler() {
     if (m_sched_param.m_flag) { /* set by start_transmit function */
         profile_id = m_sched_param.m_profile_id;
         duration = m_sched_param.m_duration;
+        m_sched_param.m_flag = false;
     }
 
     dsec_t d_time_flow;
@@ -142,7 +143,7 @@ void TrexAstfDpCore::start_scheduler() {
             node = m_flow_gen->create_node();
             node->m_type = CGenNode::TCP_TX_FIF;
             node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
-            node->m_ctx_id = profile_id; /* = tcp ctx id */
+            node->m_ctx = m_flow_gen->m_c_tcp->get_profile_ctx(profile_id);
             m_flow_gen->m_node_gen.add_node(node);
         }
 
@@ -181,12 +182,16 @@ void TrexAstfDpCore::start_scheduler() {
     }
 
     if ( m_state != STATE_TERMINATE ) {
-        report_finished(m_sched_param.m_profile_id);
+        if (m_sched_param.m_flag) {
+            profile_id = m_sched_param.m_profile_id;
+            m_sched_param.m_flag = false;
+        }
+        report_finished(profile_id);
         m_state = STATE_IDLE;
     }
 }
 
-void TrexAstfDpCore::start_tcp_ctx(uint32_t profile_id, double duration) {
+void TrexAstfDpCore::start_profile_ctx(uint32_t profile_id, double duration) {
 
     dsec_t d_time_flow;
     bool disable_client = false;
@@ -203,7 +208,7 @@ void TrexAstfDpCore::start_tcp_ctx(uint32_t profile_id, double duration) {
 
         node->m_type = CGenNode::TCP_TX_FIF;
         node->m_time = now + d_phase + 0.1; /* phase the transmit a bit */
-        node->m_ctx_id = profile_id; /* = tcp ctx id */
+        node->m_ctx = m_flow_gen->m_c_tcp->get_profile_ctx(profile_id);
         m_flow_gen->m_node_gen.add_node(node);
     }
 
@@ -214,24 +219,30 @@ void TrexAstfDpCore::start_tcp_ctx(uint32_t profile_id, double duration) {
     }
 }
 
-void TrexAstfDpCore::stop_tcp_ctx(uint32_t profile_id) {
+void TrexAstfDpCore::stop_profile_ctx(uint32_t profile_id) {
     CParserOption *go = &CGlobalInfo::m_options;
     bool immediate_stop = true;
 
     if (m_flow_gen->m_c_tcp->is_active(profile_id)) {
         m_flow_gen->m_c_tcp->deactivate(profile_id);
-        immediate_stop = false;
+        if (m_flow_gen->m_c_tcp->profile_flow_cnt(profile_id) > 0) {
+            immediate_stop = false;
+        }
     }
     if (m_flow_gen->m_s_tcp->is_active(profile_id)) {
         m_flow_gen->m_s_tcp->deactivate(profile_id);
-        immediate_stop = false;
+        if (m_flow_gen->m_s_tcp->profile_flow_cnt(profile_id) > 0) {
+            immediate_stop = false;
+        }
     }
 
     if (m_flow_gen->m_c_tcp->active_profile_cnt() == 0) {
         add_global_duration(0.0001);
         /* last profile will be reported at start_scheduler() */
-        m_sched_param.m_flag = false;
-        m_sched_param.m_profile_id = profile_id;
+        if (m_sched_param.m_flag == false) {
+            m_sched_param.m_flag = true;
+            m_sched_param.m_profile_id = profile_id;
+        }
     }
     else if ( immediate_stop || m_flow_gen->is_terminated_by_master() || go->preview.getNoCleanFlowClose() ) {
         m_flow_gen->flush_tx_queue();
@@ -332,7 +343,7 @@ void TrexAstfDpCore::start_transmit(uint32_t profile_id, double duration) {
         m_sched_param.m_duration = duration;
     }
     else {
-        start_tcp_ctx(profile_id, duration);
+        start_profile_ctx(profile_id, duration);
     }
 }
 
@@ -340,7 +351,7 @@ void TrexAstfDpCore::stop_transmit(uint32_t profile_id) {
     if ( m_state == STATE_IDLE ) { // is stopped, just ack
         return;
     }
-    stop_tcp_ctx(profile_id);
+    stop_profile_ctx(profile_id);
 }
 
 void TrexAstfDpCore::update_rate(uint32_t profile_id, double old_new_ratio) {
