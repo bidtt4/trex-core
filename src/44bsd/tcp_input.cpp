@@ -145,7 +145,7 @@ void CTcpReass::Dump(FILE *fd){
 }
 
 
-int CTcpReass::tcp_reass_no_data(CTcpPerThreadCtx * ctx,
+int CTcpReass::tcp_reass_no_data(CPerProfileCtx * ctx,
                                  struct tcpcb *tp){
     int flags=0;
 
@@ -158,10 +158,9 @@ int CTcpReass::tcp_reass_no_data(CTcpPerThreadCtx * ctx,
     }
 
     tp->rcv_nxt += m_blocks[0].m_len;
-    uint32_t profile_id = tp->m_flow->m_profile_id;
     uint16_t tg_id = tp->m_flow->m_tg_id;
-    INC_STAT(ctx, profile_id, tg_id, tcps_rcvpack);
-    INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyte, m_blocks[0].m_len);
+    INC_STAT(ctx, tg_id, tcps_rcvpack);
+    INC_STAT_CNT(ctx, tg_id, tcps_rcvbyte, m_blocks[0].m_len);
 
     flags = (m_blocks[0].m_flags==1) ? TH_FIN :0;
 
@@ -182,7 +181,7 @@ int CTcpReass::tcp_reass_no_data(CTcpPerThreadCtx * ctx,
 }
 
 
-int CTcpReass::tcp_reass(CTcpPerThreadCtx * ctx,
+int CTcpReass::tcp_reass(CPerProfileCtx * ctx,
                          struct tcpcb *tp, 
                          struct tcpiphdr *ti, 
                          struct rte_mbuf *m){
@@ -191,7 +190,7 @@ int CTcpReass::tcp_reass(CTcpPerThreadCtx * ctx,
 }
 
 
-int CTcpReass::pre_tcp_reass(CTcpPerThreadCtx * ctx,
+int CTcpReass::pre_tcp_reass(CPerProfileCtx * ctx,
                          struct tcpcb *tp, 
                          struct tcpiphdr *ti, 
                          struct rte_mbuf *m){
@@ -200,10 +199,9 @@ int CTcpReass::pre_tcp_reass(CTcpPerThreadCtx * ctx,
     if (m) {
         rte_pktmbuf_free(m);
     }
-    uint32_t profile_id = tp->m_flow->m_profile_id;
     uint16_t tg_id = tp->m_flow->m_tg_id;
-    INC_STAT(ctx, profile_id, tg_id, tcps_rcvoopack);
-    INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvoobyte,ti->ti_len);
+    INC_STAT(ctx, tg_id, tcps_rcvoopack);
+    INC_STAT_CNT(ctx, tg_id, tcps_rcvoobyte,ti->ti_len);
 
     if (m_active_blocks==0) {
         /* first one - just add it to the list */
@@ -261,12 +259,12 @@ int CTcpReass::pre_tcp_reass(CTcpPerThreadCtx * ctx,
                 if (q>0) {
                     if (q>=cur.m_len) {
                         /* all packet is duplicate */
-                        INC_STAT(ctx, profile_id, tg_id,tcps_rcvduppack);
-                        INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvdupbyte,cur.m_len);
+                        INC_STAT(ctx, tg_id,tcps_rcvduppack);
+                        INC_STAT_CNT(ctx, tg_id, tcps_rcvdupbyte,cur.m_len);
                     }else{
                         /* part of it duplicate */
-                        INC_STAT(ctx, profile_id, tg_id,tcps_rcvpartduppack);
-                        INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvpartdupbyte,(cur.m_len-q));
+                        INC_STAT(ctx, tg_id,tcps_rcvpartduppack);
+                        INC_STAT_CNT(ctx, tg_id, tcps_rcvpartdupbyte,(cur.m_len-q));
                     }
                 }
                 if (cur.m_len>q) {
@@ -283,8 +281,8 @@ int CTcpReass::pre_tcp_reass(CTcpPerThreadCtx * ctx,
 
     if (ci>MAX_TCP_REASS_BLOCKS) {
         /* drop last segment */
-        INC_STAT(ctx, profile_id, tg_id, tcps_rcvoopackdrop);
-        INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvoobytesdrop,tblocks[MAX_TCP_REASS_BLOCKS].m_len);
+        INC_STAT(ctx, tg_id, tcps_rcvoopackdrop);
+        INC_STAT_CNT(ctx, tg_id, tcps_rcvoobytesdrop,tblocks[MAX_TCP_REASS_BLOCKS].m_len);
     }
     
     m_active_blocks = bsd_umin(ci,MAX_TCP_REASS_BLOCKS);
@@ -297,7 +295,7 @@ int CTcpReass::pre_tcp_reass(CTcpPerThreadCtx * ctx,
 
 
 
-int tcp_reass_no_data(CTcpPerThreadCtx * ctx,
+int tcp_reass_no_data(CPerProfileCtx * ctx,
                       struct tcpcb *tp){
 
     if ( TCPS_HAVERCVDSYN(tp->t_state) == 0 )
@@ -316,7 +314,7 @@ int tcp_reass_no_data(CTcpPerThreadCtx * ctx,
 
 
 
-int tcp_reass(CTcpPerThreadCtx * ctx,
+int tcp_reass(CPerProfileCtx * ctx,
               struct tcpcb *tp, 
               struct tcpiphdr *ti, 
               struct rte_mbuf *m){
@@ -327,7 +325,7 @@ int tcp_reass(CTcpPerThreadCtx * ctx,
              (ti->ti_seq == tp->rcv_nxt) && 
              (tp->t_state > TCPS_ESTABLISHED) && 
              (ti->ti_len==0) ) {
-            INC_STAT(ctx, tp->m_flow->m_profile_id, tp->m_flow->m_tg_id, tcps_rcvpack);
+            INC_STAT(ctx, tp->m_flow->m_tg_id, tcps_rcvpack);
             if (m) {
                 rte_pktmbuf_free(m);
             }
@@ -342,6 +340,12 @@ int tcp_reass(CTcpPerThreadCtx * ctx,
     }
     return (res);
 }
+#ifdef  TREX_SIM
+int tcp_reass(CTcpPerThreadCtx * ctx,
+              struct tcpcb *tp,
+              struct tcpiphdr *ti,
+              struct rte_mbuf *m) { return tcp_reass(DEFAULT_PROFILE_CTX(ctx), tp, ti, m); }
+#endif
 
 
 /*
@@ -354,7 +358,7 @@ int tcp_reass(CTcpPerThreadCtx * ctx,
  * Set DELACK for segments received in order, but ack immediately
  * when segments are out of order (so fast retransmit can work).
  */
-inline void TCP_REASS(CTcpPerThreadCtx * ctx,
+inline void TCP_REASS(CPerProfileCtx * ctx,
                       struct tcpcb *tp,
                       struct tcpiphdr *ti,
                       struct rte_mbuf *m,
@@ -369,10 +373,9 @@ inline void TCP_REASS(CTcpPerThreadCtx * ctx,
             tp->t_flags |= TF_DELACK; 
         tp->rcv_nxt += ti->ti_len; 
         tiflags = ti->ti_flags & TH_FIN;
-        uint32_t profile_id = tp->m_flow->m_profile_id;
         uint16_t tg_id = tp->m_flow->m_tg_id;
-        INC_STAT(ctx, profile_id, tg_id, tcps_rcvpack);
-        INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyte,ti->ti_len);
+        INC_STAT(ctx, tg_id, tcps_rcvpack);
+        INC_STAT_CNT(ctx, tg_id, tcps_rcvbyte,ti->ti_len);
         sbappend(so,
                  &so->so_rcv, m,ti->ti_len); 
         sorwakeup(so); 
@@ -384,7 +387,7 @@ inline void TCP_REASS(CTcpPerThreadCtx * ctx,
 
 
 
-void tcp_dooptions(CTcpPerThreadCtx * ctx,
+void tcp_dooptions(CPerProfileCtx * ctx,
               struct tcpcb *tp, 
               uint8_t *cp, 
               int cnt, 
@@ -394,6 +397,7 @@ void tcp_dooptions(CTcpPerThreadCtx * ctx,
               uint32_t * ts_ecr){
     u_short mss;
     int opt, optlen;
+    CTcpPerThreadCtx * tcp_ctx = ctx->m_tcp_ctx;
 
     for (; cnt > 0; cnt -= optlen, cp += optlen) {
         opt = cp[0];
@@ -446,7 +450,7 @@ void tcp_dooptions(CTcpPerThreadCtx * ctx,
             if (ti->ti_flags & TH_SYN) {
                 tp->t_flags |= TF_RCVD_TSTMP;
                 tp->ts_recent = *ts_val;
-                tp->ts_recent_age = ctx->tcp_now;
+                tp->ts_recent_age = tcp_ctx->tcp_now;
             }
             break;
         }
@@ -499,7 +503,7 @@ struct tcpcb *debug_flow;
 
 
 /* assuming we found the flow */
-int tcp_flow_input(CTcpPerThreadCtx * ctx,
+int tcp_flow_input(CPerProfileCtx * ctx,
                     struct tcpcb *tp, 
                     struct rte_mbuf *m,
                     TCPHeader *tcp,
@@ -519,9 +523,9 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
     int todrop, acked, ourfinisacked, needoutput = 0;
     int off;
 
+    CTcpPerThreadCtx * tcp_ctx = ctx->m_tcp_ctx;
     uint8_t *optp;  // TCP option is exist  
 
-    uint32_t profile_id = tp->m_flow->m_profile_id;
     uint16_t tg_id = tp->m_flow->m_tg_id;
 
 #ifdef TCPDEBUG
@@ -576,7 +580,7 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
                  * send a reset in response to a RST.
                  */
                 if (tiflags & TH_ACK) {
-                    INC_STAT(ctx, profile_id, tg_id, tcps_badsyn);
+                    INC_STAT(ctx, tg_id, tcps_badsyn);
                     goto dropwithreset;
                 }
                 goto drop;
@@ -595,7 +599,7 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
      * Reset idle time and keep-alive timer.
      */
     tp->t_idle = 0;
-    tp->t_timer[TCPT_KEEP] = ctx->tcp_keepidle;
+    tp->t_timer[TCPT_KEEP] = tcp_ctx->tcp_keepidle;
 
     /*
      * Process options if not in LISTEN state,
@@ -633,7 +637,7 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
          */
         if (ts_present && SEQ_LEQ(ti->ti_seq, tp->last_ack_sent) &&
            SEQ_LT(tp->last_ack_sent, ti->ti_seq + ti->ti_len)) {
-            tp->ts_recent_age = ctx->tcp_now;
+            tp->ts_recent_age = tcp_ctx->tcp_now;
             tp->ts_recent = ts_val;
         }
 
@@ -644,15 +648,15 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
                 /*
                  * this is a pure ack for outstanding data.
                  */
-                INC_STAT(ctx, profile_id, tg_id, tcps_predack)
+                INC_STAT(ctx, tg_id, tcps_predack)
                 if (ts_present)
-                    tcp_xmit_timer(ctx,tp, tcp_du32(ctx->tcp_now,ts_ecr)+1 );
+                    tcp_xmit_timer(ctx,tp, tcp_du32(tcp_ctx->tcp_now,ts_ecr)+1 );
                 else if (tp->t_rtt &&
                         SEQ_GT(ti->ti_ack, tp->t_rtseq))
                     tcp_xmit_timer(ctx,tp, tp->t_rtt);
                 acked = ti->ti_ack - tp->snd_una;
-                INC_STAT(ctx, profile_id, tg_id, tcps_rcvackpack);
-                INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvackbyte,acked);
+                INC_STAT(ctx, tg_id, tcps_rcvackpack);
+                INC_STAT_CNT(ctx, tg_id, tcps_rcvackbyte,acked);
                 /* clear the dup-ack*/
                 if (tp->t_dupacks){
                     tp->t_dupacks=0;
@@ -692,10 +696,10 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
              * with nothing on the reassembly queue and
              * we have enough buffer space to take it.
              */
-            INC_STAT(ctx, profile_id, tg_id, tcps_preddat);
+            INC_STAT(ctx, tg_id, tcps_preddat);
             tp->rcv_nxt += ti->ti_len;
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvpack);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyte, ti->ti_len);
+            INC_STAT(ctx, tg_id, tcps_rcvpack);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvbyte, ti->ti_len);
             /*
              * Drop TCP, IP headers and TCP options then add data
              * to socket buffer. remove padding 
@@ -765,15 +769,15 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
         if (iss)
             tp->iss = iss;
         else
-            tp->iss = ctx->tcp_iss;
-        ctx->tcp_iss += TCP_ISSINCR/4;
+            tp->iss = tcp_ctx->tcp_iss;
+        tcp_ctx->tcp_iss += TCP_ISSINCR/4;
         tp->irs = ti->ti_seq;
         tcp_sendseqinit(tp);
         tcp_rcvseqinit(tp);
         tp->t_flags |= TF_ACKNOW;
         tp->t_state = TCPS_SYN_RECEIVED;
-        tp->t_timer[TCPT_KEEP] = ctx->tcp_keepinit;
-        INC_STAT(ctx, profile_id, tg_id, tcps_accepts);
+        tp->t_timer[TCPT_KEEP] = tcp_ctx->tcp_keepinit;
+        INC_STAT(ctx, tg_id, tcps_accepts);
         goto trimthenstep6;
         }
 
@@ -812,7 +816,7 @@ int tcp_flow_input(CTcpPerThreadCtx * ctx,
         tcp_rcvseqinit(tp);
         tp->t_flags |= TF_ACKNOW;
         if (tiflags & TH_ACK && SEQ_GT(tp->snd_una, tp->iss)) {
-            INC_STAT(ctx, profile_id, tg_id, tcps_connects);
+            INC_STAT(ctx, tg_id, tcps_connects);
             soisconnected(so);
             tp->t_state = TCPS_ESTABLISHED;
             /* Do window scaling on this connection? */
@@ -844,8 +848,8 @@ trimthenstep6:
             tcp_pktmbuf_trim(m, todrop);
             ti->ti_len = tp->rcv_wnd;
             tiflags &= ~TH_FIN;
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvpackafterwin);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyteafterwin,todrop);
+            INC_STAT(ctx, tg_id, tcps_rcvpackafterwin);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvbyteafterwin,todrop);
         }
         tp->snd_wl1 = ti->ti_seq - 1;
         tp->rcv_up = ti->ti_seq;
@@ -866,7 +870,7 @@ trimthenstep6:
         TSTMP_LT(ts_val, tp->ts_recent)) {
 
         /* Check to see if ts_recent is over 24 days old.  */
-        if ((int)(ctx->tcp_now - tp->ts_recent_age) > TCP_PAWS_IDLE) {
+        if ((int)(tcp_ctx->tcp_now - tp->ts_recent_age) > TCP_PAWS_IDLE) {
             /*
              * Invalidate ts_recent.  If this segment updates
              * ts_recent, the age will be reset later and ts_recent
@@ -880,9 +884,9 @@ trimthenstep6:
              */
             tp->ts_recent = 0;
         } else {
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvduppack);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvdupbyte,ti->ti_len);
-            INC_STAT(ctx, profile_id, tg_id, tcps_pawsdrop);
+            INC_STAT(ctx, tg_id, tcps_rcvduppack);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvdupbyte,ti->ti_len);
+            INC_STAT(ctx, tg_id, tcps_pawsdrop);
             goto dropafterack;
         }
     }
@@ -899,8 +903,8 @@ trimthenstep6:
             todrop--;
         }
         if (todrop >= ti->ti_len) {
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvduppack);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvdupbyte,ti->ti_len);
+            INC_STAT(ctx, tg_id, tcps_rcvduppack);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvdupbyte,ti->ti_len);
             /*
              * If segment is just one to the left of the window,
              * check two special cases:
@@ -926,8 +930,8 @@ trimthenstep6:
             }
             tp->t_flags |= TF_ACKNOW;
         } else {
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvpartduppack);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvpartdupbyte, todrop);
+            INC_STAT(ctx, tg_id, tcps_rcvpartduppack);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvpartdupbyte, todrop);
         }
         /* after this operation, it could be a mbuf with len==0 in  case of mbuf_len==todrop
            still need to free it */
@@ -949,7 +953,7 @@ trimthenstep6:
      */
     if (tp->t_state > TCPS_CLOSE_WAIT && ti->ti_len) {
         tp = tcp_close(ctx,tp);
-        INC_STAT(ctx, profile_id, tg_id, tcps_rcvafterclose);
+        INC_STAT(ctx, tg_id, tcps_rcvafterclose);
         goto dropwithreset;
     }
 
@@ -959,9 +963,9 @@ trimthenstep6:
      */
     todrop = (ti->ti_seq+ti->ti_len) - (tp->rcv_nxt+tp->rcv_wnd);
     if (todrop > 0) {
-        INC_STAT(ctx, profile_id, tg_id, tcps_rcvpackafterwin);
+        INC_STAT(ctx, tg_id, tcps_rcvpackafterwin);
         if (todrop >= ti->ti_len) {
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyteafterwin,ti->ti_len);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvbyteafterwin,ti->ti_len);
             /*
              * If a new connection request is received
              * while in TIME_WAIT, drop the old connection
@@ -984,11 +988,11 @@ trimthenstep6:
              */
             if (tp->rcv_wnd == 0 && ti->ti_seq == tp->rcv_nxt) {
                 tp->t_flags |= TF_ACKNOW;
-                INC_STAT(ctx, profile_id, tg_id, tcps_rcvwinprobe);
+                INC_STAT(ctx, tg_id, tcps_rcvwinprobe);
             } else
                 goto dropafterack;
         } else{
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvbyteafterwin, todrop);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvbyteafterwin, todrop);
         }
         tcp_pktmbuf_trim(m, todrop);
         ti->ti_len -= todrop;
@@ -1002,7 +1006,7 @@ trimthenstep6:
     if (ts_present && SEQ_LEQ(ti->ti_seq, tp->last_ack_sent) &&
         SEQ_LT(tp->last_ack_sent, ti->ti_seq + ti->ti_len +
            ((tiflags & (TH_SYN|TH_FIN)) != 0))) {
-        tp->ts_recent_age = ctx->tcp_now;
+        tp->ts_recent_age = tcp_ctx->tcp_now;
         tp->ts_recent = ts_val;
     }
 
@@ -1030,7 +1034,7 @@ trimthenstep6:
             so->so_error = ECONNRESET;
         close:
             tp->t_state = TCPS_CLOSED;
-            INC_STAT(ctx, profile_id, tg_id, tcps_drops);
+            INC_STAT(ctx, tg_id, tcps_drops);
             tp = tcp_close(ctx,tp);
             goto drop;
 
@@ -1071,7 +1075,7 @@ trimthenstep6:
         if (SEQ_GT(tp->snd_una, ti->ti_ack) ||
             SEQ_GT(ti->ti_ack, tp->snd_max))
             goto dropwithreset;
-        INC_STAT(ctx, profile_id, tg_id, tcps_connects);
+        INC_STAT(ctx, tg_id, tcps_connects);
         soisconnected(so);
         tp->t_state = TCPS_ESTABLISHED;
         /* Do window scaling? */
@@ -1103,7 +1107,7 @@ trimthenstep6:
         if (SEQ_LEQ(ti->ti_ack, tp->snd_una)) {
             if (ti->ti_len == 0 && tiwin == tp->snd_wnd) {
                 if (tp->t_state!=TCPS_FIN_WAIT_2){
-                    INC_STAT(ctx, profile_id, tg_id, tcps_rcvdupack);  /* we can get ack on FIN-ACK and it should not considered dup */
+                    INC_STAT(ctx, tg_id, tcps_rcvdupack);  /* we can get ack on FIN-ACK and it should not considered dup */
                 }
                 /*
                  * If we have outstanding data (other than
@@ -1132,7 +1136,7 @@ trimthenstep6:
                 if (tp->t_timer[TCPT_REXMT] == 0 ||
                     ti->ti_ack != tp->snd_una)
                     tp->t_dupacks = 0;
-                else if (++tp->t_dupacks == ctx->tcprexmtthresh) {
+                else if (++tp->t_dupacks == tcp_ctx->tcprexmtthresh) {
                     tcp_seq onxt = tp->snd_nxt;
                     u_int win =
                         bsd_umin(tp->snd_wnd, tp->snd_cwnd) / 2 / tp->t_maxseg;
@@ -1150,7 +1154,7 @@ trimthenstep6:
                     if (SEQ_GT(onxt, tp->snd_nxt))
                         tp->snd_nxt = onxt;
                     goto drop;
-                } else if (tp->t_dupacks > ctx->tcprexmtthresh) {
+                } else if (tp->t_dupacks > tcp_ctx->tcprexmtthresh) {
                     tp->snd_cwnd += tp->t_maxseg;
                     (void) tcp_output(ctx,tp);
                     goto drop;
@@ -1163,16 +1167,16 @@ trimthenstep6:
          * If the congestion window was inflated to account
          * for the other side's cached packets, retract it.
          */
-        if (tp->t_dupacks > ctx->tcprexmtthresh &&
+        if (tp->t_dupacks > tcp_ctx->tcprexmtthresh &&
             tp->snd_cwnd > tp->snd_ssthresh)
             tp->snd_cwnd = tp->snd_ssthresh;
         tp->t_dupacks = 0;
         if (SEQ_GT(ti->ti_ack, tp->snd_max)) {
-            INC_STAT(ctx,profile_id, tg_id, tcps_rcvacktoomuch);
+            INC_STAT(ctx,tg_id, tcps_rcvacktoomuch);
             goto dropafterack;
         }
         acked = ti->ti_ack - tp->snd_una;
-        INC_STAT(ctx, profile_id, tg_id, tcps_rcvackpack);
+        INC_STAT(ctx, tg_id, tcps_rcvackpack);
 
         /*
          * If we have a timestamp reply, update smoothed
@@ -1184,7 +1188,7 @@ trimthenstep6:
          * Recompute the initial retransmit timer.
          */
         if (ts_present){
-            tcp_xmit_timer(ctx,tp, tcp_du32(ctx->tcp_now,ts_ecr)+1);
+            tcp_xmit_timer(ctx,tp, tcp_du32(tcp_ctx->tcp_now,ts_ecr)+1);
         }else if (tp->t_rtt && SEQ_GT(ti->ti_ack, tp->t_rtseq)){
             tcp_xmit_timer(ctx,tp,tp->t_rtt);
         }
@@ -1216,13 +1220,13 @@ trimthenstep6:
         tp->snd_cwnd = bsd_umin(cw + incr, TCP_MAXWIN<<tp->snd_scale);
         }
         if (acked > so->so_snd.sb_cc) {
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvackbyte,so->so_snd.sb_cc);
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvackbyte_of,(acked-so->so_snd.sb_cc));
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvackbyte,so->so_snd.sb_cc);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvackbyte_of,(acked-so->so_snd.sb_cc));
             tp->snd_wnd -= so->so_snd.sb_cc;
             so->so_snd.sbdrop_all(so);
             ourfinisacked = 1;
         } else {
-            INC_STAT_CNT(ctx, profile_id, tg_id, tcps_rcvackbyte,acked);
+            INC_STAT_CNT(ctx, tg_id, tcps_rcvackbyte,acked);
             so->so_snd.sbdrop(so,acked);
             tp->snd_wnd -= acked;
             ourfinisacked = 0;
@@ -1251,7 +1255,7 @@ trimthenstep6:
                  */
                 if (so->so_state & US_SS_CANTRCVMORE) {
                     soisdisconnected(so);
-                    tp->t_timer[TCPT_2MSL] = ctx->tcp_maxidle;
+                    tp->t_timer[TCPT_2MSL] = tcp_ctx->tcp_maxidle;
                 }
                 tp->t_state = TCPS_FIN_WAIT_2;
             }
@@ -1309,7 +1313,7 @@ step6:
         /* keep track of pure window updates */
         if ( (ti->ti_len == 0) &&
             (tp->snd_wl2 == ti->ti_ack) && (tiwin > tp->snd_wnd)){
-            INC_STAT(ctx, profile_id, tg_id, tcps_rcvwinupd);
+            INC_STAT(ctx, tg_id, tcps_rcvwinupd);
         }
         tp->snd_wnd = tiwin;
         tp->snd_wl1 = ti->ti_seq;
@@ -1528,12 +1532,12 @@ findpcb:
  * Collect new round-trip time estimate
  * and update averages and current timeout.
  */
-void tcp_xmit_timer(CTcpPerThreadCtx * ctx,
+void tcp_xmit_timer(CPerProfileCtx * ctx,
                     struct tcpcb *tp,
                     int16_t rtt){
     short delta;
 
-    INC_STAT(ctx, tp->m_flow->m_profile_id, tp->m_flow->m_tg_id, tcps_rttupdated);
+    INC_STAT(ctx, tp->m_flow->m_tg_id, tcps_rttupdated);
     if (tp->t_srtt != 0) {
         /*
          * srtt is stored as fixed point with 3 bits after the
@@ -1598,8 +1602,10 @@ void tcp_xmit_timer(CTcpPerThreadCtx * ctx,
 }
 
 
-CTcpTuneables * tcp_get_parent_tunable(CTcpPerThreadCtx * ctx,
+CTcpTuneables * tcp_get_parent_tunable(CPerProfileCtx * ctx,
                                       struct tcpcb *tp){
+
+        CTcpPerThreadCtx * tcp_ctx = ctx->m_tcp_ctx;
 
         if (!(TUNE_HAS_PARENT_FLOW & tp->m_tuneable_flags)) {
             /* not part of a bigger CFlow*/
@@ -1612,12 +1618,12 @@ CTcpTuneables * tcp_get_parent_tunable(CTcpPerThreadCtx * ctx,
         uint16_t temp_id = tcp_flow->m_c_template_idx;
         CTcpTuneables *tcp_tune = NULL;
         CAstfPerTemplateRW *temp_rw = NULL;
-        CAstfTemplatesRW *ctx_temp_rw = ctx->get_template_rw(tcp_flow->m_profile_id);
+        CAstfTemplatesRW *ctx_temp_rw = ctx->m_template_rw;
         if (ctx_temp_rw)
             temp_rw = ctx_temp_rw->get_template_by_id(temp_id);
 
         if (temp_rw) {
-            if (ctx->m_ft.is_client_side())
+            if (tcp_ctx->m_ft.is_client_side())
                 tcp_tune = temp_rw->get_c_tune();
             else
                 tcp_tune = temp_rw->get_s_tune();
@@ -1642,13 +1648,15 @@ CTcpTuneables * tcp_get_parent_tunable(CTcpPerThreadCtx * ctx,
  * While looking at the routing entry, we also initialize other path-dependent
  * parameters from pre-set or cached values in the routing entry.
  */
-int tcp_mss(CTcpPerThreadCtx * ctx,
+int tcp_mss(CPerProfileCtx * ctx,
         struct tcpcb *tp, 
         u_int offer){
 
+    CTcpPerThreadCtx * tcp_ctx = ctx->m_tcp_ctx;
+
     if (tp->m_tuneable_flags<2) {
-        tp->snd_cwnd = ctx->tcp_initwnd;
-        return ctx->tcp_mssdflt;
+        tp->snd_cwnd = tcp_ctx->tcp_initwnd;
+        return tcp_ctx->tcp_mssdflt;
     } else {
 
         uint16_t init_win_factor;
@@ -1656,8 +1664,8 @@ int tcp_mss(CTcpPerThreadCtx * ctx,
 
         CTcpTuneables *tune = tcp_get_parent_tunable(ctx,tp);
         if (!tune) {
-            tp->snd_cwnd = ctx->tcp_initwnd;
-            return ctx->tcp_mssdflt;
+            tp->snd_cwnd = tcp_ctx->tcp_initwnd;
+            return tcp_ctx->tcp_mssdflt;
         }
 
         if (tune->is_valid_field(CTcpTuneables::tcp_no_delay)){
@@ -1671,13 +1679,13 @@ int tcp_mss(CTcpPerThreadCtx * ctx,
         if (tune->is_valid_field(CTcpTuneables::tcp_mss_bit)){
             mss = tune->m_tcp_mss;
         }else{
-            mss = ctx->tcp_mssdflt;
+            mss = tcp_ctx->tcp_mssdflt;
         }
 
         if (tune->is_valid_field(CTcpTuneables::tcp_initwnd_bit)){
             init_win_factor = tune->m_tcp_initwnd;
         }else{
-            init_win_factor = ctx->tcp_initwnd_factor;
+            init_win_factor = tcp_ctx->tcp_initwnd_factor;
         }
 
         tp->snd_cwnd = _update_initwnd(mss,init_win_factor);

@@ -575,7 +575,7 @@ int CClientServerTcp::test2(){
 
     uint32_t tx_num_bytes=100*1024;
 
-    c_flow = m_c_ctx.m_ft.alloc_flow(&m_c_ctx,0,0x10000001,0x30000001,1025,80,m_vlan,false);
+    c_flow = m_c_ctx.m_ft.alloc_flow(DEFAULT_PROFILE_CTX(&m_c_ctx),0x10000001,0x30000001,1025,80,m_vlan,false);
     CFlowKeyTuple   c_tuple;
     c_tuple.set_ip(0x10000001);
     c_tuple.set_port(1025);
@@ -1068,7 +1068,7 @@ int CClientServerTcp::simple_http_generic(method_program_cb_t cb){
     m_c_ctx.tcp_initwnd = m_c_ctx.tcp_mssdflt;
     m_s_ctx.tcp_initwnd = m_c_ctx.tcp_mssdflt;
 
-    c_flow = m_c_ctx.m_ft.alloc_flow(&m_c_ctx,0,0x10000001,0x30000001,1025,80,m_vlan,m_ipv6);
+    c_flow = m_c_ctx.m_ft.alloc_flow(DEFAULT_PROFILE_CTX(&m_c_ctx),0x10000001,0x30000001,1025,80,m_vlan,m_ipv6);
     CFlowKeyTuple   c_tuple;
     c_tuple.set_ip(0x10000001);
     c_tuple.set_port(1025);
@@ -1202,7 +1202,7 @@ int CClientServerTcp::fill_from_file() {
     uint16_t temp_index = 0;
     uint16_t tg_id = ro_db->get_template_tg_id(temp_index);
 
-    c_flow = m_c_ctx.m_ft.alloc_flow(&m_c_ctx,0,0x10000001,0x30000001,src_port,dst_port,m_vlan,false, tg_id);
+    c_flow = m_c_ctx.m_ft.alloc_flow(DEFAULT_PROFILE_CTX(&m_c_ctx),0x10000001,0x30000001,src_port,dst_port,m_vlan,false, tg_id);
 
     CFlowKeyTuple c_tuple;
     c_tuple.set_ip(0x10000001);

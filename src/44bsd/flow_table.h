@@ -142,9 +142,6 @@ public:
 typedef CHashEntry<flow_key_t> flow_hash_ent_t;
 typedef CCloseHash<flow_key_t> flow_hash_t;
 
-typedef TCDListNode flow_list_ent_t;
-typedef TCGenDList flow_list_t;
-
 class CTcpPerThreadCtx ;
 class CTcpFlow;
 class CUdpFlow;
@@ -293,7 +290,7 @@ public:
       }
 public:
 
-void generate_rst_pkt(CTcpPerThreadCtx * ctx,
+    void generate_rst_pkt(CPerProfileCtx * ctx,
                       uint32_t src,
                       uint32_t dst,
                       uint16_t src_port,
@@ -306,8 +303,7 @@ void generate_rst_pkt(CTcpPerThreadCtx * ctx,
                       CFlowKeyFullTuple &ftuple);
 
 
-    CTcpFlow * alloc_flow(CTcpPerThreadCtx * ctx,
-                          uint32_t profile_id,
+    CTcpFlow * alloc_flow(CPerProfileCtx * ctx,
                           uint32_t src,
                           uint32_t dst,
                           uint16_t src_port,
@@ -316,8 +312,7 @@ void generate_rst_pkt(CTcpPerThreadCtx * ctx,
                           bool is_ipv6,
                           uint16_t tg_id=0);
 
-    CUdpFlow * alloc_flow_udp(CTcpPerThreadCtx * ctx,
-                              uint32_t profile_id,
+    CUdpFlow * alloc_flow_udp(CPerProfileCtx * ctx,
                               uint32_t src,
                               uint32_t dst,
                               uint16_t src_port,
@@ -335,7 +330,7 @@ void generate_rst_pkt(CTcpPerThreadCtx * ctx,
     }
 public:
     void terminate_all_flows();
-    void terminate_profile_flows(uint32_t profile_id);
+    void terminate_profile_flows(CPerProfileCtx * ctx);
     void terminate_flow(CTcpPerThreadCtx * ctx,
                         CFlowBase  * flow,
                         bool remove_from_ft);
@@ -359,13 +354,9 @@ private:
     bool            m_verbose;
     bool            m_client_side;
     flow_hash_t     m_ft;
-    std::unordered_map<uint32_t, flow_list_t>   m_profile_flows;
 
     CEmulAppApi    *   m_tcp_api;
     CEmulAppApi    *   m_udp_api;
-
-    void append_flow_to_profile(CFlowBase * flow);
-    void remove_flow_from_profile(CFlowBase * flow);
 };
 
 

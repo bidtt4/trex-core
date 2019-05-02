@@ -80,7 +80,7 @@ int CTcpIOCb::on_flow_close(CTcpPerThreadCtx *ctx,
     flow->get_tuple_generator(c_idx,c_pool_idx,c_template_id,enable);
     assert(enable==true); /* all flows should have tuple generator */
 
-    CAstfPerTemplateRW * cur = ctx->get_template_rw(flow->m_profile_id)->get_template_by_id(c_template_id);
+    CAstfPerTemplateRW * cur = flow->m_ctx->m_template_rw->get_template_by_id(c_template_id);
 
     CTupleGeneratorSmart * lpgen= cur->m_tuple_gen.get_gen();
     if ( lpgen->IsFreePortRequired(c_pool_idx) ){
@@ -217,7 +217,7 @@ static CEmulAppApiUdpImpl  m_udp_bh_api_impl_c;
 #ifndef TREX_SIM
 uint16_t get_client_side_vlan(CVirtualIF * _ifs);
 #endif
-void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
+void CFlowGenListPerThread::generate_flow(bool &done, CPerProfileCtx * ctx){
 
     done=false;
 
@@ -226,13 +226,13 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
         return;
     }
 
-    CAstfTemplatesRW * c_rw = m_c_tcp->get_template_rw(profile_id);
+    CAstfTemplatesRW * c_rw = ctx->m_template_rw;
 
     /* choose template index */
     uint16_t template_id = c_rw->do_schedule_template();
 
     CAstfPerTemplateRW * cur = c_rw->get_template_by_id(template_id);
-    CAstfDbRO    *   cur_tmp_ro = m_c_tcp->get_template_ro(profile_id);
+    CAstfDbRO    *   cur_tmp_ro = ctx->m_template_ro;
 
     if (cur->check_limit()){
         /* we can't generate a flow, there is a limit*/
@@ -275,7 +275,7 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
     CFlowBase * c_flow;
     uint16_t tg_id = cur_tmp_ro->get_template_tg_id(template_id);
     if (is_udp) {
-        c_flow = m_c_tcp->m_ft.alloc_flow_udp(m_c_tcp, profile_id,
+        c_flow = m_c_tcp->m_ft.alloc_flow_udp(ctx,
                                                      tuple.getClient(),
                                                      tuple.getServer(),
 
@@ -287,7 +287,7 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
                                                      true,
                                                      tg_id);
     }else{
-        c_flow = m_c_tcp->m_ft.alloc_flow(m_c_tcp, profile_id,
+        c_flow = m_c_tcp->m_ft.alloc_flow(ctx,
                                                      tuple.getClient(),
                                                      tuple.getServer(),
                                                      tuple.getClientPort(),
@@ -350,7 +350,7 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
         CUdpFlow * udp_flow=(CUdpFlow*)c_flow;;
         app_c->set_program(cur_tmp_ro->get_client_prog(template_id));
         app_c->set_bh_api(&m_udp_bh_api_impl_c);
-        app_c->set_udp_flow_ctx(m_c_tcp,udp_flow);
+        app_c->set_udp_flow_ctx(udp_flow->m_ctx,udp_flow);
         app_c->set_udp_flow();
         if (CGlobalInfo::m_options.preview.getEmulDebug() ){
             app_c->set_log_enable(true);
@@ -366,7 +366,7 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
         CTcpFlow * tcp_flow=(CTcpFlow*)c_flow;
         app_c->set_program(cur_tmp_ro->get_client_prog(template_id));
         app_c->set_bh_api(&m_tcp_bh_api_impl_c);
-        app_c->set_flow_ctx(m_c_tcp,tcp_flow);
+        app_c->set_flow_ctx(tcp_flow->m_ctx,tcp_flow);
         if (CGlobalInfo::m_options.preview.getEmulDebug() ){
             app_c->set_log_enable(true);
             app_c->set_debug_id(0);
@@ -379,7 +379,7 @@ void CFlowGenListPerThread::generate_flow(bool &done, uint32_t profile_id){
 
         /* start connect */
         app_c->start(true);
-        tcp_connect(m_c_tcp,&tcp_flow->m_tcp);
+        tcp_connect(tcp_flow->m_ctx,&tcp_flow->m_tcp);
     }
     /* WARNING -- flow might be not valid here !!!! */
 }
@@ -390,7 +390,7 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     m_cur_time_sec =node->m_time;
     #endif
 
-    if (!m_c_tcp->is_active(node->m_ctx_id)) {
+    if (!node->m_ctx->m_active) {
         on_terminate = true;
     }
 
@@ -399,7 +399,9 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     if ( on_terminate == false ) {
         m_cur_time_sec = node->m_time ;
 
-        generate_flow(done, node->m_ctx_id);
+        //printf("[%p] TCP_TX_FIF time: %lf\n", node->m_ctx, node->m_time);
+
+        generate_flow(done, node->m_ctx);
 
         if (m_sched_accurate){
             CVirtualIF * v_if=m_node_gen.m_v_if;
@@ -408,7 +410,7 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
 
 
         if (!done) {
-            node->m_time += m_c_tcp->get_fif_d_time(node->m_ctx_id);
+            node->m_time += node->m_ctx->m_fif_d_time;
             m_node_gen.m_p_queue.push(node);
         }else{
             free_node(node);
