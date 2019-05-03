@@ -390,7 +390,7 @@ void CFlowGenListPerThread::handle_tx_fif(CGenNode * node,
     m_cur_time_sec =node->m_time;
     #endif
 
-    if (!node->m_ctx->m_active) {
+    if (node->m_ctx->m_state != CPerProfileCtx::STATE_ACTIVE) {
         on_terminate = true;
     }
 

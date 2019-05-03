@@ -869,8 +869,9 @@ public:
     struct tcpstat      m_tcpstat; /* tcp statistics */
     struct CUdpStats    m_udpstat; /* udp statistics */
 
-    bool                m_active; /* active or idle in scheduling */
-    bool                m_stopped; /* stopped and reported */
+    enum {
+        STATE_NONE, STATE_ACTIVE, STATE_STOPPING, STATE_STOPPED
+    } m_state;
     uint32_t            m_stop_id;
 
     int                 m_flow_cnt; /* active flow count */
@@ -1046,34 +1047,38 @@ public:
 
     void activate(uint32_t id=0) {
         CPerProfileCtx * ctx = get_profile_ctx(id);
-        if (ctx->m_active == false) {
-            ctx->m_active = true;
+        if (ctx->m_state == CPerProfileCtx::STATE_NONE) {
             m_active_profile_cnt++;
+            ctx->m_state = CPerProfileCtx::STATE_ACTIVE;
         }
     }
     void deactivate(uint32_t id=0) {
         CPerProfileCtx * ctx = get_profile_ctx(id);
-        if (ctx->m_active == true) {
-            ctx->m_active = false;
-            m_active_profile_cnt--;
+        if (ctx->m_state <= CPerProfileCtx::STATE_ACTIVE) {
+            if (ctx->m_state == CPerProfileCtx::STATE_ACTIVE) {
+                m_active_profile_cnt--;
+            }
+            ctx->m_state = CPerProfileCtx::STATE_STOPPING;
         }
     }
-    bool is_active(uint32_t id) { return get_profile_ctx(id)->m_active; }
-
-    int get_stop_id(uint32_t id) { return get_profile_ctx(id)->m_stop_id; }
-    void set_stopped(uint32_t id) { get_profile_ctx(id)->m_stopped = true; }
-    bool is_stopped(uint32_t id) { return get_profile_ctx(id)->m_stopped; }
+    void set_stopped(uint32_t id) { get_profile_ctx(id)->m_state = CPerProfileCtx::STATE_STOPPED; }
     void set_all_stopped(std::vector<uint32_t>& ids) {
         for (auto& it: m_profiles) {
-            if (it.second->m_stopped == false) {
-                it.second->m_stopped = true;
+            if ((it.second->m_state == CPerProfileCtx::STATE_ACTIVE) ||
+                (it.second->m_state == CPerProfileCtx::STATE_STOPPING)) {
+                it.second->m_state = CPerProfileCtx::STATE_STOPPED;
                 ids.push_back(it.first);
             }
         }
     }
 
+    bool is_created(uint32_t id) { return get_profile_ctx(id)->m_state == CPerProfileCtx::STATE_NONE; }
+    bool is_active(uint32_t id) { return get_profile_ctx(id)->m_state == CPerProfileCtx::STATE_ACTIVE; }
+    bool is_stopped(uint32_t id) { return get_profile_ctx(id)->m_state == CPerProfileCtx::STATE_STOPPED; }
+
     int active_profile_cnt() { return m_active_profile_cnt; }
     int profile_flow_cnt(uint32_t id) { return get_profile_ctx(id)->m_flow_cnt; }
+    int get_stop_id(uint32_t id) { return get_profile_ctx(id)->m_stop_id; }
 
 public:
     CAstfFifRampup* get_sch_rampup(uint32_t id) { return get_profile_ctx(id)->m_sch_rampup; }
