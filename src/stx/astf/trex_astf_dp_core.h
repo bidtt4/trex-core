@@ -43,7 +43,7 @@ public:
     virtual bool is_port_active(uint8_t port_id);
 
     void start_transmit(uint32_t profile_id, double duration);
-    void stop_transmit(uint32_t profile_id);
+    void stop_transmit(uint32_t profile_id, uint32_t stop_id);
     void update_rate(uint32_t profile_id, double ratio);
     void create_tcp_batch(uint32_t profile_id);
     void delete_tcp_batch(uint32_t profile_id);
@@ -61,12 +61,20 @@ protected:
     void add_profile_duration(uint32_t profile_id, double duration);
     void get_scheduler_options(uint32_t profile_id, bool& disable_client, double& d_time_flow, double& d_phase);
     void start_profile_ctx(uint32_t profile_id, double duration);
-    void stop_profile_ctx(uint32_t profile_id);
+    void stop_profile_ctx(uint32_t profile_id, uint32_t stop_id);
 
-    struct {
-        bool        m_flag;
+    /* scheduling profile parameters */
+    struct profile_param {
         uint32_t    m_profile_id;
         double      m_duration;
+    };
+    struct {
+        bool        m_flag;
+        bool        m_stopping;
+
+        uint32_t    m_profile_id;
+        double      m_duration;
+        std::vector<struct profile_param> m_params;
     } m_sched_param;
 };
 
