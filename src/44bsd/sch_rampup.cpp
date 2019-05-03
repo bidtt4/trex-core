@@ -31,7 +31,7 @@ CAstfFifRampup::CAstfFifRampup(CTcpPerThreadCtx * ctx,
                    double             cps){
         /* total ticks */
         m_ctx=ctx;
-        m_ctx_id=id;
+        m_profile_id=id;
         m_ticks = (uint32_t)rampup_sec*1000/TICK_MSEC;
         m_rampup_sec =rampup_sec;
         assert(m_ticks>1);
@@ -55,13 +55,13 @@ CAstfFifRampup::~CAstfFifRampup(){
 void CAstfFifRampup::on_timer_update(CAstfTimerFunctorObj *tmr){
 
     double cur_cps = m_cps*(double)m_cur_tick/((double)m_ticks);
-    m_ctx->set_fif_d_time(1.0/cur_cps, m_ctx_id);
+    m_ctx->set_fif_d_time(1.0/cur_cps, m_profile_id);
 
     double max_rampup_sec = (double)m_rampup_sec/4.0;
 
     /* make sure the d time is not bigger than the rampup time (could be in smaller numbers) */
-    if (m_ctx->get_fif_d_time(m_ctx_id) > max_rampup_sec ) {
-        m_ctx->set_fif_d_time(max_rampup_sec, m_ctx_id);
+    if (m_ctx->get_fif_d_time(m_profile_id) > max_rampup_sec ) {
+        m_ctx->set_fif_d_time(max_rampup_sec, m_profile_id);
     }
     //printf("tick  %d %d (%f,%f) dtime:%f \n",(int)m_cur_tick,(int)m_ticks,cur_cps,m_cps,m_ctx->m_fif_d_time);
     if (m_cur_tick == m_ticks) {

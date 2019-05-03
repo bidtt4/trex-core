@@ -46,7 +46,7 @@ public:
 
 private:
     CTcpPerThreadCtx * m_ctx;
-    uint32_t           m_ctx_id;
+    uint32_t           m_profile_id;
     CAstfTimerFunctorObj  * m_tmr;
     double             m_cps;
     uint16_t           m_ticks;

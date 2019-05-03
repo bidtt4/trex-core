@@ -69,12 +69,13 @@ protected:
         double      m_duration;
     };
     struct {
-        bool        m_flag;
-        bool        m_stopping;
+        bool        m_flag; /* starting */
 
         uint32_t    m_profile_id;
         double      m_duration;
         std::vector<struct profile_param> m_params;
+
+        bool        m_stopping;
     } m_sched_param;
 };
 
