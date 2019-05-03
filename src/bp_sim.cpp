@@ -3367,7 +3367,7 @@ inline int CNodeGenerator::flush_file_realtime(dsec_t max_time,
             {
                 dsec_t dt = cur_time - n_time ;
 
-                if (dt > BURST_OFFSET_DTIME) {
+                if (dt > BURST_OFFSET_DTIME || (offset + dt < 0)) {
                     state = scSTRECH;
                 } else if (dt > 0) {
                     state = scWORK;

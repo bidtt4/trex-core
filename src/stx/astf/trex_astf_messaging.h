@@ -69,8 +69,9 @@ private:
  */
 class TrexAstfDpStop : public TrexCpToDpMsgBase {
 public:
-    TrexAstfDpStop(uint32_t profile_id);
-    TrexAstfDpStop() : TrexAstfDpStop(0) {}
+    TrexAstfDpStop(uint32_t profile_id, uint32_t stop_id);
+    TrexAstfDpStop(uint32_t profile_id) : TrexAstfDpStop(profile_id, 0) {}
+    TrexAstfDpStop() : TrexAstfDpStop(0, 0) {}
     virtual TrexCpToDpMsgBase* clone();
     virtual bool handle(TrexDpCore *dp_core);
     virtual void on_node_remove();
@@ -78,6 +79,7 @@ public:
 private:
     CFlowGenListPerThread* m_core;
     uint32_t m_profile_id;
+    uint32_t m_stop_id;
 };
 
 /**

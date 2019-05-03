@@ -52,13 +52,14 @@ TrexCpToDpMsgBase* TrexAstfDpStart::clone() {
 /*************************
   stop traffic message
  ************************/
-TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id) {
+TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id, uint32_t stop_id) {
     m_profile_id = profile_id;
     m_core = NULL;
+    m_stop_id = stop_id;
 }
 
 bool TrexAstfDpStop::handle(TrexDpCore *dp_core) {
-    astf_core(dp_core)->stop_transmit(m_profile_id);
+    astf_core(dp_core)->stop_transmit(m_profile_id, m_stop_id);
     return true;
 }
 
@@ -70,7 +71,7 @@ void TrexAstfDpStop::on_node_remove() {
 }
 
 TrexCpToDpMsgBase* TrexAstfDpStop::clone() {
-    return new TrexAstfDpStop(m_profile_id);
+    return new TrexAstfDpStop(m_profile_id, m_stop_id);
 }
 
 /*************************
