@@ -140,7 +140,7 @@ void TrexAstfDpCore::start_scheduler() {
     }
 }
 
-void TrexAstfDpCore::parse_astf_json(string *profile_buffer, string *topo_buffer) {
+void TrexAstfDpCore::parse_astf_json(uint32_t profile_id, string *profile_buffer, string *topo_buffer) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
@@ -185,7 +185,7 @@ void TrexAstfDpCore::parse_astf_json(string *profile_buffer, string *topo_buffer
     }
 }
 
-void TrexAstfDpCore::create_tcp_batch() {
+void TrexAstfDpCore::create_tcp_batch(uint32_t profile_id) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
@@ -205,7 +205,7 @@ void TrexAstfDpCore::create_tcp_batch() {
     report_finished();
 }
 
-void TrexAstfDpCore::delete_tcp_batch() {
+void TrexAstfDpCore::delete_tcp_batch(uint32_t profile_id) {
     TrexWatchDog::IOFunction dummy;
     (void)dummy;
 
@@ -213,12 +213,12 @@ void TrexAstfDpCore::delete_tcp_batch() {
     report_finished();
 }
 
-void TrexAstfDpCore::start_transmit() {
+void TrexAstfDpCore::start_transmit(uint32_t profile_id, double duration) {
     assert(m_state==STATE_IDLE);
     m_state = STATE_TRANSMITTING;
 }
 
-void TrexAstfDpCore::stop_transmit() {
+void TrexAstfDpCore::stop_transmit(uint32_t profile_id) {
     if ( m_state == STATE_IDLE ) { // is stopped, just ack
         return;
     }
@@ -226,7 +226,7 @@ void TrexAstfDpCore::stop_transmit() {
     add_global_duration(0.0001);
 }
 
-void TrexAstfDpCore::update_rate(double old_new_ratio) {
+void TrexAstfDpCore::update_rate(uint32_t profile_id, double old_new_ratio) {
     m_flow_gen->m_c_tcp->m_fif_d_time *= old_new_ratio;
 }
 

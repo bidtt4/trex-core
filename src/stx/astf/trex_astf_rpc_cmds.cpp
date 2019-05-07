@@ -95,6 +95,8 @@ TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfStart, "start");
 TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfStop, "stop");
 TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfUpdate, "update");
 
+TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfProfileList, "get_profile_list");
+
 TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfStartLatency, "start_latency");
 TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfStopLatency, "stop_latency");
 TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfUpdateLatency, "update_latency");
@@ -114,17 +116,24 @@ TREX_RPC_CMD_ASTF_OWNED(TrexRpcCmdAstfTopoClear, "topo_clear");
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfSync::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result, "");
     TrexAstf *stx = get_astf_object();
 
     Json::Value &res = result["result"];
     res["epoch"] = stx->get_epoch();
     res["state"] = stx->get_state();
 
+    if ( profile_id != "" ) {
+        Json::Value state_profile =  Json::objectValue;
+        stx->get_profiles_status(state_profile);
+        res["state_profile"] = state_profile;
+    }
     return (TREX_RPC_CMD_OK);
 }
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfIncEpoch::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     TrexAstf *stx = get_astf_object();
     try {
         stx->inc_epoch();
@@ -156,8 +165,11 @@ TrexRpcCmdAstfAcquire::_run(const Json::Value &params, Json::Value &result) {
         res["ports"][to_string(port.first)] = handler;
     }
 
-    if ( stx->profile_needs_parsing() ) {
-        stx->profile_clear();
+    vector<string> profile_list = stx->get_profile_id_list();
+    for ( auto profile_id : profile_list ) {
+        if ( stx->profile_needs_parsing(profile_id) ) {
+            stx->profile_clear(profile_id);
+        }
     }
 
     if ( stx->topo_needs_parsing() ) {
@@ -177,16 +189,24 @@ TrexRpcCmdAstfRelease::_run(const Json::Value &params, Json::Value &result) {
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfProfileFragment::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     const bool frag_first = parse_bool(params, "frag_first", result, false);
     const bool frag_last = parse_bool(params, "frag_last", result, false);
 
     TrexAstf *stx = get_astf_object();
 
+    stx->add_profile(profile_id);
+
     if ( frag_first && !frag_last) {
         const string hash = parse_string(params, "md5", result);
-        if ( stx->profile_cmp_hash(hash) ) {
-            result["result"]["matches_loaded"] = true;
-            return TREX_RPC_CMD_OK;
+        switch ( stx->profile_cmp_hash(profile_id, hash) ) {
+            case HASH_ON_SAME_PROFILE:
+                result["result"]["matches_loaded"] = true;
+                return TREX_RPC_CMD_OK;
+            case HASH_ON_OTHER_PROFILE:
+                generate_execute_err(result, "Fragment already added on other profile_id");
+            default:
+                break;
         }
     }
 
@@ -194,13 +214,13 @@ TrexRpcCmdAstfProfileFragment::_run(const Json::Value &params, Json::Value &resu
 
     try {
         if ( frag_first ) {
-            stx->profile_clear();
+            stx->profile_clear(profile_id);
         }
 
-        stx->profile_append(fragment);
+        stx->profile_append(profile_id, fragment);
 
         if ( frag_last ) {
-            stx->profile_set_loaded();
+            stx->profile_set_loaded(profile_id);
         }
 
     } catch (const TrexException &ex) {
@@ -212,8 +232,9 @@ TrexRpcCmdAstfProfileFragment::_run(const Json::Value &params, Json::Value &resu
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfProfileClear::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     try {
-        get_astf_object()->profile_clear();
+        get_astf_object()->profile_clear(profile_id);
     } catch (const TrexException &ex) {
         generate_execute_err(result, ex.what());
     }
@@ -223,6 +244,7 @@ TrexRpcCmdAstfProfileClear::_run(const Json::Value &params, Json::Value &result)
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfStart::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     start_params_t args;
     args.duration = parse_double(params, "duration", result);
     args.mult = parse_double(params, "mult", result);
@@ -232,7 +254,7 @@ TrexRpcCmdAstfStart::_run(const Json::Value &params, Json::Value &result) {
     args.client_mask = parse_uint32(params, "client_mask", result);
 
     try {
-        get_astf_object()->start_transmit(args);
+        get_astf_object()->start_transmit(profile_id, args);
     } catch (const TrexException &ex) {
         generate_execute_err(result, ex.what());
     }
@@ -242,8 +264,9 @@ TrexRpcCmdAstfStart::_run(const Json::Value &params, Json::Value &result) {
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfStop::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     try {
-        get_astf_object()->stop_transmit();
+        get_astf_object()->stop_transmit(profile_id);
     } catch (const TrexException &ex) {
         generate_execute_err(result, ex.what());
     }
@@ -253,10 +276,11 @@ TrexRpcCmdAstfStop::_run(const Json::Value &params, Json::Value &result) {
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfUpdate::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     const double mult = parse_double(params, "mult", result);
 
     try {
-        get_astf_object()->update_rate(mult);
+        get_astf_object()->update_rate(profile_id, mult);
     } catch (const TrexException &ex) {
         generate_execute_err(result, ex.what());
     }
@@ -264,6 +288,19 @@ TrexRpcCmdAstfUpdate::_run(const Json::Value &params, Json::Value &result) {
     return (TREX_RPC_CMD_OK);
 }
 
+trex_rpc_cmd_rc_e
+TrexRpcCmdAstfProfileList::_run(const Json::Value &params, Json::Value &result) {
+    vector<string> profile_list = get_astf_object()->get_profile_id_list();
+    Json::Value json_profile_list = Json::arrayValue;
+
+    for (auto &profile_id : profile_list) {
+        json_profile_list.append(profile_id);
+    }
+
+    result["result"] = json_profile_list;
+
+    return (TREX_RPC_CMD_OK);
+}
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result) {
@@ -376,7 +413,9 @@ TrexRpcCmdAstfGetLatencyStats::_run(const Json::Value &params, Json::Value &resu
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfGetTrafficDist::_run(const Json::Value &params, Json::Value &result) {
-    auto db = CAstfDB::instance();
+    string profile_id = parse_profile(params, result);
+    uint32_t profile_index = get_astf_object()->get_profile_index_by_id(profile_id);
+    auto db = CAstfDB::instance(profile_index);
     auto stx = get_astf_object();
     auto &api = get_platform_api();
 
@@ -416,7 +455,11 @@ TrexRpcCmdAstfGetTrafficDist::_run(const Json::Value &params, Json::Value &resul
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfCountersDesc::_run(const Json::Value &params, Json::Value &result) {
-    CSTTCp *lpstt = get_platform_api().get_fl()->m_stt_cp;
+    string profile_id = parse_profile(params, result);
+    if (!get_astf_object()->is_valid_profile(profile_id)) {
+        generate_execute_err(result, "Invalid profile : " + profile_id);
+    }
+    CSTTCp *lpstt = get_astf_object()->get_sttcp_by_id(profile_id);
     if (lpstt) {
         if (lpstt->m_init) {
             lpstt->m_dtbl.dump_meta("counter desc", result["result"]);
@@ -428,7 +471,8 @@ TrexRpcCmdAstfCountersDesc::_run(const Json::Value &params, Json::Value &result)
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfCountersValues::_run(const Json::Value &params, Json::Value &result) {
-    CSTTCp *lpstt = get_platform_api().get_fl()->m_stt_cp;
+    string profile_id = parse_profile(params, result);
+    CSTTCp *lpstt = get_astf_object()->get_sttcp_by_id(profile_id);
     if (lpstt) {
         if (lpstt->m_init) {
             lpstt->m_dtbl.dump_values("counter vals", false, result["result"]);
@@ -440,15 +484,20 @@ TrexRpcCmdAstfCountersValues::_run(const Json::Value &params, Json::Value &resul
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfGetTGNames::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
+    if (!get_astf_object()->is_valid_profile(profile_id)) {
+        generate_execute_err(result, "Invalid profile : " + profile_id);
+    }
     bool initialized = parse_bool(params, "initialized", result);
     uint64_t epoch = 0;
     if (initialized) {
         epoch = parse_uint64(params, "epoch", result);
     }
-    CSTTCp *lpstt = get_platform_api().get_fl()->m_stt_cp;
+    CSTTCp *lpstt = get_astf_object()->get_sttcp_by_id(profile_id);
     if (lpstt && lpstt->m_init) {
-        if (!get_astf_object()->is_state_build()) {
-            lpstt->UpdateTGNames(CAstfDB::instance()->get_tg_names());
+        if (!get_astf_object()->is_profile_state_build(profile_id)) {
+            uint32_t profile_index = get_astf_object()->get_profile_index_by_id(profile_id);
+            lpstt->UpdateTGNames(CAstfDB::instance(profile_index)->get_tg_names());
         }
         uint64_t server_epoch = lpstt->m_epoch;
         result["result"]["epoch"] = server_epoch;
@@ -462,10 +511,11 @@ TrexRpcCmdAstfGetTGNames::_run(const Json::Value &params, Json::Value &result) {
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfGetTGStats::_run(const Json::Value &params, Json::Value &result) {
+    string profile_id = parse_profile(params, result);
     vector<uint16_t> tgids_arr;
     uint64_t epoch = parse_uint64(params, "epoch", result);
     const Json::Value &tgids = parse_array(params, "tg_ids", result);
-    CSTTCp *lpstt = get_platform_api().get_fl()->m_stt_cp;
+    CSTTCp *lpstt = get_astf_object()->get_sttcp_by_id(profile_id);
     try {
         if (tgids.size() > MAX_TG_ALLOWED_AT_ONCE) {
             generate_execute_err(result, "Trying to get statistics for too many TGs. Max allowed is "
@@ -486,7 +536,7 @@ TrexRpcCmdAstfGetTGStats::_run(const Json::Value &params, Json::Value &result) {
             uint64_t server_epoch = lpstt->m_epoch;
             result["result"]["epoch"] = server_epoch;
             if (server_epoch == epoch) {
-                if (!get_astf_object()->is_state_build()) {
+                if (!get_astf_object()->is_profile_state_build(profile_id)) {
                     lpstt->UpdateTGStats(tgids_arr);
                 }
                 lpstt->DumpTGStats(result["result"], tgids_arr);
@@ -571,6 +621,7 @@ TrexRpcCmdsASTF::TrexRpcCmdsASTF() : TrexRpcComponent("ASTF") {
     m_cmds.push_back(new TrexRpcCmdAstfStart(this));
     m_cmds.push_back(new TrexRpcCmdAstfStop(this));
     m_cmds.push_back(new TrexRpcCmdAstfUpdate(this));
+    m_cmds.push_back(new TrexRpcCmdAstfProfileList(this));
     m_cmds.push_back(new TrexRpcCmdAstfStartLatency(this));
     m_cmds.push_back(new TrexRpcCmdAstfStopLatency(this));
     m_cmds.push_back(new TrexRpcCmdAstfUpdateLatency(this));

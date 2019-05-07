@@ -69,6 +69,8 @@ public:
         EVENT_ASTF_CLEANUP          = 55,
         */
 
+        EVENT_ASTF_PROFILE_STATE_CHG = 60,
+
         EVENT_SERVER_STOPPED        = 100,
         
         

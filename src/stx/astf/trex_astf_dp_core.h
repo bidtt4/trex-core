@@ -42,12 +42,12 @@ public:
      */
     virtual bool is_port_active(uint8_t port_id);
 
-    void start_transmit();
-    void stop_transmit();
-    void update_rate(double ratio);
-    void create_tcp_batch();
-    void delete_tcp_batch();
-    void parse_astf_json(std::string *profile_buffer, std::string *topo_buffer);
+    void start_transmit(uint32_t profile_id, double duration);
+    void stop_transmit(uint32_t profile_id);
+    void update_rate(uint32_t profile_id, double ratio);
+    void create_tcp_batch(uint32_t profile_id);
+    void delete_tcp_batch(uint32_t profile_id);
+    void parse_astf_json(uint32_t profile_id, std::string *profile_buffer, std::string *topo_buffer);
 
 protected:
     virtual bool rx_for_idle();

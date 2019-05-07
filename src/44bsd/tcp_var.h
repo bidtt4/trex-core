@@ -978,7 +978,9 @@ public:
 
     CFlowTable           m_ft;
     struct  tcpiphdr tcp_saveti;
-         
+
+    struct tcpstat* get_tcpstat(uint32_t id=0) { return &m_tcpstat; }
+    struct CUdpStats* get_udpstat(uint32_t id=0) { return &m_udpstat; }
 };
 
 

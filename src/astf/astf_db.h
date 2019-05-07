@@ -367,7 +367,7 @@ class CAstfDB  : public CTRexDummyCommand  {
 
  public:
     // make the class singelton
-    static CAstfDB *instance() {
+    static CAstfDB *instance(uint32_t profile_id = 0) {
         if (! m_pInstance) {
             m_pInstance = new CAstfDB();
             m_pInstance->m_json_initiated = false;
@@ -375,14 +375,14 @@ class CAstfDB  : public CTRexDummyCommand  {
         return m_pInstance;
     }
 
-    static void free_instance(){
+    static void free_instance(uint32_t profile_id = 0){
         if (m_pInstance){
             delete m_pInstance;
             m_pInstance=0;
         }
     }
 
-    static bool has_instance() {
+    static bool has_instance(uint32_t profile_id = 0) {
         return m_pInstance != nullptr;
     }
 
