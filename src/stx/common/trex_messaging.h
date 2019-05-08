@@ -289,7 +289,6 @@ public:
 private:
     int m_thread_id;
     uint32_t m_profile_id;
-
 };
 
 /**

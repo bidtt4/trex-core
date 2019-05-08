@@ -41,7 +41,6 @@ TrexAstfDpStart::TrexAstfDpStart(uint32_t profile_id, double duration) {
 
 
 bool TrexAstfDpStart::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpStart(" << m_profile_id << ", " << m_duration << ")" << std::endl;
     astf_core(dp_core)->start_transmit(m_profile_id, m_duration);
     return true;
 }
@@ -53,14 +52,14 @@ TrexCpToDpMsgBase* TrexAstfDpStart::clone() {
 /*************************
   stop traffic message
  ************************/
-TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id) {
+TrexAstfDpStop::TrexAstfDpStop(uint32_t profile_id, uint32_t stop_id) {
     m_profile_id = profile_id;
     m_core = NULL;
+    m_stop_id = stop_id;
 }
 
 bool TrexAstfDpStop::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpStop(" << m_profile_id << ")" << std::endl;
-    astf_core(dp_core)->stop_transmit(m_profile_id);
+    astf_core(dp_core)->stop_transmit(m_profile_id, m_stop_id);
     return true;
 }
 
@@ -72,7 +71,7 @@ void TrexAstfDpStop::on_node_remove() {
 }
 
 TrexCpToDpMsgBase* TrexAstfDpStop::clone() {
-    return new TrexAstfDpStop(m_profile_id);
+    return new TrexAstfDpStop(m_profile_id, m_stop_id);
 }
 
 /*************************
@@ -84,7 +83,6 @@ TrexAstfDpUpdate::TrexAstfDpUpdate(uint32_t profile_id, double old_new_ratio) {
 }
 
 bool TrexAstfDpUpdate::handle(TrexDpCore *dp_core) {
-    //std::cout << "TrexAstfDpUpdate(" << m_profile_id << ", " << m_old_new_ratio << ")" << std::endl;
     astf_core(dp_core)->update_rate(m_profile_id, m_old_new_ratio);
     return true;
 }
