@@ -68,7 +68,6 @@ public:
         m_profile_buffer = "";
         m_profile_hash = "";
         m_profile_parsed = false;
-        m_profile_built = false;
         m_profile_stopping = false;
 
         m_active_cores = 0;
@@ -96,7 +95,6 @@ public:
     std::string     m_profile_buffer;
     std::string     m_profile_hash;
     bool            m_profile_parsed;
-    bool            m_profile_built;
     bool            m_profile_stopping;
 
     int16_t         m_active_cores;
