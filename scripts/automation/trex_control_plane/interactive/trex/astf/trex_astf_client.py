@@ -841,7 +841,7 @@ class ASTFClient(TRexClient):
                     clear_global = True,
                     clear_xstats = True,
                     clear_traffic = True,
-                    pid_input = DEFAULT_PROFILE_ID):
+                    pid_input = ALL_PROFILE_ID):
         """
             Clears statistics in given ports.
 
