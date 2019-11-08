@@ -272,17 +272,16 @@ class CAstfTrafficStats(object):
         return data
 
 
-    def clear_stats(self, pid_input = DEFAULT_PROFILE_ID):
-        data = self._get_stats_values(relative = False, pid_input = pid_input)
-        if pid_input in self._ref.keys():
-            for section in self.sections:
-                self._ref[pid_input][section] = data[section]
-
-        if pid_input is DEFAULT_PROFILE_ID:
-            data = self._get_stats_values(relative = False, pid_input = pid_input, is_sum = True)
+    def clear_stats(self, pid_input = DEFAULT_PROFILE_ID, is_sum = False):
+        data = self._get_stats_values(relative = False, pid_input = pid_input, is_sum = is_sum)
+        if is_sum:
             if self._ref_global:
                 for section in self.sections:
                     self._ref_global[section] = data[section]
+        else:
+            if pid_input in self._ref.keys():
+                for section in self.sections:
+                    self._ref[pid_input][section] = data[section]
 
 
     def to_table(self, with_zeroes = False, tgid = 0, pid_input = DEFAULT_PROFILE_ID, is_sum = False):
