@@ -35,6 +35,16 @@
 #ifndef _NETINET_TCPIP_H_
 #define _NETINET_TCPIP_H_
 
+#ifdef  TREX_FBSD
+struct ipovly {
+    u_char  ih_x1[9];               /* (unused) */
+    u_char  ih_pr;                  /* protocol */
+    u_short ih_len;                 /* protocol length */
+    struct  in_addr ih_src;         /* source internet address */
+    struct  in_addr ih_dst;         /* destination internet address */
+};
+#endif
+
 /*
  * Tcp+ip header, after ip options removed.
  */

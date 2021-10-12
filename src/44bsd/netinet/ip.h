@@ -36,7 +36,9 @@
 #ifndef _NETINET_IP_H_
 #define	_NETINET_IP_H_
 
+#ifndef TREX_FBSD
 #include <sys/cdefs.h>
+#endif
 
 /*
  * Definitions for internet protocol version 4.

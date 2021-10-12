@@ -72,6 +72,34 @@
  * Research Laboratory (NRL).
  */
 
+#ifdef  TREX_FBSD
+
+#include "sys_inet.h"
+#include "tcp_int.h"
+
+/* tcp_subr.c */
+extern u_int tcp_maxseg(const struct tcpcb *);
+/* tcp_timer.c */
+extern void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
+
+/* defined functions */
+void tcp_update_dsack_list(struct tcpcb *tp, tcp_seq rcv_start, tcp_seq rcv_end);
+void tcp_update_sack_list(struct tcpcb *tp, tcp_seq rcv_start, tcp_seq rcv_end);
+void tcp_clean_dsack_blocks(struct tcpcb *tp);
+void tcp_clean_sackreport(struct tcpcb *tp);
+int tcp_sack_doack(struct tcpcb *tp, struct tcpopt *to, tcp_seq th_ack);
+void tcp_free_sackholes(struct tcpcb *tp);
+void tcp_sack_partialack(struct tcpcb *tp, struct tcphdr *th);
+struct sackhole * tcp_sack_output(struct tcpcb *tp, int *sack_bytes_rexmt);
+void tcp_sack_adjust(struct tcpcb *tp);
+
+static struct sackhole * tcp_sackhole_alloc(struct tcpcb *tp, tcp_seq start, tcp_seq end);
+static void tcp_sackhole_free(struct tcpcb *tp, struct sackhole *hole);
+static struct sackhole * tcp_sackhole_insert(struct tcpcb *tp, tcp_seq start, tcp_seq end, struct sackhole *after);
+static void tcp_sackhole_remove(struct tcpcb *tp, struct sackhole *hole);
+
+#else   /* ! TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -149,6 +177,8 @@ VNET_DEFINE(int, tcp_sack_globalholes) = 0;
 SYSCTL_INT(_net_inet_tcp_sack, OID_AUTO, globalholes, CTLFLAG_VNET | CTLFLAG_RD,
     &VNET_NAME(tcp_sack_globalholes), 0,
     "Global number of TCP SACK holes currently allocated");
+
+#endif  /* ! TREX_FBSD */
 
 /*
  * This function will find overlaps with the currently stored sackblocks
@@ -448,13 +478,21 @@ tcp_sackhole_alloc(struct tcpcb *tp, tcp_seq start, tcp_seq end)
 {
 	struct sackhole *hole;
 
+#ifndef TREX_FBSD
 	if (tp->snd_numholes >= V_tcp_sack_maxholes ||
 	    V_tcp_sack_globalholes >= V_tcp_sack_globalmaxholes) {
+#else
+	if (tp->snd_numholes >= V_tcp_sack_maxholes) {
+#endif
 		TCPSTAT_INC(tcps_sack_sboverflow);
 		return NULL;
 	}
 
+#ifndef TREX_FBSD
 	hole = (struct sackhole *)uma_zalloc(V_sack_hole_zone, M_NOWAIT);
+#else
+	hole = (struct sackhole *)malloc(sizeof(struct sackhole));
+#endif
 	if (hole == NULL)
 		return NULL;
 
@@ -463,7 +501,9 @@ tcp_sackhole_alloc(struct tcpcb *tp, tcp_seq start, tcp_seq end)
 	hole->rxmit = start;
 
 	tp->snd_numholes++;
+#ifndef TREX_FBSD
 	atomic_add_int(&V_tcp_sack_globalholes, 1);
+#endif
 
 	return hole;
 }
@@ -475,10 +515,16 @@ static void
 tcp_sackhole_free(struct tcpcb *tp, struct sackhole *hole)
 {
 
+#ifndef TREX_FBSD
 	uma_zfree(V_sack_hole_zone, hole);
+#else
+	free(hole);
+#endif
 
 	tp->snd_numholes--;
+#ifndef TREX_FBSD
 	atomic_subtract_int(&V_tcp_sack_globalholes, 1);
+#endif
 
 	KASSERT(tp->snd_numholes >= 0, ("tp->snd_numholes >= 0"));
 	KASSERT(V_tcp_sack_globalholes >= 0, ("tcp_sack_globalholes >= 0"));
@@ -578,6 +624,11 @@ tcp_sack_doack(struct tcpcb *tp, struct tcpopt *to, tcp_seq th_ack)
 			    SEQ_LEQ(sack.end, tp->snd_max)) {
 				sack_blocks[num_sack_blks++] = sack;
 			}
+#ifdef TREX_FBSD /* remove warning: array-bounds */
+			if (num_sack_blks > sizeof(sack_blocks)/sizeof(sack_blocks[0])) {
+				break;
+			}
+#endif
 		}
 	}
 	/*
@@ -592,6 +643,9 @@ tcp_sack_doack(struct tcpcb *tp, struct tcpopt *to, tcp_seq th_ack)
 	 * pass. The overhead of sorting up to 4+1 elements is less than
 	 * making up to 4+1 passes over the scoreboard.
 	 */
+#ifdef TREX_FBSD /* remove warning: array-bounds */
+	num_sack_blks = min(num_sack_blks, sizeof(sack_blocks)/sizeof(sack_blocks[0]));
+#endif
 	for (i = 0; i < num_sack_blks; i++) {
 		for (j = i + 1; j < num_sack_blks; j++) {
 			if (SEQ_GT(sack_blocks[i].end, sack_blocks[j].end)) {

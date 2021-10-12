@@ -35,8 +35,12 @@
 #ifndef _NETINET_TCP_H_
 #define _NETINET_TCP_H_
 
+#ifdef TREX_FBSD
+#define __BSD_VISIBLE   1
+#else
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#endif
 
 #if __BSD_VISIBLE
 

@@ -55,6 +55,27 @@
  *
  */
 
+#ifdef  TREX_FBSD
+
+#include "sys_inet.h"
+#include "tcp_int.h"
+
+#include <netinet/cc/cc_newreno.h>
+
+/* tcp_input.c */
+extern uint32_t tcp_compute_initwnd(struct tcpcb *, uint32_t);
+extern int tcp_compute_pipe(struct tcpcb *);
+/* tcp_subr.c */
+extern u_int tcp_maxseg(const struct tcpcb *);
+
+#define V_tcp_abc_l_var     2
+#define V_tcp_do_rfc3465    1
+
+#define V_cc_do_abe             0
+#define V_cc_abe_frlossreduce   0
+
+#else   /* !TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -79,26 +100,41 @@ __FBSDID("$FreeBSD$");
 static MALLOC_DEFINE(M_NEWRENO, "newreno data",
 	"newreno beta values");
 
+#endif  /* !TREX_FBSD */
+
+#ifndef TREX_FBSD
 static void	newreno_cb_destroy(struct cc_var *ccv);
+#endif
 static void	newreno_ack_received(struct cc_var *ccv, uint16_t type);
 static void	newreno_after_idle(struct cc_var *ccv);
 static void	newreno_cong_signal(struct cc_var *ccv, uint32_t type);
 static void	newreno_post_recovery(struct cc_var *ccv);
+#ifndef TREX_FBSD
 static int newreno_ctl_output(struct cc_var *ccv, struct sockopt *sopt, void *buf);
+#endif
 
+#ifndef TREX_FBSD
 VNET_DEFINE_STATIC(uint32_t, newreno_beta) = 50;
 VNET_DEFINE_STATIC(uint32_t, newreno_beta_ecn) = 80;
 #define V_newreno_beta VNET(newreno_beta)
 #define V_newreno_beta_ecn VNET(newreno_beta_ecn)
+#else /* TREX_FBSD */
+#define V_newreno_beta 50
+#define V_newreno_beta_ecn 80
+#endif /* TREX_FBSD */
 
 struct cc_algo newreno_cc_algo = {
 	.name = "newreno",
+#ifndef TREX_FBSD
 	.cb_destroy = newreno_cb_destroy,
+#endif
 	.ack_received = newreno_ack_received,
 	.after_idle = newreno_after_idle,
 	.cong_signal = newreno_cong_signal,
 	.post_recovery = newreno_post_recovery,
+#ifndef TREX_FBSD
 	.ctl_output = newreno_ctl_output,
+#endif
 };
 
 struct newreno {
@@ -106,6 +142,7 @@ struct newreno {
 	uint32_t beta_ecn;
 };
 
+#ifndef TREX_FBSD
 static inline struct newreno *
 newreno_malloc(struct cc_var *ccv)
 {
@@ -127,6 +164,7 @@ newreno_cb_destroy(struct cc_var *ccv)
 {
 	free(ccv->cc_data, M_NEWRENO);
 }
+#endif /* !TREX_FBSD */
 
 static void
 newreno_ack_received(struct cc_var *ccv, uint16_t type)
@@ -218,7 +256,11 @@ newreno_after_idle(struct cc_var *ccv)
 	 * maximum of the former ssthresh or 3/4 of the old cwnd, to
 	 * not exit slow-start prematurely.
 	 */
+#ifndef TREX_FBSD
 	rw = tcp_compute_initwnd(tcp_maxseg(ccv->ccvc.tcp));
+#else
+	rw = tcp_compute_initwnd(ccv->ccvc.tcp, tcp_maxseg(ccv->ccvc.tcp));
+#endif
 
 	CCV(ccv, snd_ssthresh) = max(CCV(ccv, snd_ssthresh),
 	    CCV(ccv, snd_cwnd)-(CCV(ccv, snd_cwnd)>>2));
@@ -319,6 +361,7 @@ newreno_post_recovery(struct cc_var *ccv)
 	}
 }
 
+#ifndef TREX_FBSD
 static int
 newreno_ctl_output(struct cc_var *ccv, struct sockopt *sopt, void *buf)
 {
@@ -372,7 +415,9 @@ newreno_ctl_output(struct cc_var *ccv, struct sockopt *sopt, void *buf)
 
 	return (0);
 }
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 static int
 newreno_beta_handler(SYSCTL_HANDLER_ARGS)
 {
@@ -410,3 +455,4 @@ SYSCTL_PROC(_net_inet_tcp_cc_newreno, OID_AUTO, beta_ecn,
 
 DECLARE_CC_MODULE(newreno, &newreno_cc_algo);
 MODULE_VERSION(newreno, 1);
+#endif /* !TREX_FBSD */

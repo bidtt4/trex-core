@@ -31,6 +31,44 @@
  *	@(#)tcp_subr.c	8.2 (Berkeley) 5/24/95
  */
 
+#ifdef  TREX_FBSD
+
+#include "sys_inet.h"
+#include "tcp_int.h"
+
+/* tcp_debug.c */
+extern void tcp_trace(short, short, struct tcpcb *, void *, struct tcphdr *, int);
+/* tcp_output.c */
+extern int tcp_output(struct tcpcb *);
+extern int tcp_addoptions(struct tcpcb *, struct tcpopt *, u_char *);
+extern void tcp_setpersist(struct tcpcb *);
+/* tcp_inpput.c */
+extern void tcp_do_segment(struct mbuf *, struct tcphdr *, struct socket *, struct tcpcb *, int, int, uint8_t);
+/* tcp_timer.c */
+extern int tcp_timer_active(struct tcpcb *, uint32_t);
+extern void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
+extern void tcp_timer_stop(struct tcpcb *, uint32_t);
+/* tcp_sack.c */
+void tcp_free_sackholes(struct tcpcb *tp);
+
+/* defined functions */
+void tcp_state_change(struct tcpcb *tp, int newstate);
+struct tcpcb * tcp_close(struct tcpcb *tp);
+void tcp_discardcb(struct tcpcb *tp);
+struct tcpcb * tcp_drop(struct tcpcb *tp, int errno);
+u_int tcp_maxseg(const struct tcpcb *tp);
+void tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m, tcp_seq ack, tcp_seq seq, int flags);
+void tcp_timer_discard(void *ptp);
+
+/* external interface functions */
+extern int tcp_build_pkt(struct tcpcb *, uint32_t, uint32_t, uint16_t, uint16_t, struct mbuf **);
+extern int tcp_ip_output(struct tcpcb *, struct mbuf *);
+extern void tcp_reass_flush(struct tcpcb *);
+extern int tcp_mssopt(struct tcpcb *);
+extern bool tcp_isipv6(struct tcpcb *);
+
+#else   /* !TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -335,26 +373,32 @@ VNET_DEFINE(struct hhook_head *, tcp_hhh[HHOOK_TCP_LAST+1]);
 #define TS_OFFSET_SECRET_LENGTH SIPHASH_KEY_LENGTH
 VNET_DEFINE_STATIC(u_char, ts_offset_secret[TS_OFFSET_SECRET_LENGTH]);
 #define	V_ts_offset_secret	VNET(ts_offset_secret)
+#endif /* !TREX_FBSD */
 
 static int	tcp_default_fb_init(struct tcpcb *tp);
 static void	tcp_default_fb_fini(struct tcpcb *tp, int tcb_is_purged);
+#ifndef TREX_FBSD
 static int	tcp_default_handoff_ok(struct tcpcb *tp);
 static struct inpcb *tcp_notify(struct inpcb *, int);
 static struct inpcb *tcp_mtudisc_notify(struct inpcb *, int);
 static void tcp_mtudisc(struct inpcb *, int);
 static char *	tcp_log_addr(struct in_conninfo *inc, struct tcphdr *th,
 		    void *ip4hdr, const void *ip6hdr);
+#endif /* !TREX_FBSD */
 
 static struct tcp_function_block tcp_def_funcblk = {
 	.tfb_tcp_block_name = "freebsd",
 	.tfb_tcp_output = tcp_output,
 	.tfb_tcp_do_segment = tcp_do_segment,
+#ifndef TREX_FBSD
 	.tfb_tcp_ctloutput = tcp_default_ctloutput,
 	.tfb_tcp_handoff_ok = tcp_default_handoff_ok,
+#endif
 	.tfb_tcp_fb_init = tcp_default_fb_init,
 	.tfb_tcp_fb_fini = tcp_default_fb_fini,
 };
 
+#ifndef TREX_FBSD
 static int tcp_fb_cnt = 0;
 struct tcp_funchead t_functions;
 static struct tcp_function_block *tcp_func_set_ptr = &tcp_def_funcblk;
@@ -686,6 +730,7 @@ tcp_default_handoff_ok(struct tcpcb *tp)
 
 	return (0);
 }
+#endif /* !TREX_FBSD */
 
 /*
  * tfb_tcp_fb_init() function for the default stack.
@@ -719,7 +764,11 @@ tcp_default_fb_init(struct tcpcb *tp)
 	 * Make sure some kind of transmission timer is set if there is
 	 * outstanding data.
 	 */
+#ifndef TREX_FBSD
 	so = tp->t_inpcb->inp_socket;
+#else
+	so = &tp->m_socket;
+#endif
 	if ((!TCPS_HAVEESTABLISHED(tp->t_state) || sbavail(&so->so_snd) ||
 	    tp->snd_una != tp->snd_max) && !(tcp_timer_active(tp, TT_REXMT) ||
 	    tcp_timer_active(tp, TT_PERSIST))) {
@@ -769,6 +818,7 @@ tcp_default_fb_fini(struct tcpcb *tp, int tcb_is_purged)
 	return;
 }
 
+#ifndef TREX_FBSD
 /*
  * Target size of TCP PCB hash tables. Must be a power of two.
  *
@@ -1377,6 +1427,7 @@ tcpip_maketemplate(struct inpcb *inp)
 	tcpip_fillheaders(inp, (void *)&t->tt_ipgen, (void *)&t->tt_t);
 	return (t);
 }
+#endif /* !TREX_FBSD */
 
 /*
  * Send a single message to the TCP at address specified by
@@ -1397,7 +1448,9 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
     tcp_seq ack, tcp_seq seq, int flags)
 {
 	struct tcpopt to;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
+#endif
 	struct ip *ip;
 	struct mbuf *optm;
 	struct tcphdr *nth;
@@ -1412,6 +1465,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	KASSERT(tp != NULL || m != NULL, ("tcp_respond: tp and m both NULL"));
 	NET_EPOCH_ASSERT();
 
+#ifndef TREX_FBSD
 #ifdef INET6
 	isipv6 = ((struct ip *)ipgen)->ip_v == (IPV6_VERSION >> 4);
 	ip6 = ipgen;
@@ -1424,18 +1478,26 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		INP_WLOCK_ASSERT(inp);
 	} else
 		inp = NULL;
+#else /* TREX_FBSD */
+	isipv6 = tcp_isipv6(tp);
+#endif /* TREX_FBSD */
 
 	incl_opts = false;
 	win = 0;
 	if (tp != NULL) {
 		if (!(flags & TH_RST)) {
+#ifndef TREX_FBSD
 			win = sbspace(&inp->inp_socket->so_rcv);
+#else
+			win = sbspace(&tp->m_socket.so_rcv);
+#endif
 			if (win > TCP_MAXWIN << tp->rcv_scale)
 				win = TCP_MAXWIN << tp->rcv_scale;
 		}
 		if ((tp->t_flags & TF_NOOPT) == 0)
 			incl_opts = true;
 	}
+#ifndef TREX_FBSD
 	if (m == NULL) {
 		m = m_gethdr(M_NOWAIT, MT_DATA);
 		if (m == NULL)
@@ -1526,6 +1588,11 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		xchg(nth->th_dport, nth->th_sport, uint16_t);
 #undef xchg
 	}
+#else /* TREX_FBSD */
+	if (m) {
+		m_freem(m);
+	}
+#endif /* TREX_FBSD */
 	tlen = 0;
 #ifdef INET6
 	if (isipv6)
@@ -1543,6 +1610,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	    ("Not enough trailing space for message (m=%p, need=%d, have=%ld)",
 	    m, tlen, (long)M_TRAILINGSPACE(m)));
 #endif
+#ifndef TREX_FBSD
 	m->m_len = tlen;
 	to.to_flags = 0;
 	if (incl_opts) {
@@ -1559,6 +1627,13 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 			optm = m;
 		}
 	}
+#else /* TREX_FBSD */
+	to.to_flags = 0;
+
+        (void) optm;
+        u_char opt[TCP_MAXOLEN];
+        optp = &opt[0];
+#endif /* TREX_FBSD */
 	if (incl_opts) {
 		/* Timestamps. */
 		if (tp->t_flags & TF_RCVD_TSTMP) {
@@ -1572,12 +1647,18 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 			to.to_flags |= TOF_SIGNATURE;
 #endif
 		/* Add the options. */
+#ifndef TREX_FBSD
 		tlen += optlen = tcp_addoptions(&to, optp);
-
+#else
+		tlen += optlen = tcp_addoptions(tp, &to, optp);
+#endif
+#ifndef TREX_FBSD
 		/* Update m_len in the correct mbuf. */
 		optm->m_len += optlen;
+#endif
 	} else
 		optlen = 0;
+#ifndef TREX_FBSD
 #ifdef INET6
 	if (isipv6) {
 		ip6->ip6_flow = 0;
@@ -1599,6 +1680,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #endif
 	m->m_pkthdr.len = tlen;
 	m->m_pkthdr.rcvif = NULL;
+#endif /* !TREX_FBSD */
 #ifdef MAC
 	if (inp != NULL) {
 		/*
@@ -1613,6 +1695,24 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		 * update the label in place.
 		 */
 		mac_netinet_tcp_reply(m);
+	}
+#endif
+#ifdef TREX_FBSD
+        if (tcp_build_pkt(tp, 0, 0, tlen, optlen, &m) != 0) {
+                return;
+        }
+#ifdef INET6
+	if (isipv6) {
+		ip6 = mtod(m, struct ip6_hdr *);
+		nth = (struct tcphdr *)(ip6 + 1);
+	} else
+#endif /* INET6 */
+	{
+		ip = mtod(m, struct ip *);
+		nth = (struct tcphdr *)(ip + 1);
+	}
+	if (optlen) {
+		bcopy(opt, nth + 1, optlen);
 	}
 #endif
 	nth->th_seq = htonl(seq);
@@ -1636,6 +1736,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	}
 #endif
 
+#ifndef TREX_FBSD
 	m->m_pkthdr.csum_data = offsetof(struct tcphdr, th_sum);
 #ifdef INET6
 	if (isipv6) {
@@ -1656,14 +1757,20 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		    htons((u_short)(tlen - sizeof(struct ip) + ip->ip_p)));
 	}
 #endif /* INET */
+#endif /* !TREX_FBSD */
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (tp == NULL || (inp->inp_socket->so_options & SO_DEBUG))
-		tcp_trace(TA_OUTPUT, 0, tp, mtod(m, void *), th, 0);
+#else
+	if (tp == NULL || (tp->m_socket.so_options & SO_DEBUG))
 #endif
-	TCP_PROBE3(debug__output, tp, th, m);
+		tcp_trace(TA_OUTPUT, 0, tp, mtod(m, void *), nth, 0);
+#endif
+	TCP_PROBE3(debug__output, tp, nth, m);
 	if (flags & TH_RST)
 		TCP_PROBE5(accept__refused, NULL, NULL, m, tp, nth);
 
+#ifndef TREX_FBSD
 #ifdef INET6
 	if (isipv6) {
 		TCP_PROBE5(send, NULL, tp, ip6, tp, nth);
@@ -1679,6 +1786,9 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		(void)ip_output(m, NULL, NULL, 0, NULL, inp);
 	}
 #endif
+#else /* TREX_FBSD */
+	tcp_ip_output(tp, m);
+#endif /* TREX_FBSD */
 }
 
 /*
@@ -1687,49 +1797,80 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
  * protocol control block.  The `inp' parameter must have
  * come from the zone allocator set up in tcp_init().
  */
+#ifndef TREX_FBSD /* TCP_USRREQ */
 struct tcpcb *
 tcp_newtcpcb(struct inpcb *inp)
+#else /* TREX_FBSD */
+struct tcpcb *
+tcp_inittcpcb(struct tcpcb *tp, struct tcp_function_block *fb, struct cc_algo *cc_algo, struct tcp_tune *tune, struct tcpstat *stat)
+#endif /* TREX_FBSD */
 {
+#ifndef TREX_FBSD
 	struct tcpcb_mem *tm;
 	struct tcpcb *tp;
+#endif /* !TREX_FBSD */
 #ifdef INET6
+#ifndef TREX_FBSD
 	int isipv6 = (inp->inp_vflag & INP_IPV6) != 0;
+#else
+	int isipv6 = tcp_isipv6(tp);
+#endif
 #endif /* INET6 */
 
+#ifndef TREX_FBSD
 	tm = uma_zalloc(V_tcpcb_zone, M_NOWAIT | M_ZERO);
 	if (tm == NULL)
 		return (NULL);
 	tp = &tm->tcb;
+#endif /* !TREX_FBSD */
 
 	/* Initialise cc_var struct for this tcpcb. */
+#ifndef TREX_FBSD
 	tp->ccv = &tm->ccv;
+#else
+	tp->ccv = &tp->m_ccv;
+#endif
 	tp->ccv->type = IPPROTO_TCP;
 	tp->ccv->ccvc.tcp = tp;
+#ifndef TREX_FBSD
 	rw_rlock(&tcp_function_lock);
 	tp->t_fb = tcp_func_set_ptr;
 	refcount_acquire(&tp->t_fb->tfb_refcnt);
 	rw_runlock(&tcp_function_lock);
+#else
+	tp->t_fb = fb ? fb : &tcp_def_funcblk;
+        tp->t_tune = tune;
+        tp->t_stat = stat;
+#endif
 	/*
 	 * Use the current system default CC algorithm.
 	 */
+#ifndef TREX_FBSD
 	CC_LIST_RLOCK();
 	KASSERT(!STAILQ_EMPTY(&cc_list), ("cc_list is empty!"));
 	CC_ALGO(tp) = CC_DEFAULT();
 	CC_LIST_RUNLOCK();
+#else
+	CC_ALGO(tp) = cc_algo;
+#endif
 	/*
 	 * The tcpcb will hold a reference on its inpcb until tcp_discardcb()
 	 * is called.
 	 */
+#ifndef TREX_FBSD
 	in_pcbref(inp);	/* Reference for tcpcb */
 	tp->t_inpcb = inp;
+#endif
 
 	if (CC_ALGO(tp)->cb_init != NULL)
 		if (CC_ALGO(tp)->cb_init(tp->ccv) > 0) {
 			if (tp->t_fb->tfb_tcp_fb_fini)
 				(*tp->t_fb->tfb_tcp_fb_fini)(tp, 1);
+#ifndef TREX_FBSD
 			in_pcbrele_wlocked(inp);
 			refcount_release(&tp->t_fb->tfb_refcnt);
 			uma_zfree(V_tcpcb_zone, tm);
+#endif
 			return (NULL);
 		}
 
@@ -1748,20 +1889,26 @@ tcp_newtcpcb(struct inpcb *inp)
 #ifdef VIMAGE
 	tp->t_vnet = inp->inp_vnet;
 #endif
+#ifndef TREX_FBSD
 	tp->t_timers = &tm->tt;
+#endif
+#ifndef TREX_FBSD /* tcp_reass */
 	TAILQ_INIT(&tp->t_segq);
+#endif
 	tp->t_maxseg =
 #ifdef INET6
 		isipv6 ? V_tcp_v6mssdflt :
 #endif /* INET6 */
 		V_tcp_mssdflt;
 
+#ifndef TREX_FBSD
 	/* Set up our timeouts. */
 	callout_init(&tp->t_timers->tt_rexmt, 1);
 	callout_init(&tp->t_timers->tt_persist, 1);
 	callout_init(&tp->t_timers->tt_keep, 1);
 	callout_init(&tp->t_timers->tt_2msl, 1);
 	callout_init(&tp->t_timers->tt_delack, 1);
+#endif
 
 	if (V_tcp_do_rfc1323)
 		tp->t_flags = (TF_REQ_SCALE|TF_REQ_TSTMP);
@@ -1781,6 +1928,7 @@ tcp_newtcpcb(struct inpcb *inp)
 	tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->t_rcvtime = ticks;
+#ifndef TREX_FBSD
 	/*
 	 * IPv4 TTL initialization is necessary for an IPv6 socket as well,
 	 * because the socket may be bound to an IPv6 wildcard address,
@@ -1788,6 +1936,7 @@ tcp_newtcpcb(struct inpcb *inp)
 	 */
 	inp->inp_ip_ttl = V_ip_defttl;
 	inp->inp_ppcb = tp;
+#endif
 #ifdef TCPPCAP
 	/*
 	 * Init the TCP PCAP queues.
@@ -1798,12 +1947,16 @@ tcp_newtcpcb(struct inpcb *inp)
 	/* Initialize the per-TCPCB log data. */
 	tcp_log_tcpcbinit(tp);
 #endif
+#ifndef TREX_FBSD
 	tp->t_pacing_rate = -1;
+#endif
 	if (tp->t_fb->tfb_tcp_fb_init) {
 		if ((*tp->t_fb->tfb_tcp_fb_init)(tp)) {
+#ifndef TREX_FBSD
 			refcount_release(&tp->t_fb->tfb_refcnt);
 			in_pcbrele_wlocked(inp);
 			uma_zfree(V_tcpcb_zone, tm);
+#endif
 			return (NULL);
 		}
 	}
@@ -1814,6 +1967,7 @@ tcp_newtcpcb(struct inpcb *inp)
 	return (tp);		/* XXX */
 }
 
+#ifndef TREX_FBSD
 /*
  * Switch the congestion control algorithm back to NewReno for any active
  * control blocks using an algorithm which is about to go away.
@@ -1884,6 +2038,7 @@ tcp_ccalgounload(struct cc_algo *unload_algo)
 
 	return (0);
 }
+#endif /* !TREX_FBSD */
 
 /*
  * Drop a TCP connection, reporting
@@ -1893,7 +2048,11 @@ tcp_ccalgounload(struct cc_algo *unload_algo)
 struct tcpcb *
 tcp_drop(struct tcpcb *tp, int errno)
 {
+#ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
+#else
+	struct socket *so = &tp->m_socket;
+#endif
 
 	NET_EPOCH_ASSERT();
 	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
@@ -1914,11 +2073,13 @@ tcp_drop(struct tcpcb *tp, int errno)
 void
 tcp_discardcb(struct tcpcb *tp)
 {
+#ifndef TREX_FBSD
 	struct inpcb *inp = tp->t_inpcb;
 	struct socket *so = inp->inp_socket;
 #ifdef INET6
 	int isipv6 = (inp->inp_vflag & INP_IPV6) != 0;
 #endif /* INET6 */
+#endif /* !TREX_FBSD */
 	int released __unused;
 
 	INP_WLOCK_ASSERT(inp);
@@ -1931,12 +2092,14 @@ tcp_discardcb(struct tcpcb *tp)
 	 * callout, and the last discard function called will take care of
 	 * deleting the tcpcb.
 	 */
+#ifndef TREX_FBSD
 	tp->t_timers->tt_draincnt = 0;
 	tcp_timer_stop(tp, TT_REXMT);
 	tcp_timer_stop(tp, TT_PERSIST);
 	tcp_timer_stop(tp, TT_KEEP);
 	tcp_timer_stop(tp, TT_2MSL);
 	tcp_timer_stop(tp, TT_DELACK);
+#endif
 	if (tp->t_fb->tfb_tcp_timer_stop_all) {
 		/*
 		 * Call the stop-all function of the methods,
@@ -1949,6 +2112,7 @@ tcp_discardcb(struct tcpcb *tp)
 		tp->t_fb->tfb_tcp_timer_stop_all(tp);
 	}
 
+#ifndef TREX_FBSD /* TCP_HOSTCACHE */
 	/*
 	 * If we got enough samples through the srtt filter,
 	 * save the rtt and rttvar in the routing entry.
@@ -2004,9 +2168,12 @@ tcp_discardcb(struct tcpcb *tp)
 
 		tcp_hc_update(&inp->inp_inc, &metrics);
 	}
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 	/* free the reassembly queue, if any */
 	tcp_reass_flush(tp);
+#endif /* !TREX_FBSD */
 
 #ifdef TCP_OFFLOAD
 	/* Disconnect offload device, if any. */
@@ -2035,6 +2202,7 @@ tcp_discardcb(struct tcpcb *tp)
 #endif
 
 	CC_ALGO(tp) = NULL;
+#ifndef TREX_FBSD
 	inp->inp_ppcb = NULL;
 	if (tp->t_timers->tt_draincnt == 0) {
 		/* We own the last reference on tcpcb, let's free it. */
@@ -2051,14 +2219,18 @@ tcp_discardcb(struct tcpcb *tp)
 		KASSERT(!released, ("%s: inp %p should not have been released "
 			"here", __func__, inp));
 	}
+#endif /* !TREX_FBSD */
 }
 
+#ifndef TREX_FBSD
 void
 tcp_timer_discard(void *ptp)
 {
 	struct inpcb *inp;
 	struct tcpcb *tp;
+#ifndef TREX_FBSD
 	struct epoch_tracker et;
+#endif
 
 	tp = (struct tcpcb *)ptp;
 	CURVNET_SET(tp->t_vnet);
@@ -2070,6 +2242,7 @@ tcp_timer_discard(void *ptp)
 	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) != 0,
 		("%s: tcpcb has to be stopped here", __func__));
 	tp->t_timers->tt_draincnt--;
+#ifndef TREX_FBSD
 	if (tp->t_timers->tt_draincnt == 0) {
 		/* We own the last reference on this tcpcb, let's free it. */
 #ifdef TCP_BLACKBOX
@@ -2087,10 +2260,12 @@ tcp_timer_discard(void *ptp)
 			return;
 		}
 	}
+#endif /* !TREX_FBSD */
 	INP_WUNLOCK(inp);
 	NET_EPOCH_EXIT(et);
 	CURVNET_RESTORE();
 }
+#endif /* !TREX_FBSD */
 
 /*
  * Attempt to close a TCP control block, marking it as dropped, and freeing
@@ -2099,7 +2274,9 @@ tcp_timer_discard(void *ptp)
 struct tcpcb *
 tcp_close(struct tcpcb *tp)
 {
+#ifndef TREX_FBSD
 	struct inpcb *inp = tp->t_inpcb;
+#endif
 	struct socket *so;
 
 	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
@@ -2109,6 +2286,7 @@ tcp_close(struct tcpcb *tp)
 	if (tp->t_state == TCPS_LISTEN)
 		tcp_offload_listen_stop(tp);
 #endif
+#ifndef TREX_FBSD
 	/*
 	 * This releases the TFO pending counter resource for TFO listen
 	 * sockets as well as passively-created TFO sockets that transition
@@ -2119,12 +2297,18 @@ tcp_close(struct tcpcb *tp)
 		tp->t_tfo_pending = NULL;
 	}
 	in_pcbdrop(inp);
+#endif /* !TREX_FBSD */
 	TCPSTAT_INC(tcps_closed);
 	if (tp->t_state != TCPS_CLOSED)
 		tcp_state_change(tp, TCPS_CLOSED);
 	KASSERT(inp->inp_socket != NULL, ("tcp_close: inp_socket NULL"));
+#ifndef TREX_FBSD
 	so = inp->inp_socket;
+#else
+	so = &tp->m_socket;
+#endif
 	soisdisconnected(so);
+#ifndef TREX_FBSD
 	if (inp->inp_flags & INP_SOCKREF) {
 		KASSERT(so->so_state & SS_PROTOREF,
 		    ("tcp_close: !SS_PROTOREF"));
@@ -2135,9 +2319,11 @@ tcp_close(struct tcpcb *tp)
 		sofree(so);
 		return (NULL);
 	}
+#endif /* !TREX_FBSD */
 	return (tp);
 }
 
+#ifndef TREX_FBSD
 void
 tcp_drain(void)
 {
@@ -2710,7 +2896,9 @@ out:
 		INP_WUNLOCK(inp);
 }
 #endif /* INET6 */
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD /* TCP_USRREQ */
 static uint32_t
 tcp_keyed_hash(struct in_conninfo *inc, u_char *key, u_int len)
 {
@@ -2852,7 +3040,9 @@ tcp_new_isn(struct in_conninfo *inc)
 	ISN_UNLOCK();
 	return (new_isn);
 }
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 /*
  * When a specific ICMP unreachable message is received and the
  * connection state is SYN-SENT, drop the connection.  This behavior
@@ -2883,7 +3073,9 @@ tcp_drop_syn_sent(struct inpcb *inp, int errno)
 	else
 		return (NULL);
 }
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD /* TCP_MSS_UPDATE */
 /*
  * When `need fragmentation' ICMP is received, update our idea of the MSS
  * based on the new value. Also nudge TCP to send something, since we
@@ -3009,6 +3201,7 @@ tcp_maxmtu6(struct in_conninfo *inc, struct tcp_ifcap *cap)
 	return (maxmtu);
 }
 #endif /* INET6 */
+#endif /* !TREX_FBSD */
 
 /*
  * Calculate effective SMSS per RFC5681 definition for a given TCP
@@ -3062,6 +3255,7 @@ tcp_maxseg(const struct tcpcb *tp)
 	return (tp->t_maxseg - optlen);
 }
 
+#ifndef TREX_FBSD
 static int
 sysctl_drop(SYSCTL_HANDLER_ARGS)
 {
@@ -3178,6 +3372,7 @@ SYSCTL_PROC(_net_inet_tcp, TCPCTL_DROP, drop,
     CTLFLAG_VNET | CTLTYPE_STRUCT | CTLFLAG_WR | CTLFLAG_SKIP |
     CTLFLAG_NEEDGIANT, NULL, 0, sysctl_drop, "",
     "Drop TCP connection");
+#endif /* !TREX_FBSD */
 
 #ifdef KERN_TLS
 static int
@@ -3295,6 +3490,7 @@ SYSCTL_PROC(_net_inet_tcp, OID_AUTO, switch_to_ifnet_tls,
     "Switch TCP connection to ifnet TLS");
 #endif
 
+#ifndef TREX_FBSD /* TCP_LOG_DEBUG */
 /*
  * Generate a standardized TCP log line for use throughout the
  * tcp subsystem.  Memory allocation is done with M_NOWAIT to
@@ -3410,6 +3606,7 @@ tcp_log_addr(struct in_conninfo *inc, struct tcphdr *th, void *ip4hdr,
 		panic("%s: string too long", __func__);
 	return (s);
 }
+#endif /* !TREX_FBSD */
 
 /*
  * A subroutine which makes it easy to track TCP state changes with DTrace.
@@ -3423,12 +3620,15 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 	int pstate = tp->t_state;
 #endif
 
+#ifndef TREX_FBSD
 	TCPSTATES_DEC(tp->t_state);
 	TCPSTATES_INC(newstate);
+#endif
 	tp->t_state = newstate;
 	TCP_PROBE6(state__change, NULL, tp, NULL, tp, NULL, pstate);
 }
 
+#ifndef TREX_FBSD
 /*
  * Create an external-format (``xtcpcb'') structure using the information in
  * the kernel-format tcpcb structure pointed to by tp.  This is done to
@@ -3520,3 +3720,4 @@ tcp_log_end_status(struct tcpcb *tp, uint8_t status)
 		}
 	}
 }
+#endif  /* !TREX_FBSD */

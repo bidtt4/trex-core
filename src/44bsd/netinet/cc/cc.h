@@ -51,13 +51,16 @@
 #ifndef _NETINET_CC_CC_H_
 #define _NETINET_CC_CC_H_
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(TREX_FBSD)
 
+#ifndef TREX_FBSD
 /* Global CC vars. */
 extern STAILQ_HEAD(cc_head, cc_algo) cc_list;
 extern const int tcprexmtthresh;
+#endif /* !TREX_FBSD */
 extern struct cc_algo newreno_cc_algo;
 
+#ifndef TREX_FBSD
 /* Per-netstack bits. */
 VNET_DECLARE(struct cc_algo *, default_cc_ptr);
 #define	V_default_cc_ptr VNET(default_cc_ptr)
@@ -70,6 +73,7 @@ VNET_DECLARE(int, cc_abe_frlossreduce);
 
 /* Define the new net.inet.tcp.cc sysctl tree. */
 SYSCTL_DECL(_net_inet_tcp_cc);
+#endif /* !TREX_FBSD */
 
 /* CC housekeeping functions. */
 int	cc_register_algo(struct cc_algo *add_cc);
@@ -120,7 +124,7 @@ struct cc_var {
 
 #define	CC_SIGPRIVMASK	0xFF000000	/* Mask to check if sig is private. */
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(TREX_FBSD)
 /*
  * Structure to hold data and function pointers that together represent a
  * congestion control algorithm.
@@ -128,11 +132,13 @@ struct cc_var {
 struct cc_algo {
 	char	name[TCP_CA_NAME_MAX];
 
+#ifndef TREX_FBSD
 	/* Init global module state on kldload. */
 	int	(*mod_init)(void);
 
 	/* Cleanup global module state on kldunload. */
 	int	(*mod_destroy)(void);
+#endif /* !TREX_FBSD */
 
 	/* Init CC state for a new control block. */
 	int	(*cb_init)(struct cc_var *ccv);
@@ -158,10 +164,12 @@ struct cc_algo {
 	/* Called for an additional ECN processing apart from RFC3168. */
 	void	(*ecnpkt_handler)(struct cc_var *ccv);
 
+#ifndef TREX_FBSD
 	/* Called for {get|set}sockopt() on a TCP socket with TCP_CCALGOOPT. */
 	int     (*ctl_output)(struct cc_var *, struct sockopt *, void *);
 
 	STAILQ_ENTRY (cc_algo) entries;
+#endif /* !TREX_FBSD */
 };
 
 /* Macro to obtain the CC algo's struct ptr. */
@@ -170,6 +178,7 @@ struct cc_algo {
 /* Macro to obtain the CC algo's data ptr. */
 #define	CC_DATA(tp)	((tp)->ccv->cc_data)
 
+#ifndef TREX_FBSD
 /* Macro to obtain the system default CC algo's struct ptr. */
 #define	CC_DEFAULT()	V_default_cc_ptr
 
@@ -183,6 +192,23 @@ extern struct rwlock cc_list_lock;
 #define	CC_LIST_LOCK_ASSERT()	rw_assert(&cc_list_lock, RA_LOCKED)
 
 #define CC_ALGOOPT_LIMIT	2048
+#endif
+
+#ifdef TREX_FBSD
+// <netinet/cc/cc_module.h>
+/*
+ * Allows a CC algorithm to manipulate a commonly named CC variable regardless
+ * of the transport protocol and associated C struct.
+ * XXXLAS: Out of action until the work to support SCTP is done.
+ *
+#define CCV(ccv, what)                                                  \
+(*(                                                                     \
+        (ccv)->type == IPPROTO_TCP ?    &(ccv)->ccvc.tcp->what :        \
+                                        &(ccv)->ccvc.sctp->what         \
+))
+ */
+#define CCV(ccv, what) (ccv)->ccvc.tcp->what
+#endif /* TREX_FBSD */
 
 #endif /* _KERNEL */
 #endif /* _NETINET_CC_CC_H_ */

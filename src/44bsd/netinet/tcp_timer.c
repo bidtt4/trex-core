@@ -31,6 +31,39 @@
  *	@(#)tcp_timer.c	8.2 (Berkeley) 5/24/95
  */
 
+#ifdef  TREX_FBSD
+
+#include "sys_inet.h"
+#include "tcp_int.h"
+
+/* tcp_debug.c */
+extern void tcp_trace(short, short, struct tcpcb *, void *, struct tcphdr *, int);
+/* tcp_sack.c */
+extern void tcp_free_sackholes(struct tcpcb *);
+/* tcp_output.c */
+extern void tcp_setpersist(struct tcpcb *);
+/* tcp_input.c */
+extern void cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type);
+/* tcp_subr.c */
+extern struct tcpcb * tcp_drop(struct tcpcb *, int);
+extern struct tcpcb * tcp_close(struct tcpcb *);
+extern void tcp_respond(struct tcpcb *, void *, struct tcphdr *, struct mbuf *, tcp_seq, tcp_seq, int);
+extern struct tcptemp * tcpip_maketemplate(struct inpcb *);
+extern void tcp_timer_discard(void *);
+
+/* defined functions */
+void tcp_timer_2msl(void *xtp);
+void tcp_timer_keep(void *xtp);
+void tcp_timer_persist(void *xtp);
+void tcp_timer_rexmt(void *xtp);
+void tcp_timer_delack(void *xtp);
+
+void tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta);
+int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
+void tcp_cancel_timers(struct tcpcb *tp);
+
+#else   /* !TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -237,7 +270,9 @@ inp_to_cpuid(struct inpcb *inp)
 		return (0);
 	}
 }
+#endif  /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 /*
  * Tcp protocol timeout routine called every 500 ms.
  * Updates timestamps used for TCP
@@ -256,11 +291,59 @@ tcp_slowtimo(void)
 	}
 	VNET_LIST_RUNLOCK_NOSLEEP();
 }
+#else
+typedef void (*timer_handle_t)(void *);
+static timer_handle_t tcp_timer_handlers[TCPT_NTIMERS] = {
+	tcp_timer_delack,
+	tcp_timer_rexmt,
+	tcp_timer_persist,
+	tcp_timer_keep,
+	tcp_timer_2msl
+};
 
+void
+tcp_handle_timers(struct tcpcb *tp)
+{
+	uint32_t now_tick = ticks;
+	uint32_t tick_passed = now_tick - tp->m_timer.last_tick;
+
+	for (int i = 0; i < TCPT_NTIMERS; i++ ) {
+		if ((tp->m_timer.tt_flags & (1 << i)) == 0)
+			continue;
+
+		if (tp->m_timer.tt_timer[i] <= tick_passed) {
+			tcp_timer_activate(tp, i, 0);
+			(tcp_timer_handlers[i])(tp);
+		} else {
+			tp->m_timer.tt_timer[i] -= tick_passed;
+		}
+	}
+	tp->m_timer.last_tick = now_tick;
+}
+
+void
+tcp_cancel_timers(struct tcpcb *tp)
+{
+	tp->m_timer.tt_flags = 0;
+}
+#endif /* !TREX_FBSD */
+
+#ifndef TREX_FBSD
 int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
     { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512, 512, 512 };
 
 int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
+#else
+const int tcp_backoff[TCP_MAXRXTSHIFT + 1] =
+    { 1, 2, 4, 8, 16, 32/*, 64, 128, 256, 512, 512, 512, 512*/ };
+
+#if 1
+const int tcp_syn_backoff[TCP_MAXRXTSHIFT + 1] =
+    { 1, 1, 1, 2, 2 , 3/*, 4, 8, 16, 32, 64, 64, 64*/ };
+#endif
+
+const int tcp_totbackoff = 511;	/* sum of tcp_backoff[] */
+#endif
 
 /*
  * TCP timer processing.
@@ -269,8 +352,11 @@ int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
 void
 tcp_timer_delack(void *xtp)
 {
+#ifndef TREX_FBSD
 	struct epoch_tracker et;
+#endif
 	struct tcpcb *tp = xtp;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
 
@@ -289,6 +375,7 @@ tcp_timer_delack(void *xtp)
 		CURVNET_RESTORE();
 		return;
 	}
+#endif
 	tp->t_flags |= TF_ACKNOW;
 	TCPSTAT_INC(tcps_delack);
 	NET_EPOCH_ENTER(et);
@@ -298,29 +385,38 @@ tcp_timer_delack(void *xtp)
 	CURVNET_RESTORE();
 }
 
+#ifndef TREX_FBSD
 void
 tcp_inpinfo_lock_del(struct inpcb *inp, struct tcpcb *tp)
 {
 	if (inp && tp != NULL)
 		INP_WUNLOCK(inp);
 }
+#else
+#define tcp_inpinfo_lock_del(inp,tp)
+#endif
 
 void
 tcp_timer_2msl(void *xtp)
 {
 	struct tcpcb *tp = xtp;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
 	struct epoch_tracker et;
+#endif
 	CURVNET_SET(tp->t_vnet);
 #ifdef TCPDEBUG
 	int ostate;
 
 	ostate = tp->t_state;
 #endif
+#ifndef TREX_FBSD
 	inp = tp->t_inpcb;
+#endif /* !TREX_FBSD */
 	KASSERT(inp != NULL, ("%s: tp %p tp->t_inpcb == NULL", __func__, tp));
 	INP_WLOCK(inp);
 	tcp_free_sackholes(tp);
+#ifndef TREX_FBSD
 	if (callout_pending(&tp->t_timers->tt_2msl) ||
 	    !callout_active(&tp->t_timers->tt_2msl)) {
 		INP_WUNLOCK(tp->t_inpcb);
@@ -335,6 +431,8 @@ tcp_timer_2msl(void *xtp)
 	}
 	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) == 0,
 		("%s: tp %p tcpcb can't be stopped here", __func__, tp));
+#endif /* !TREX_FBSD */
+#ifndef TREX_FBSD
 	/*
 	 * 2 MSL timeout in shutdown went off.  If we're closed but
 	 * still waiting for peer to close and connection has been idle
@@ -353,6 +451,8 @@ tcp_timer_2msl(void *xtp)
 		CURVNET_RESTORE();
 		return;
 	}
+#endif /* !TREX_FBSD */
+#ifndef TREX_FBSD
 	if (tcp_fast_finwait2_recycle && tp->t_state == TCPS_FIN_WAIT_2 &&
 	    tp->t_inpcb && tp->t_inpcb->inp_socket &&
 	    (tp->t_inpcb->inp_socket->so_rcv.sb_state & SBS_CANTRCVMORE)) {
@@ -367,24 +467,37 @@ tcp_timer_2msl(void *xtp)
 		tcp_inpinfo_lock_del(inp, tp);
 		goto out;
 	} else {
+#endif /* !TREX_FBSD */
 		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
+#ifndef TREX_FBSD
 			callout_reset(&tp->t_timers->tt_2msl,
 				      TP_KEEPINTVL(tp), tcp_timer_2msl, tp);
+#else
+			tcp_timer_activate(tp, TT_2MSL, TP_KEEPINTVL(tp));
+#endif
 		} else {
+#ifndef TREX_FBSD
 			if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
 				tcp_inpinfo_lock_del(inp, tp);
 				goto out;
 			}
+#endif
 			NET_EPOCH_ENTER(et);
 			tp = tcp_close(tp);
 			NET_EPOCH_EXIT(et);
 			tcp_inpinfo_lock_del(inp, tp);
 			goto out;
 		}
+#ifndef TREX_FBSD
 	}
+#endif
 
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
+#else
+	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
 #endif
@@ -401,14 +514,17 @@ tcp_timer_keep(void *xtp)
 {
 	struct tcpcb *tp = xtp;
 	struct tcptemp *t_template;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
 	struct epoch_tracker et;
+#endif
 	CURVNET_SET(tp->t_vnet);
 #ifdef TCPDEBUG
 	int ostate;
 
 	ostate = tp->t_state;
 #endif
+#ifndef TREX_FBSD
 	inp = tp->t_inpcb;
 	KASSERT(inp != NULL, ("%s: tp %p tp->t_inpcb == NULL", __func__, tp));
 	INP_WLOCK(inp);
@@ -426,6 +542,7 @@ tcp_timer_keep(void *xtp)
 	}
 	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) == 0,
 		("%s: tp %p tcpcb can't be stopped here", __func__, tp));
+#endif
 
 	/*
 	 * Because we don't regularly reset the keepalive callout in
@@ -438,8 +555,12 @@ tcp_timer_keep(void *xtp)
 
 		idletime = ticks - tp->t_rcvtime;
 		if (idletime < TP_KEEPIDLE(tp)) {
+#ifndef TREX_FBSD
 			callout_reset(&tp->t_timers->tt_keep,
 			    TP_KEEPIDLE(tp) - idletime, tcp_timer_keep, tp);
+#else
+			tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp) - idletime);
+#endif
 			INP_WUNLOCK(inp);
 			CURVNET_RESTORE();
 			return;
@@ -454,7 +575,11 @@ tcp_timer_keep(void *xtp)
 	if (tp->t_state < TCPS_ESTABLISHED)
 		goto dropit;
 	if ((V_tcp_always_keepalive ||
+#ifndef TREX_FBSD
 	    inp->inp_socket->so_options & SO_KEEPALIVE) &&
+#else
+	    tp->m_socket.so_options & SO_KEEPALIVE) &&
+#endif
 	    tp->t_state <= TCPS_CLOSING) {
 		if (ticks - tp->t_rcvtime >= TP_KEEPIDLE(tp) + TP_MAXIDLE(tp))
 			goto dropit;
@@ -471,6 +596,7 @@ tcp_timer_keep(void *xtp)
 		 * correspondent TCP to respond.
 		 */
 		TCPSTAT_INC(tcps_keepprobe);
+#ifndef TREX_FBSD
 		t_template = tcpip_maketemplate(inp);
 		if (t_template) {
 			NET_EPOCH_ENTER(et);
@@ -480,14 +606,31 @@ tcp_timer_keep(void *xtp)
 			NET_EPOCH_EXIT(et);
 			free(t_template, M_TEMP);
 		}
+#else /* TREX_FBSD */
+		(void) t_template;
+		tcp_respond(tp, NULL, (struct tcphdr *)NULL, (struct mbuf *)NULL,
+			    tp->rcv_nxt, tp->snd_una - 1, 0);
+#endif /* TREX_FBSD */
+#ifndef TREX_FBSD
 		callout_reset(&tp->t_timers->tt_keep, TP_KEEPINTVL(tp),
 			      tcp_timer_keep, tp);
+#else
+		tcp_timer_activate(tp, TT_KEEP, TP_KEEPINTVL(tp));
+#endif
 	} else
+#ifndef TREX_FBSD
 		callout_reset(&tp->t_timers->tt_keep, TP_KEEPIDLE(tp),
 			      tcp_timer_keep, tp);
+#else
+		tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
+#endif
 
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (inp->inp_socket->so_options & SO_DEBUG)
+#else
+	if (tp->m_socket.so_options & SO_DEBUG)
+#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
 #endif
@@ -498,22 +641,30 @@ tcp_timer_keep(void *xtp)
 
 dropit:
 	TCPSTAT_INC(tcps_keepdrops);
+#ifndef TREX_FBSD
 	if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
 		tcp_inpinfo_lock_del(inp, tp);
 		goto out;
 	}
+#endif
 	NET_EPOCH_ENTER(et);
 	tp = tcp_drop(tp, ETIMEDOUT);
 
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
+#else
+	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	NET_EPOCH_EXIT(et);
 	tcp_inpinfo_lock_del(inp, tp);
+#ifndef TREX_FBSD
  out:
+#endif
 	CURVNET_RESTORE();
 }
 
@@ -521,14 +672,17 @@ void
 tcp_timer_persist(void *xtp)
 {
 	struct tcpcb *tp = xtp;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
 	struct epoch_tracker et;
+#endif
 	CURVNET_SET(tp->t_vnet);
 #ifdef TCPDEBUG
 	int ostate;
 
 	ostate = tp->t_state;
 #endif
+#ifndef TREX_FBSD
 	inp = tp->t_inpcb;
 	KASSERT(inp != NULL, ("%s: tp %p tp->t_inpcb == NULL", __func__, tp));
 	INP_WLOCK(inp);
@@ -546,6 +700,7 @@ tcp_timer_persist(void *xtp)
 	}
 	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) == 0,
 		("%s: tp %p tcpcb can't be stopped here", __func__, tp));
+#endif /* !TREX_FBSD */
 	/*
 	 * Persistence timer into zero window.
 	 * Force a byte to be output, if possible.
@@ -562,10 +717,12 @@ tcp_timer_persist(void *xtp)
 	    (ticks - tp->t_rcvtime >= tcp_maxpersistidle ||
 	     ticks - tp->t_rcvtime >= TCP_REXMTVAL(tp) * tcp_totbackoff)) {
 		TCPSTAT_INC(tcps_persistdrop);
+#ifndef TREX_FBSD
 		if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
 			tcp_inpinfo_lock_del(inp, tp);
 			goto out;
 		}
+#endif
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
@@ -579,10 +736,12 @@ tcp_timer_persist(void *xtp)
 	if (tp->t_state > TCPS_CLOSE_WAIT &&
 	    (ticks - tp->t_rcvtime) >= TCPTV_PERSMAX) {
 		TCPSTAT_INC(tcps_persistdrop);
+#ifndef TREX_FBSD
 		if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
 			tcp_inpinfo_lock_del(inp, tp);
 			goto out;
 		}
+#endif
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
@@ -597,7 +756,11 @@ tcp_timer_persist(void *xtp)
 	tp->t_flags &= ~TF_FORCEDATA;
 
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (tp != NULL && tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+#else
+	if (tp != NULL && tp->m_socket.so_options & SO_DEBUG)
+#endif
 		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO);
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
@@ -612,14 +775,17 @@ tcp_timer_rexmt(void * xtp)
 	struct tcpcb *tp = xtp;
 	CURVNET_SET(tp->t_vnet);
 	int rexmt;
+#ifndef TREX_FBSD
 	struct inpcb *inp;
 	struct epoch_tracker et;
 	bool isipv6;
+#endif
 #ifdef TCPDEBUG
 	int ostate;
 
 	ostate = tp->t_state;
 #endif
+#ifndef TREX_FBSD
 	inp = tp->t_inpcb;
 	KASSERT(inp != NULL, ("%s: tp %p tp->t_inpcb == NULL", __func__, tp));
 	INP_WLOCK(inp);
@@ -637,6 +803,7 @@ tcp_timer_rexmt(void * xtp)
 	}
 	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) == 0,
 		("%s: tp %p tcpcb can't be stopped here", __func__, tp));
+#endif /* !TREX_FBSD */
 	tcp_free_sackholes(tp);
 	TCP_LOG_EVENT(tp, NULL, NULL, NULL, TCP_LOG_RTO, 0, 0, NULL, false);
 	if (tp->t_fb->tfb_tcp_rexmit_tmr) {
@@ -651,10 +818,12 @@ tcp_timer_rexmt(void * xtp)
 	if (++tp->t_rxtshift > TCP_MAXRXTSHIFT) {
 		tp->t_rxtshift = TCP_MAXRXTSHIFT;
 		TCPSTAT_INC(tcps_timeoutdrop);
+#ifndef TREX_FBSD
 		if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
 			tcp_inpinfo_lock_del(inp, tp);
 			goto out;
 		}
+#endif
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
@@ -697,15 +866,27 @@ tcp_timer_rexmt(void * xtp)
 		tp->t_flags |= TF_PREVVALID;
 	} else
 		tp->t_flags &= ~TF_PREVVALID;
+#ifndef TREX_FBSD
 	TCPSTAT_INC(tcps_rexmttimeo);
 	if ((tp->t_state == TCPS_SYN_SENT) ||
 	    (tp->t_state == TCPS_SYN_RECEIVED))
 		rexmt = tcp_rexmit_initial * tcp_backoff[tp->t_rxtshift];
 	else
 		rexmt = TCP_REXMTVAL(tp) * tcp_backoff[tp->t_rxtshift];
+#else /* TREX_FBSD */
+	if ((tp->t_state == TCPS_SYN_SENT) ||
+	    (tp->t_state == TCPS_SYN_RECEIVED)) {
+		rexmt = tcp_rexmit_initial * tcp_syn_backoff[tp->t_rxtshift];
+		TCPSTAT_INC(tcps_rexmttimeo_syn);
+	} else {
+		rexmt = TCP_REXMTVAL(tp) * tcp_backoff[tp->t_rxtshift];
+		TCPSTAT_INC(tcps_rexmttimeo);
+	}
+#endif /* TREX_FBSD */
 	TCPT_RANGESET(tp->t_rxtcur, rexmt,
 		      tp->t_rttmin, TCPTV_REXMTMAX);
 
+#ifndef TREX_FBSD
 	/*
 	 * We enter the path for PLMTUD if connection is established or, if
 	 * connection is FIN_WAIT_1 status, reason for the last is that if
@@ -840,7 +1021,9 @@ tcp_timer_rexmt(void * xtp)
 			}
 		}
 	}
+#endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 	/*
 	 * Disable RFC1323 and SACK if we haven't got any response to
 	 * our third SYN to work-around some broken terminal servers
@@ -851,10 +1034,12 @@ tcp_timer_rexmt(void * xtp)
 	if (tcp_rexmit_drop_options && (tp->t_state == TCPS_SYN_SENT) &&
 	    (tp->t_rxtshift == 3))
 		tp->t_flags &= ~(TF_REQ_SCALE|TF_REQ_TSTMP|TF_SACK_PERMIT);
+#endif /* !TREX_FBSD */
 	/*
 	 * If we backed off this far, notify the L3 protocol that we're having
 	 * connection problems.
 	 */
+#ifndef TREX_FBSD /* not support of route */
 	if (tp->t_rxtshift > TCP_RTT_INVALIDATE) {
 #ifdef INET6
 		if ((tp->t_inpcb->inp_vflag & INP_IPV6) != 0)
@@ -863,6 +1048,7 @@ tcp_timer_rexmt(void * xtp)
 #endif
 			in_losing(tp->t_inpcb);
 	}
+#endif /* !TREX_FBSD */
 	tp->snd_nxt = tp->snd_una;
 	tp->snd_recover = tp->snd_max;
 	/*
@@ -879,7 +1065,11 @@ tcp_timer_rexmt(void * xtp)
 	(void) tp->t_fb->tfb_tcp_output(tp);
 	NET_EPOCH_EXIT(et);
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
+#else
+	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
 #endif
@@ -892,10 +1082,15 @@ out:
 void
 tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta)
 {
+#ifndef TREX_FBSD
 	struct callout *t_callout;
 	callout_func_t *f_callout;
+#ifndef TREX_FBSD
 	struct inpcb *inp = tp->t_inpcb;
 	int cpu = inp_to_cpuid(inp);
+#else
+	int cpu = 0;
+#endif
 
 #ifdef TCP_OFFLOAD
 	if (tp->t_flags & TF_TOE)
@@ -938,11 +1133,27 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta)
 	} else {
 		callout_reset_on(t_callout, delta, f_callout, tp, cpu);
 	}
+#else
+	uint32_t now_tick = ticks;
+
+	if (tp->m_timer.tt_flags == 0) {
+		tp->m_timer.last_tick = now_tick;
+	}
+
+	if (delta == 0) {
+		tp->m_timer.tt_flags &= ~(1 << timer_type);
+	} else {
+		tp->m_timer.tt_flags |= (1 << timer_type);
+		delta += (now_tick - tp->m_timer.last_tick);
+	}
+	tp->m_timer.tt_timer[timer_type] = delta;
+#endif
 }
 
 int
 tcp_timer_active(struct tcpcb *tp, uint32_t timer_type)
 {
+#ifndef TREX_FBSD
 	struct callout *t_callout;
 
 	switch (timer_type) {
@@ -968,8 +1179,12 @@ tcp_timer_active(struct tcpcb *tp, uint32_t timer_type)
 			panic("tp %p bad timer_type %#x", tp, timer_type);
 		}
 	return callout_active(t_callout);
+#else
+	return (tp->m_timer.tt_flags & (1 << timer_type));
+#endif
 }
 
+#ifndef TREX_FBSD
 /*
  * Stop the timer from running, and apply a flag
  * against the timer_flags that will force the
@@ -1064,9 +1279,13 @@ tcp_timers_unsuspend(struct tcpcb *tp, uint32_t timer_type)
 				    ((tp->t_inpcb->inp_socket == NULL) ||
 				     (tp->t_inpcb->inp_socket->so_rcv.sb_state & SBS_CANTRCVMORE))) {
 					/* Star the 2MSL timer */
+#ifndef TREX_FBSD
 					tcp_timer_activate(tp, TT_2MSL,
 					    (tcp_fast_finwait2_recycle) ?
 					    tcp_finwait2_timeout : TP_MAXIDLE(tp));
+#else
+					tcp_timer_activate(tp, TT_2MSL, TP_MAXIDLE(tp));
+#endif
 				}
 			}
 			break;
@@ -1074,10 +1293,12 @@ tcp_timers_unsuspend(struct tcpcb *tp, uint32_t timer_type)
 			panic("tp:%p bad timer_type 0x%x", tp, timer_type);
 	}
 }
+#endif /* !TREX_FBSD */
 
 void
 tcp_timer_stop(struct tcpcb *tp, uint32_t timer_type)
 {
+#ifndef TREX_FBSD
 	struct callout *t_callout;
 
 	tp->t_timers->tt_flags |= TT_STOPPED;
@@ -1117,4 +1338,7 @@ tcp_timer_stop(struct tcpcb *tp, uint32_t timer_type)
 		 */
 		tp->t_timers->tt_draincnt++;
 	}
+#else
+	tp->m_timer.tt_flags = 0;
+#endif
 }

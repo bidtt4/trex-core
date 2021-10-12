@@ -72,7 +72,7 @@
 	(tp)->snd_una = (tp)->snd_nxt = (tp)->snd_max = (tp)->snd_up = \
 	    (tp)->snd_recover = (tp)->iss
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(TREX_FBSD)
 /*
  * Clock macros for RFC 1323 timestamps.
  */
@@ -81,6 +81,7 @@
 /* Timestamp wrap-around time, 24 days. */
 #define TCP_PAWS_IDLE	(24 * 24 * 60 * 60 * 1000)
 
+#ifndef TREX_FBSD
 /*
  * tcp_ts_getticks() in ms, should be 1ms < x < 1000ms according to RFC 1323.
  * We always use 1ms granularity independent of hz.
@@ -97,6 +98,9 @@ tcp_ts_getticks(void)
 	getmicrouptime(&tv);
 	return (tv.tv_sec * 1000 + tv.tv_usec / 1000);
 }
+#else /* TREX_FBSD */
+extern uint32_t tcp_ts_getticks(void);
+#endif
 #endif /* _KERNEL */
 
 #endif /* _NETINET_TCP_SEQ_H_ */

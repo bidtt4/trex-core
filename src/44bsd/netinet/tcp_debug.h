@@ -35,6 +35,7 @@
 #ifndef _NETINET_TCP_DEBUG_H_
 #define	_NETINET_TCP_DEBUG_H_
 
+#ifndef TREX_FBSD
 struct	tcp_debug {
 	uint32_t	td_time;	/* network format */
 	short	td_act;
@@ -59,6 +60,17 @@ struct	tcp_debug {
 	short	td_req;
 	struct	tcpcb td_cb;
 };
+#else /* TREX_FBSD */
+
+#ifdef _DEBUG
+#define TCPDEBUG
+#endif
+
+#define	IP6_HDR_LEN	40	/* sizeof(struct ip6_hdr) */
+/* <sys/protosw.h> */
+#define PRU_SLOWTIMO    19      /* 500ms timeout */
+
+#endif /* TREX_FBSD */
 
 #define	TA_INPUT	0
 #define	TA_OUTPUT	1
@@ -71,6 +83,7 @@ static const char	*tanames[] =
     { "input", "output", "user", "respond", "drop" };
 #endif
 
+#ifndef TREX_FBSD
 #define	TCP_NDEBUG 100
 
 #ifndef _KERNEL
@@ -78,5 +91,6 @@ static const char	*tanames[] =
 struct	tcp_debug tcp_debug[TCP_NDEBUG];
 int	tcp_debx;
 #endif
+#endif /* !TREX_FBSD */
 
 #endif /* !_NETINET_TCP_DEBUG_H_ */

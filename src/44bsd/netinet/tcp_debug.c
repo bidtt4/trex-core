@@ -32,6 +32,36 @@
  *	@(#)tcp_debug.c	8.1 (Berkeley) 6/10/93
  */
 
+#ifdef TREX_FBSD
+
+#include "sys_inet.h"
+
+#ifdef _DEBUG
+#define TCPSTATES
+#define TCPTIMERS
+#define TANAMES
+#endif
+#include "tcp_int.h"
+
+#ifdef TCPDEBUG
+// <sys/protosw.h>
+static const char *prurequests[] = {
+        "ATTACH",       "DETACH",       "BIND",         "LISTEN",
+        "CONNECT",      "ACCEPT",       "DISCONNECT",   "SHUTDOWN",
+        "RCVD",         "SEND",         "ABORT",        "CONTROL",
+        "SENSE",        "RCVOOB",       "SENDOOB",      "SOCKADDR",
+        "PEERADDR",     "CONNECT2",     "FASTTIMO",     "SLOWTIMO",
+        "PROTORCV",     "PROTOSEND",    "SEND_EOF",     "SOSETLABEL",
+        "CLOSE",        "FLUSH",
+};
+
+static const int tcpconsdebug = 1;
+#endif
+
+void tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen, struct tcphdr *th, int req);
+
+#else /* !TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -91,6 +121,8 @@ static int		tcp_debx;
 struct mtx		tcp_debug_mtx;
 MTX_SYSINIT(tcp_debug_mtx, &tcp_debug_mtx, "tcp_debug_mtx", MTX_DEF);
 
+#endif /* !TREX_FBSD */
+
 /*
  * Save TCP state at a given moment; optionally, both tcpcb and TCP packet
  * header state will be saved.
@@ -99,6 +131,7 @@ void
 tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
     struct tcphdr *th, int req)
 {
+#ifndef TREX_FBSD
 #ifdef INET6
 	int isipv6;
 #endif /* INET6 */
@@ -157,7 +190,16 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
 	}
 	td->td_req = req;
 	mtx_unlock(&tcp_debug_mtx);
+#endif  /* !TREX_FBSD */
 #ifdef TCPDEBUG
+#ifdef TREX_FBSD
+	tcp_seq seq, ack;
+	int len, flags;
+#ifdef INET6
+	int isipv6;
+	isipv6 = (ipgen != NULL && ((struct ip *)ipgen)->ip_v == 6) ? 1 : 0;
+#endif /* INET6 */
+#endif /* TREX_FBSD */
 	if (tcpconsdebug == 0)
 		return;
 	if (tp != NULL)

@@ -43,6 +43,10 @@
 #include <sys/mbuf.h>
 #endif
 
+#ifdef TREX_FBSD
+#define _WANT_TCPCB
+#endif /* TREX_FBSD */
+
 #define TCP_END_BYTE_INFO 8	/* Bytes that makeup the "end information array" */
 /* Types of ending byte info */
 #define TCP_EI_EMPTY_SLOT	0
@@ -118,9 +122,15 @@ struct sackhint {
 	uint32_t	prr_out;	/* Bytes sent during IN_RECOVERY */
 };
 
+#ifndef TREX_FBSD
 #define SEGQ_EMPTY(tp) TAILQ_EMPTY(&(tp)->t_segq)
+#else
+#define SEGQ_EMPTY(tp)  ((tp)->t_segq == NULL)
+#endif
 
+#ifndef TREX_FBSD
 STAILQ_HEAD(tcp_log_stailq, tcp_log_mem);
+#endif /* !TREX_FBSD */
 
 /*
  * Tcp control block, one per tcp; fields:
@@ -129,8 +139,11 @@ STAILQ_HEAD(tcp_log_stailq, tcp_log_mem);
  */
 struct tcpcb {
 	/* Cache line 1 */
+#ifndef TREX_FBSD
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
+#endif
 	struct tcp_function_block *t_fb;/* TCP function call block */
+#ifndef TREX_FBSD
 	void	*t_fb_ptr;		/* Pointer to t_fb specific data */
 	uint32_t t_maxseg:24,		/* maximum segment size */
 		t_logstate:8;		/* State of "black box" logging */
@@ -141,6 +154,10 @@ struct tcpcb {
 		t_fin_is_rst: 1,	/* Are fin's treated as resets */
 		t_log_state_set: 1,
 		bits_spare : 2;
+#else /* TREX_FBSD */
+	uint32_t t_maxseg:24;		/* maximum segment size */
+	uint32_t t_state:4;		/* Tunneling (over udp) port */
+#endif /* TREX_FBSD */
 	u_int	t_flags;
 	tcp_seq	snd_una;		/* sent but unacknowledged */
 	tcp_seq	snd_max;		/* highest sequence number sent;
@@ -150,14 +167,20 @@ struct tcpcb {
 	tcp_seq	snd_up;			/* send urgent pointer */
 	uint32_t  snd_wnd;		/* send window */
 	uint32_t  snd_cwnd;		/* congestion-controlled window */
+#ifndef TREX_FBSD
 	uint32_t t_peakrate_thr; 	/* pre-calculated peak rate threshold */
+#endif /* !TREX_FBSD */
 	/* Cache line 2 */
 	u_int32_t  ts_offset;		/* our timestamp offset */
+#ifdef TCP_SB_AUTOSIZE
 	u_int32_t	rfbuf_ts;	/* recv buffer autoscaling timestamp */
+#endif
 	int	rcv_numsacks;		/* # distinct sack blks present */
 	u_int	t_tsomax;		/* TSO total burst length limit in bytes */
+#ifndef TREX_FBSD
 	u_int	t_tsomaxsegcount;	/* TSO maximum segment count */
 	u_int	t_tsomaxsegsize;	/* TSO maximum segment size in bytes */
+#endif /* !TREX_FBSD */
 	tcp_seq	rcv_nxt;		/* receive next */
 	tcp_seq	rcv_adv;		/* advertised window */
 	uint32_t  rcv_wnd;		/* receive window */
@@ -173,13 +196,25 @@ struct tcpcb {
 	u_int	t_rcvtime;		/* inactivity time */
 	/* Cache line 3 */
 	tcp_seq	rcv_up;			/* receive urgent pointer */
+#ifndef TREX_FBSD
 	int	t_segqlen;		/* segment reassembly queue length */
 	uint32_t t_segqmbuflen;		/* Count of bytes mbufs on all entries */
+#endif /* !TREX_FBSD */
+#ifndef TREX_FBSD
 	struct	tsegqe_head t_segq;	/* segment reassembly queue */
+#else /* TREX_FBSD */
+	void *	t_segq;			/* segment reassembly queue */
+#endif /* TREX_FBSD */
+#ifndef TREX_FBSD
 	struct mbuf      *t_in_pkt;
 	struct mbuf	 *t_tail_pkt;
+#endif /* !TREX_FBSD */
+#ifndef TREX_FBSD
 	struct tcp_timer *t_timers;	/* All the TCP timers in one struct */
+#endif /* !TREX_FBSD */
+#ifndef TREX_FBSD
 	struct	vnet *t_vnet;		/* back pointer to parent vnet */
+#endif /* !TREX_FBSD */
 	uint32_t  snd_ssthresh;		/* snd_cwnd size threshold for
 					 * for slow start exponential to
 					 * linear switch
@@ -190,13 +225,17 @@ struct tcpcb {
 
 	tcp_seq	irs;			/* initial receive sequence number */
 	tcp_seq	iss;			/* initial send sequence number */
+#ifndef TREX_FBSD
 	u_int	t_acktime;		/* RACK and BBR incoming new data was acked */
+#endif /* !TREX_FBSD */
 	u_int	t_sndtime;		/* time last data was sent */
 	u_int	ts_recent_age;		/* when last updated */
 	tcp_seq	snd_recover;		/* for use in NewReno Fast Recovery */
+#ifndef TREX_FBSD
 	uint16_t cl4_spare;		/* Spare to adjust CL 4 */
 	char	t_oobflags;		/* have some */
 	char	t_iobc;			/* input character */
+#endif /* !TREX_FBSD */
 	int	t_rxtcur;		/* current retransmit value (ticks) */
 
 	int	t_rxtshift;		/* log(2) of rexmt exp. backoff */
@@ -207,9 +246,11 @@ struct tcpcb {
 	u_int	t_fbyte_in;		/* ticks time when first byte queued in */
 	u_int	t_fbyte_out;		/* ticks time when first byte queued out */
 
+#ifndef TREX_FBSD
 	u_int	t_pmtud_saved_maxseg;	/* pre-blackhole MSS */
 	int	t_blackhole_enter;	/* when to enter blackhole detection */
 	int	t_blackhole_exit;	/* when to exit blackhole detection */
+#endif
 	u_int	t_rttmin;		/* minimum rtt allowed */
 
 	u_int	t_rttbest;		/* best rtt we've seen */
@@ -230,21 +271,32 @@ struct tcpcb {
 	struct sackblk sackblks[MAX_SACK_BLKS]; /* seq nos. of sack blocks */
 	struct sackhint	sackhint;	/* SACK scoreboard hint */
 	int	t_rttlow;		/* smallest observerved RTT */
+#ifdef TCP_SB_AUTOSIZE
 	int	rfbuf_cnt;		/* recv buffer autoscaling byte count */
+#endif
+#ifndef TREX_FBSD
 	struct toedev	*tod;		/* toedev handling this connection */
+#endif /* !TREX_FBSD */
 	int	t_sndrexmitpack;	/* retransmit packets sent */
+#ifndef TREX_FBSD
 	int	t_rcvoopack;		/* out-of-order packets received */
 	void	*t_toe;			/* TOE pcb pointer */
+#endif /* !TREX_FBSD */
 	struct cc_algo	*cc_algo;	/* congestion control algorithm */
 	struct cc_var	*ccv;		/* congestion control specific vars */
+#ifndef TREX_FBSD
 	struct osd	*osd;		/* storage for Khelp module data */
+#endif /* !TREX_FBSD */
 	int	t_bytes_acked;		/* # bytes acked during current RTT */
+#ifndef TREX_FBSD
 	u_int   t_maxunacktime;
 	u_int	t_keepinit;		/* time to establish connection */
 	u_int	t_keepidle;		/* time before keepalive probes begin */
 	u_int	t_keepintvl;		/* interval between keepalives */
 	u_int	t_keepcnt;		/* number of keepalives before close */
+#endif /* !TREX_FBSD */
 	int	t_dupacks;		/* consecutive dup acks recd */
+#ifndef TREX_FBSD
 	int	t_lognum;		/* Number of log entries */
 	int	t_loglimit;		/* Maximum number of log entries */
 	int64_t	t_pacing_rate;		/* bytes / sec, -1 => unlimited */
@@ -269,14 +321,25 @@ struct tcpcb {
 		uint8_t t_end_info_bytes[TCP_END_BYTE_INFO];
 		uint64_t t_end_info;
 	};
+#endif /* !TREX_FBSD */
 #ifdef TCPPCAP
 	struct mbufq t_inpkts;		/* List of saved input packets. */
 	struct mbufq t_outpkts;		/* List of saved output packets. */
 #endif
+#ifdef TREX_FBSD
+	struct tcp_tune *t_tune;	/* pointer to TCP tunable values */
+	struct tcpstat *t_stat;		/* pointer to TCP counters */
+
+        /* data structures per tcpcb */
+	struct tcp_timer m_timer;	/* TCP timer */
+	struct cc_var m_ccv;		/* congestion control specific vars */
+	struct socket m_socket;		/* user socket vars */
+#endif /* TREX_FBSD */
 };
 #endif	/* _KERNEL || _WANT_TCPCB */
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(TREX_FBSD)
+#ifndef TREX_FBSD
 struct tcptemp {
 	u_char	tt_ipgen[40]; /* the size must be of max ip header, now IPv6 */
 	struct	tcphdr tt_t;
@@ -296,6 +359,7 @@ struct tcptemp {
  */
 /* Flags for tcp functions */
 #define TCP_FUNC_BEING_REMOVED 0x01   	/* Can no longer be referenced */
+#endif /* !TREX_FBSD */
 
 /*
  * If defining the optional tcp_timers, in the
@@ -323,10 +387,13 @@ struct tcptemp {
 struct tcp_function_block {
 	char tfb_tcp_block_name[TCP_FUNCTION_NAME_LEN_MAX];
 	int	(*tfb_tcp_output)(struct tcpcb *);
+#ifndef TREX_FBSD
 	int	(*tfb_tcp_output_wtime)(struct tcpcb *, const struct timeval *);
+#endif /* !TREX_FBSD */
 	void	(*tfb_tcp_do_segment)(struct mbuf *, struct tcphdr *,
 			    struct socket *, struct tcpcb *,
 		        int, int, uint8_t);
+#ifndef TREX_FBSD
 	int     (*tfb_do_queued_segments)(struct socket *, struct tcpcb *, int);
 	int      (*tfb_do_segment_nounlock)(struct mbuf *, struct tcphdr *,
 			    struct socket *, struct tcpcb *,
@@ -338,24 +405,30 @@ struct tcp_function_block {
 			    int, struct timeval *);
 	int     (*tfb_tcp_ctloutput)(struct socket *so, struct sockopt *sopt,
 			    struct inpcb *inp, struct tcpcb *tp);
+#endif /* !TREX_FBSD */
 	/* Optional memory allocation/free routine */
 	int	(*tfb_tcp_fb_init)(struct tcpcb *);
 	void	(*tfb_tcp_fb_fini)(struct tcpcb *, int);
 	/* Optional timers, must define all if you define one */
 	int	(*tfb_tcp_timer_stop_all)(struct tcpcb *);
+#ifndef TREX_FBSD
 	void	(*tfb_tcp_timer_activate)(struct tcpcb *,
 			    uint32_t, u_int);
 	int	(*tfb_tcp_timer_active)(struct tcpcb *, uint32_t);
 	void	(*tfb_tcp_timer_stop)(struct tcpcb *, uint32_t);
+#endif /* !TREX_FBSD */
 	void	(*tfb_tcp_rexmit_tmr)(struct tcpcb *);
+#ifndef TREX_FBSD
 	int	(*tfb_tcp_handoff_ok)(struct tcpcb *);
 	void	(*tfb_tcp_mtu_chg)(struct tcpcb *);
 	int	(*tfb_pru_options)(struct tcpcb *, int);
 	volatile uint32_t tfb_refcnt;
 	uint32_t  tfb_flags;
 	uint8_t	tfb_id;
+#endif /* !TREX_FBSD */
 };
 
+#ifndef TREX_FBSD
 struct tcp_function {
 	TAILQ_ENTRY(tcp_function)	tf_next;
 	char				tf_name[TCP_FUNCTION_NAME_LEN_MAX];
@@ -363,7 +436,8 @@ struct tcp_function {
 };
 
 TAILQ_HEAD(tcp_funchead, tcp_function);
-#endif	/* _KERNEL */
+#endif /* !TREX_FBSD */
+#endif	/* _KERNEL || TREX_FBSD */
 
 /*
  * Flags and utility macros for the t_flags field.
@@ -568,13 +642,18 @@ struct	tcpstat {
 	uint64_t tcps_connects;		/* connections established */
 	uint64_t tcps_drops;		/* connections dropped */
 	uint64_t tcps_conndrops;	/* embryonic connections dropped */
+#ifndef TREX_FBSD
 	uint64_t tcps_minmssdrops;	/* average minmss too low drops */
+#endif
 	uint64_t tcps_closed;		/* conn. closed (includes drops) */
 	uint64_t tcps_segstimed;	/* segs where we tried to get rtt */
 	uint64_t tcps_rttupdated;	/* times we succeeded */
 	uint64_t tcps_delack;		/* delayed acks sent */
 	uint64_t tcps_timeoutdrop;	/* conn. dropped in rxmt timeout */
 	uint64_t tcps_rexmttimeo;	/* retransmit timeouts */
+#ifdef TREX_FBSD
+	uint64_t tcps_rexmttimeo_syn;	/* retransmit SYN timeouts */
+#endif
 	uint64_t tcps_persisttimeo;	/* persist timeouts */
 	uint64_t tcps_keeptimeo;	/* keepalive timeouts */
 	uint64_t tcps_keepprobe;	/* keepalive probes sent */
@@ -582,7 +661,10 @@ struct	tcpstat {
 
 	uint64_t tcps_sndtotal;		/* total packets sent */
 	uint64_t tcps_sndpack;		/* data packets sent */
-	uint64_t tcps_sndbyte;		/* data bytes sent */
+	uint64_t tcps_sndbyte;		/* data bytes sent (TREX_FBSD: by application layer) */
+#ifdef TREX_FBSD
+	uint64_t tcps_sndbyte_ok;	/* data bytes sent by TCP */
+#endif
 	uint64_t tcps_sndrexmitpack;	/* data packets retransmitted */
 	uint64_t tcps_sndrexmitbyte;	/* data bytes retransmitted */
 	uint64_t tcps_sndrexmitbad;	/* unnecessary packet retransmissions */
@@ -613,10 +695,14 @@ struct	tcpstat {
 	uint64_t tcps_rcvacktoomuch;	/* rcvd acks for unsent data */
 	uint64_t tcps_rcvackpack;	/* rcvd ack packets */
 	uint64_t tcps_rcvackbyte;	/* bytes acked by rcvd acks */
+#ifdef TREX_FBSD
+	uint64_t tcps_rcvackbyte_of;	/* bytes acked by rcvd acks (overflowed) */
+#endif
 	uint64_t tcps_rcvwinupd;	/* rcvd window update packets */
 	uint64_t tcps_pawsdrop;		/* segments dropped due to PAWS */
 	uint64_t tcps_predack;		/* times hdr predict ok for acks */
 	uint64_t tcps_preddat;		/* times hdr predict ok for data pkts */
+#ifndef TREX_FBSD
 	uint64_t tcps_pcbcachemiss;
 	uint64_t tcps_cachedrtt;	/* times cached RTT in route updated */
 	uint64_t tcps_cachedrttvar;	/* times cached rttvar updated */
@@ -624,12 +710,16 @@ struct	tcpstat {
 	uint64_t tcps_usedrtt;		/* times RTT initialized from route */
 	uint64_t tcps_usedrttvar;	/* times RTTVAR initialized from rt */
 	uint64_t tcps_usedssthresh;	/* times ssthresh initialized from rt*/
+#endif /* !TREX_FBSD */
 	uint64_t tcps_persistdrop;	/* timeout in persist state */
 	uint64_t tcps_badsyn;		/* bogus SYN, e.g. premature ACK */
+#ifndef TREX_FBSD
 	uint64_t tcps_mturesent;	/* resends due to MTU discovery */
 	uint64_t tcps_listendrop;	/* listen queue overflows */
+#endif /* !TREX_FBSD */
 	uint64_t tcps_badrst;		/* ignored RSTs in the window */
 
+#ifndef TREX_FBSD
 	uint64_t tcps_sc_added;		/* entry added to syncache */
 	uint64_t tcps_sc_retransmitted;	/* syncache entry was retransmitted */
 	uint64_t tcps_sc_dupsyn;	/* duplicate SYN packet */
@@ -650,6 +740,7 @@ struct	tcpstat {
 	uint64_t tcps_hc_bucketoverflow;/* hostcache per bucket limit hit */
 
 	uint64_t tcps_finwait2_drops;    /* Drop FIN_WAIT_2 connection after time limit */
+#endif /* !TREX_FBSD */
 
 	/* SACK related stats */
 	uint64_t tcps_sack_recovery_episode; /* SACK recovery episodes */
@@ -666,6 +757,7 @@ struct	tcpstat {
 	uint64_t tcps_ecn_shs;		/* ECN successful handshakes */
 	uint64_t tcps_ecn_rcwnd;	/* # times ECN reduced the cwnd */
 
+#ifndef TREX_FBSD
 	/* TCP_SIGNATURE related stats */
 	uint64_t tcps_sig_rcvgoodsig;	/* Total matching signature received */
 	uint64_t tcps_sig_rcvbadsig;	/* Total bad signature received */
@@ -679,9 +771,21 @@ struct	tcpstat {
 	uint64_t tcps_pmtud_blackhole_failed;		 /* Black Hole Failure Count */
 
 	uint64_t _pad[12];		/* 6 UTO, 6 TBD */
+#else /* TREX_FBSD */
+	struct tcpstat *next;		/* additional statistics */
+#endif /* TREX_FBSD */
 };
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
+
+#ifdef TREX_FBSD
+#define TCPSTAT_ADD(name, val)                  \
+    do {                                        \
+        for (struct tcpstat *_stat = tp->t_stat; _stat; _stat = _stat->next)    \
+            _stat->name += val;                 \
+    } while(0)
+#define TCPSTAT_INC(name)           TCPSTAT_ADD(name, 1)
+#endif /* TREX_FBSD */
 
 #ifdef _KERNEL
 #define	TI_UNLOCKED	1
@@ -1092,5 +1196,70 @@ tcp_fields_to_net(struct tcphdr *th)
 	th->th_urp = htons(th->th_urp);
 }
 #endif /* _KERNEL */
+
+#ifdef TREX_FBSD
+
+/* localized global TCP tunable values */
+struct tcp_tune {
+        int tcp_do_rfc1323;     /* (1) Enable rfc1323 (high performance TCP) extensions */
+        int tcp_do_sack;        /* (1) Enable/Disable TCP SACK support */
+        int tcp_mssdflt;        /* (TCP_MSS) Default TCP Maximum Segment Size */
+        int tcp_v6mssdflt;      /* (TCP6_MSS) Default TCP Maximum Segment Size for IPv6 */
+        int tcp_initcwnd_segments;  /* (10) Slow-start flight size (initial congestion window) in number of segments (10) */
+        int tcprexmtthresh;     /* (3) number of duplicate ack to trigger retransmission */
+
+        int tcp_keepinit;       /* (TCPTV_KEEP_INIT) time to establish connection */
+        int tcp_keepidle;       /* (TCPTV_KEEP_IDLE) time before keepalive probes begin */
+        int tcp_keepintvl;      /* (TCPTV_KEEPINTVL) time between keepalive probes */
+        int tcp_keepcnt;        /* (TCPTV_KEEPCNT) Number of keepalive probes to send */
+        int tcp_delacktime;     /* (TCPTV_DELACK) Time before a delayed ACK is sent */
+};
+
+#define TCP_TUNE(name)              tp->t_tune->name
+
+//#define V_path_mtu_discovery        0
+#define V_tcp_insecure_rst          0
+#define V_tcp_insecure_syn          0
+#define V_drop_synfin               0
+
+#define V_tcp_do_tso                1
+#define V_tcp_delack_enabled        1
+
+#ifdef TCP_SB_AUTOSIZE
+#define V_tcp_do_autosndbuf         1
+#define V_tcp_autosndbuf_max        (2*1024*1024)
+#define V_tcp_autosndbuf_inc        (8*1024)
+#define V_tcp_sendbuf_auto_lowat    0
+#define V_tcp_do_autorcvbuf         1
+#define V_tcp_autorcvbuf_max        (2*1024*1024)
+#endif /* TCP_SB_AUTOSIZE */
+
+#define V_tcp_do_sack               TCP_TUNE(tcp_do_sack)
+#define V_tcp_sack_maxholes         128
+//#define V_tcp_sack_globalmaxholes   65536
+
+#define V_tcp_do_prr                1
+#define V_tcp_do_prr_conservative   0
+#define V_tcp_do_rfc6675_pipe       0
+
+#define V_tcp_do_rfc3390            1
+#define V_tcp_do_rfc3042            1
+
+#define V_tcp_do_ecn                2
+#define V_tcp_ecn_maxretries        1
+
+#define V_tcp_minmss                216
+#define V_tcp_tolerate_missing_ts   0
+
+#define V_tcp_do_newcwv             0
+
+#define V_tcp_mssdflt               TCP_TUNE(tcp_mssdflt)
+#define V_tcp_v6mssdflt             TCP_TUNE(tcp_v6mssdflt)
+#define V_tcp_initcwnd_segments     TCP_TUNE(tcp_initcwnd_segments)    // 10
+#define V_tcp_do_rfc1323            TCP_TUNE(tcp_do_rfc1323)           // 1
+#define V_tcprexmtthresh            TCP_TUNE(tcprexmtthresh)           // 3
+#define V_tcp_delacktime            TCP_TUNE(tcp_delacktime)
+
+#endif /* TREX_FBSD */
 
 #endif /* _NETINET_TCP_VAR_H_ */

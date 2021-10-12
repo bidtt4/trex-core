@@ -31,6 +31,37 @@
  *	@(#)tcp_output.c	8.4 (Berkeley) 5/24/95
  */
 
+#ifdef TREX_FBSD
+
+#include "sys_inet.h"
+#define TCPOUTFLAGS             // tcp_outflags @ tcp_fsm.h
+#include "tcp_int.h"
+
+/* tcp_debug.c */
+extern void tcp_trace(short, short, struct tcpcb *, void *, struct tcphdr *, int);
+/* tcp_sack.c */
+extern void tcp_sack_adjust(struct tcpcb *tp);
+extern struct sackhole *tcp_sack_output(struct tcpcb *tp, int *sack_bytes_rexmt);
+extern void tcp_clean_dsack_blocks(struct tcpcb *tp);
+/* tcp_timer.c */
+extern void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
+extern int tcp_timer_active(struct tcpcb *, uint32_t);
+/* tcp_subr.c */
+extern u_int tcp_maxseg(const struct tcpcb *);
+
+/* defined functions */
+int tcp_output(struct tcpcb *tp);
+void tcp_setpersist(struct tcpcb *tp);
+int tcp_addoptions(struct tcpcb *tp, struct tcpopt *to, u_char *optp);
+
+/* external interface functions */
+extern int tcp_mssopt(struct tcpcb *);
+extern int tcp_build_pkt(struct tcpcb *, uint32_t, uint32_t, uint16_t, uint16_t, struct mbuf **);
+extern int tcp_ip_output(struct tcpcb *, struct mbuf *);
+extern bool tcp_isipv6(struct tcpcb *);
+
+#else   /* !TREX_FBSD */
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -141,6 +172,8 @@ SYSCTL_INT(_net_inet_tcp, OID_AUTO, sendbuf_auto_lowat, CTLFLAG_VNET | CTLFLAG_R
 	&VNET_NAME(tcp_sendbuf_auto_lowat), 0,
 	"Modify threshold for auto send buffer growth to account for SO_SNDLOWAT");
 
+#endif  /* !TREX_FBSD */
+
 /*
  * Make sure that either retransmit or persist timer is set for SYN, FIN and
  * non-ACK.
@@ -194,7 +227,11 @@ cc_after_idle(struct tcpcb *tp)
 int
 tcp_output(struct tcpcb *tp)
 {
+#ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
+#else
+	struct socket *so = &tp->m_socket;
+#endif
 	int32_t len;
 	uint32_t recwin, sendwin;
 	int off, flags, error = 0;	/* Keep compiler happy */
@@ -216,7 +253,9 @@ tcp_output(struct tcpcb *tp)
 	struct sackhole *p;
 	int tso, mtu;
 	struct tcpopt to;
+#ifdef TCP_RFC7413
 	unsigned int wanted_cookie = 0;
+#endif
 	unsigned int dont_sendalot = 0;
 #if 0
 	int maxburst = TCP_MAXBURST;
@@ -225,7 +264,11 @@ tcp_output(struct tcpcb *tp)
 	struct ip6_hdr *ip6 = NULL;
 	int isipv6;
 
+#ifndef TREX_FBSD
 	isipv6 = (tp->t_inpcb->inp_vflag & INP_IPV6) != 0;
+#else
+	isipv6 = tcp_isipv6(tp);
+#endif
 #endif
 #ifdef KERN_TLS
 	const bool hw_tls = (so->so_snd.sb_flags & SB_TLS_IFNET) != 0;
@@ -241,6 +284,7 @@ tcp_output(struct tcpcb *tp)
 		return (tcp_offload_output(tp));
 #endif
 
+#ifdef TCP_RFC7413
 	/*
 	 * For TFO connections in SYN_SENT or SYN_RECEIVED,
 	 * only allow the initial SYN or SYN|ACK and those sent
@@ -252,6 +296,7 @@ tcp_output(struct tcpcb *tp)
 	    SEQ_GT(tp->snd_max, tp->snd_una) && /* initial SYN or SYN|ACK sent */
 	    (tp->snd_nxt != tp->snd_una))       /* not a retransmit */
 		return (0);
+#endif
 
 	/*
 	 * Determine length of data that should be transmitted,
@@ -439,6 +484,7 @@ after_sack_rexmit:
 	if ((flags & TH_SYN) && SEQ_GT(tp->snd_nxt, tp->snd_una)) {
 		if (tp->t_state != TCPS_SYN_RECEIVED)
 			flags &= ~TH_SYN;
+#ifdef TCP_RFC7413
 		/*
 		 * When sending additional segments following a TFO SYN|ACK,
 		 * do not include the SYN bit.
@@ -446,6 +492,7 @@ after_sack_rexmit:
 		if (IS_FASTOPEN(tp->t_flags) &&
 		    (tp->t_state == TCPS_SYN_RECEIVED))
 			flags &= ~TH_SYN;
+#endif
 		off--, len++;
 	}
 
@@ -459,6 +506,7 @@ after_sack_rexmit:
 		flags &= ~TH_FIN;
 	}
 
+#ifdef TCP_RFC7413
 	/*
 	 * On TFO sockets, ensure no data is sent in the following cases:
 	 *
@@ -477,6 +525,7 @@ after_sack_rexmit:
 	      (tp->t_tfo_client_cookie_len == 0)) ||
 	     (flags & TH_RST)))
 		len = 0;
+#endif
 	if (len <= 0) {
 		/*
 		 * If FIN has been sent but not acked,
@@ -508,7 +557,9 @@ after_sack_rexmit:
 	/* len will be >= 0 after this point. */
 	KASSERT(len >= 0, ("[%s:%d]: len < 0", __func__, __LINE__));
 
+#ifdef TCP_SB_AUTOSIZE
 	tcp_sndbuf_autoscale(tp, so, sendwin);
+#endif
 
 	/*
 	 * Decide if we can use TCP Segmentation Offloading (if supported by
@@ -543,6 +594,7 @@ after_sack_rexmit:
 		ipsec_optlen = IPSEC_HDRSIZE(ipv4, tp->t_inpcb);
 #endif /* INET */
 #endif /* IPSEC */
+#ifndef TREX_FBSD // no IP options in IP header
 #ifdef INET6
 	if (isipv6)
 		ipoptlen = ip6_optlen(tp->t_inpcb);
@@ -552,6 +604,7 @@ after_sack_rexmit:
 		ipoptlen = tp->t_inpcb->inp_options->m_len -
 				offsetof(struct ipoption, ipopt_list);
 	else
+#endif /* !TREX_FBSD */
 		ipoptlen = 0;
 #if defined(IPSEC) || defined(IPSEC_SUPPORT)
 	ipoptlen += ipsec_optlen;
@@ -799,9 +852,14 @@ send:
 	if ((tp->t_flags & TF_NOOPT) == 0) {
 		/* Maximum segment size. */
 		if (flags & TH_SYN) {
+#ifndef TREX_FBSD
 			to.to_mss = tcp_mssopt(&tp->t_inpcb->inp_inc);
+#else
+			to.to_mss = tcp_mssopt(tp);
+#endif
 			to.to_flags |= TOF_MSS;
 
+#ifdef TCP_RFC7413
 			/*
 			 * On SYN or SYN|ACK transmits on TFO connections,
 			 * only include the TFO option if it is not a
@@ -834,6 +892,7 @@ send:
 					dont_sendalot = 1;
 				}
 			}
+#endif
 		}
 		/* Window scaling. */
 		if ((flags & TH_SYN) && (tp->t_flags & TF_REQ_SCALE)) {
@@ -851,10 +910,12 @@ send:
 				tp->t_badrxtwin = curticks;
 		}
 
+#ifdef TCP_SB_AUTOSIZE
 		/* Set receive buffer autosizing timestamp. */
 		if (tp->rfbuf_ts == 0 &&
 		    (so->so_rcv.sb_flags & SB_AUTOSIZE))
 			tp->rfbuf_ts = tcp_ts_getticks();
+#endif /* TCP_SB_AUTOSIZE */
 
 		/* Selective ACK's. */
 		if (tp->t_flags & TF_SACK_PERMIT) {
@@ -878,7 +939,12 @@ send:
 #endif /* TCP_SIGNATURE */
 
 		/* Processing the options. */
+#ifndef TREX_FBSD
 		hdrlen += optlen = tcp_addoptions(&to, opt);
+#else
+		hdrlen += optlen = tcp_addoptions(tp, &to, opt);
+#endif
+#ifdef TCP_RFC7413
 		/*
 		 * If we wanted a TFO option to be added, but it was unable
 		 * to fit, ensure no data is sent.
@@ -886,6 +952,7 @@ send:
 		if (IS_FASTOPEN(tp->t_flags) && wanted_cookie &&
 		    !(to.to_flags & TOF_FASTOPEN))
 			len = 0;
+#endif
 	}
 
 	/*
@@ -898,14 +965,18 @@ send:
 		flags &= ~TH_FIN;
 
 		if (tso) {
+#ifndef TREX_FBSD
 			u_int if_hw_tsomax;
+#endif
 			u_int moff;
 			int max_len;
 
 			/* extract TSO information */
+#ifndef TREX_FBSD /* change tp->t_tsomax to have TCP payload size only */
 			if_hw_tsomax = tp->t_tsomax;
 			if_hw_tsomaxsegcount = tp->t_tsomaxsegcount;
 			if_hw_tsomaxsegsize = tp->t_tsomaxsegsize;
+#endif
 
 			/*
 			 * Limit a TSO burst to prevent it from
@@ -919,17 +990,26 @@ send:
 			 * Check if we should limit by maximum payload
 			 * length:
 			 */
+#ifndef TREX_FBSD
 			if (if_hw_tsomax != 0) {
 				/* compute maximum TSO length */
 				max_len = (if_hw_tsomax - hdrlen -
 				    max_linkhdr);
+#else /* TREX_FBSD */
+			if (tp->t_tsomax != 0) {
+				max_len = tp->t_tsomax - optlen;
+#endif
 				if (max_len <= 0) {
 					len = 0;
 				} else if (len > max_len) {
 					sendalot = 1;
 					len = max_len;
 				}
+#ifndef TREX_FBSD
 			}
+#else
+			}
+#endif
 
 			/*
 			 * Prevent the last segment from being
@@ -991,6 +1071,7 @@ send:
 	KASSERT(len + hdrlen + ipoptlen <= IP_MAXPACKET,
 	    ("%s: len > IP_MAXPACKET", __func__));
 
+#ifndef TREX_FBSD /* no need to check */
 /*#ifdef DIAGNOSTIC*/
 #ifdef INET6
 	if (max_linkhdr + hdrlen > MCLBYTES)
@@ -999,6 +1080,7 @@ send:
 #endif
 		panic("tcphdr too big");
 /*#endif*/
+#endif /* !TREX_FBSD */
 
 	/*
 	 * This KASSERT is here to catch edge cases at a well defined place.
@@ -1036,12 +1118,18 @@ send:
 #endif /* STATS */
 		} else {
 			TCPSTAT_INC(tcps_sndpack);
+#ifndef TREX_FBSD
 			TCPSTAT_ADD(tcps_sndbyte, len);
+#else
+			TCPSTAT_ADD(tcps_sndbyte_ok, len);
+#endif
 #ifdef STATS
 			stats_voi_update_abs_u64(tp->t_stats, VOI_TCP_TXPB,
 			    len);
 #endif /* STATS */
 		}
+
+#ifndef TREX_FBSD
 #ifdef INET6
 		if (MHLEN < hdrlen + max_linkhdr)
 			m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
@@ -1095,6 +1183,20 @@ send:
 				goto out;
 			}
 		}
+#else /* TREX_FBSD */
+                (void) if_hw_tsomaxsegcount;
+                (void) if_hw_tsomaxsegsize;
+                (void) hw_tls;
+		(void) mb;
+		(void) msb;
+		(void) moff;
+
+		if (tcp_build_pkt(tp, off, len, hdrlen, optlen, &m) != 0) {
+			error = ENOBUFS;
+			sack_rxmit = 0;
+			goto out;
+		}
+#endif /* TREX_FBSD */
 
 		/*
 		 * If we're sending everything we've got, set PUSH.
@@ -1117,6 +1219,7 @@ send:
 		else
 			TCPSTAT_INC(tcps_sndwinup);
 
+#ifndef TREX_FBSD
 		m = m_gethdr(M_NOWAIT, MT_DATA);
 		if (m == NULL) {
 			error = ENOBUFS;
@@ -1131,9 +1234,18 @@ send:
 #endif
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
+#else /* TREX_FBSD */
+		if (tcp_build_pkt(tp, 0, 0, hdrlen, optlen, &m) != 0) {
+			error = ENOBUFS;
+			sack_rxmit = 0;
+			goto out;
+		}
+#endif /* TREX_FBSD */
 	}
 	SOCKBUF_UNLOCK_ASSERT(&so->so_snd);
+#ifndef TREX_FBSD
 	m->m_pkthdr.rcvif = (struct ifnet *)0;
+#endif
 #ifdef MAC
 	mac_inpcb_create_mbuf(tp->t_inpcb, m);
 #endif
@@ -1141,7 +1253,9 @@ send:
 	if (isipv6) {
 		ip6 = mtod(m, struct ip6_hdr *);
 		th = (struct tcphdr *)(ip6 + 1);
+#ifndef TREX_FBSD
 		tcpip_fillheaders(tp->t_inpcb, ip6, th);
+#endif
 	} else
 #endif /* INET6 */
 	{
@@ -1150,7 +1264,9 @@ send:
 		ipov = (struct ipovly *)ip;
 #endif
 		th = (struct tcphdr *)(ip + 1);
+#ifndef TREX_FBSD
 		tcpip_fillheaders(tp->t_inpcb, ip, th);
+#endif
 	}
 
 	/*
@@ -1293,8 +1409,10 @@ send:
 	} else
 		tp->t_flags &= ~TF_RXWIN0SENT;
 	if (SEQ_GT(tp->snd_up, tp->snd_nxt)) {
+#ifndef TREX_FBSD /* not support this for now - hhaim */
 		th->th_urp = htons((u_short)(tp->snd_up - tp->snd_nxt));
 		th->th_flags |= TH_URG;
+#endif
 	} else
 		/*
 		 * If no urgent pointer to send, then we pull
@@ -1304,6 +1422,7 @@ send:
 		 */
 		tp->snd_up = tp->snd_una;		/* drag it along */
 
+#ifndef TREX_FBSD
 	/*
 	 * Put TCP length in extended header, and then
 	 * checksum extended header and data.
@@ -1370,6 +1489,7 @@ send:
 	KASSERT(len + hdrlen == m_length(m, NULL),
 	    ("%s: mbuf chain shorter than expected: %d + %u != %u",
 	    __func__, len, hdrlen, m_length(m, NULL)));
+#endif /* !TREX_FBSD */
 
 #ifdef TCP_HHOOK
 	/* Run HHOOK_TCP_ESTABLISHED_OUT helper hooks. */
@@ -1381,6 +1501,7 @@ send:
 	 * Trace.
 	 */
 	if (so->so_options & SO_DEBUG) {
+#ifndef TREX_FBSD
 		u_short save = 0;
 #ifdef INET6
 		if (!isipv6)
@@ -1394,6 +1515,11 @@ send:
 		if (!isipv6)
 #endif
 		ipov->ih_len = save;
+#else   /* TREX_FBSD */
+                (void) ipov;
+
+		tcp_trace(TA_OUTPUT, tp->t_state, tp, mtod(m, void *), th, 0);
+#endif
 	}
 #endif /* TCPDEBUG */
 	TCP_PROBE3(debug__output, tp, th, m);
@@ -1412,6 +1538,7 @@ send:
 	 * m->m_pkthdr.len should have been set before checksum calculation,
 	 * because in6_cksum() need it.
 	 */
+#ifndef TREX_FBSD
 #ifdef INET6
 	if (isipv6) {
 		/*
@@ -1497,6 +1624,9 @@ send:
 		mtu = tp->t_inpcb->inp_route.ro_nh->nh_mtu;
     }
 #endif /* INET */
+#else /* TREX_FBSD */
+        error = tcp_ip_output(tp, m);
+#endif
 
 out:
 	/*
@@ -1660,10 +1790,14 @@ timer:
 			 */
 			if (tso)
 				tp->t_flags &= ~TF_TSO;
+#ifndef TREX_FBSD /* TCP_MSS_UPDATE */
 			if (mtu != 0) {
 				tcp_mss_update(tp, -1, mtu, NULL, NULL);
 				goto again;
 			}
+#else /* TREX_FBSD */
+			(void) mtu;
+#endif
 			return (error);
 		case EHOSTDOWN:
 		case EHOSTUNREACH:
@@ -1714,8 +1848,12 @@ tcp_setpersist(struct tcpcb *tp)
 	int tt;
 
 	tp->t_flags &= ~TF_PREVVALID;
+#ifndef TREX_FBSD
 	if (tcp_timer_active(tp, TT_REXMT))
 		panic("tcp_setpersist: retransmit pending");
+#else
+	assert(!tcp_timer_active(tp, TT_REXMT));
+#endif
 	/*
 	 * Start/restart persistence timer.
 	 */
@@ -1743,8 +1881,13 @@ tcp_setpersist(struct tcpcb *tp)
  * TCP Timestamps (12 bytes) and TCP Signatures (18 bytes) are present,
  * we only have 10 bytes for SACK options (40 - (12 + 18)).
  */
+#ifndef TREX_FBSD
 int
 tcp_addoptions(struct tcpopt *to, u_char *optp)
+#else
+int
+tcp_addoptions(struct tcpcb *tp, struct tcpopt *to, u_char *optp)
+#endif
 {
 	u_int32_t mask, optlen = 0;
 
@@ -1878,7 +2021,11 @@ tcp_addoptions(struct tcpopt *to, u_char *optp)
 			break;
 			}
 		default:
+#ifndef TREX_FBSD
 			panic("%s: unknown TCP option type", __func__);
+#else
+			printf("%s: unknown TCP option type(0x%x)", __func__, mask);
+#endif
 			break;
 		}
 	}
@@ -1903,6 +2050,7 @@ tcp_addoptions(struct tcpopt *to, u_char *optp)
 	return (optlen);
 }
 
+#ifndef TREX_FBSD
 /*
  * This is a copy of m_copym(), taking the TSO segment size/limit
  * constraints into account, and advancing the sndptr as it goes.
@@ -2071,7 +2219,9 @@ nospace:
 	m_freem(top);
 	return (NULL);
 }
+#endif /* !TREX_FBSD */
 
+#ifdef TCP_SB_AUTOSIZE
 void
 tcp_sndbuf_autoscale(struct tcpcb *tp, struct socket *so, uint32_t sendwin)
 {
@@ -2130,3 +2280,4 @@ tcp_sndbuf_autoscale(struct tcpcb *tp, struct socket *so, uint32_t sendwin)
 		}
 	}
 }
+#endif /* TCP_SB_AUTOSIZE */

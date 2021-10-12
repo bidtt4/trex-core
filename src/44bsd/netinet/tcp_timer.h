@@ -71,9 +71,16 @@
  * amount of time probing, then we drop the connection.
  */
 
+#ifdef TREX_FBSD
+// <sys/kernel.h>
+#define hz              1000
+#define ticks           tcp_ts_getticks()
+#endif /* TREX_FBSD */
+
 /*
  * Time constants.
  */
+#ifndef TREX_FBSD
 #define	TCPTV_MSL	( 30*hz)		/* max seg lifetime (hah!) */
 #define	TCPTV_SRTTBASE	0			/* base roundtrip time;
 						   if 0, no idea yet */
@@ -88,6 +95,20 @@
 #define	TCPTV_KEEPCNT	8			/* max probes before drop */
 
 #define TCPTV_FINWAIT2_TIMEOUT (60*hz)         /* FIN_WAIT_2 timeout if no receiver */
+#else /* TREX_FBSD, from trex-core */
+#define	TCPTV_MSL	(  hz/4)		/* max seg lifetime (hah!) */
+#define	TCPTV_SRTTBASE	0			/* base roundtrip time;
+						   if 0, no idea yet */
+#define	TCPTV_RTOBASE	(  1*hz)		/* assumed RTO if no info */
+
+#define	TCPTV_PERSMIN	(  5*hz)		/* minimum persist interval */
+#define	TCPTV_PERSMAX	( 10*hz)		/* maximum persist interval */
+
+#define	TCPTV_KEEP_INIT	(  5*hz)		/* initial connect keepalive */
+#define	TCPTV_KEEP_IDLE	(  5*hz)		/* dflt time before probing */
+#define	TCPTV_KEEPINTVL	(  7*hz)		/* default probe interval */
+#define	TCPTV_KEEPCNT	8			/* max probes before drop */
+#endif /* TREX_FBSD */
 
 /*
  * Minimum retransmit timer is 3 ticks, for algorithmic stability.
@@ -111,13 +132,21 @@
  */
 #define	TCPTV_MIN	( hz/33 )		/* minimum allowable value */
 #define TCPTV_CPU_VAR	( hz/5 )		/* cpu variance allowed (200ms) */
+#ifndef TREX_FBSD
 #define	TCPTV_REXMTMAX	( 64*hz)		/* max allowable REXMT value */
+#else
+#define	TCPTV_REXMTMAX	(  5*hz)		/* max allowable REXMT value */
+#endif
 
 #define TCPTV_TWTRUNC	8			/* RTO factor to truncate TW */
 
 #define	TCP_LINGERTIME	120			/* linger at most 2 minutes */
 
+#ifndef TREX_FBSD
 #define	TCP_MAXRXTSHIFT	12			/* maximum retransmits */
+#else
+#define	TCP_MAXRXTSHIFT	5 			/* maximum retransmits */
+#endif
 
 #define	TCPTV_DELACK	( hz/25 )		/* 40ms timeout */
 
@@ -143,6 +172,46 @@ static const char *tcptimers[] =
 	if ((u_long)(tv) > (u_long)(tvmax)) \
 		(tv) = (tvmax); \
 } while(0)
+
+#ifdef TREX_FBSD
+
+#define TT_DELACK	0	/* delayed ACK timer */
+#define TT_REXMT	1	/* retransmit timer */
+#define TT_PERSIST	2	/* retransmit persistence */
+#define TT_KEEP		3	/* keepalive */
+#define TT_2MSL		4	/* 2*msl TIME_WAIT timer */
+#define TCPT_NTIMERS    5
+
+struct tcp_timer {
+	uint32_t	last_tick;	/* last handle tick */
+	uint32_t	tt_flags;	/* Timers flags */
+#define TT_FLAG_DELACK	(1 << TT_DELACK)
+#define TT_FLAG_REXMT	(1 << TT_REXMT)
+#define TT_FLAG_PERSIST	(1 << TT_PERSIST)
+#define TT_FLAG_KEEP	(1 << TT_KEEP)
+#define TT_FLAG_2MSL	(1 << TT_2MSL)
+	uint32_t	tt_timer[TCPT_NTIMERS];
+};
+
+#define	TP_KEEPINIT(tp)	((tp)->t_tune->tcp_keepinit)
+#define	TP_KEEPIDLE(tp)	((tp)->t_tune->tcp_keepidle)
+#define	TP_KEEPINTVL(tp) ((tp)->t_tune->tcp_keepintvl)
+#define	TP_KEEPCNT(tp)	((tp)->t_tune->tcp_keepcnt)
+#define	TP_MAXIDLE(tp)	(TP_KEEPCNT(tp) * TP_KEEPINTVL(tp))
+
+#define tcp_maxpersistidle  TCPTV_KEEP_IDLE
+
+#define tcp_persmin         TCPTV_PERSMIN
+#define tcp_persmax         TCPTV_PERSMAX
+#define tcp_rexmit_initial  TCPTV_RTOBASE
+#define tcp_rexmit_min      TCPTV_MIN
+#define tcp_rexmit_slop     TCPTV_CPU_VAR
+extern const int tcp_backoff[];
+extern const int tcp_totbackoff;
+
+#define V_tcp_always_keepalive  1
+
+#else /* !TREX_FBSD */
 
 #ifdef _KERNEL
 
@@ -228,5 +297,6 @@ void	tcp_timer_rexmt(void *xtp);
 void	tcp_timer_delack(void *xtp);
 
 #endif /* _KERNEL */
+#endif /* !TREX_FBSD */
 
 #endif /* !_NETINET_TCP_TIMER_H_ */
