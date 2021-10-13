@@ -86,6 +86,8 @@ void tcp_dropwithreset(struct mbuf *, struct tcphdr *, struct tcpcb *, int, int)
 void tcp_dooptions(struct tcpcb *, struct tcpopt *, u_char *, int, int);
 int tcp_compute_pipe(struct tcpcb *);
 uint32_t tcp_compute_initwnd(struct tcpcb *, uint32_t);
+void tcp_mss(struct tcpcb *, int);
+int tcp_mssopt(struct tcpcb *);
 
 static void cc_ack_received(struct tcpcb *tp, struct tcphdr *th, uint16_t nsegs, uint16_t type);
 static void cc_post_recovery(struct tcpcb *tp, struct tcphdr *th);
@@ -97,10 +99,6 @@ static void tcp_newreno_partial_ack(struct tcpcb *, struct tcphdr *);
 #define BANDLIM_UNLIMITED -1
 #define BANDLIM_RST_CLOSEDPORT 3 /* No connection, and no listeners */
 #define BANDLIM_RST_OPENPORT 4   /* No connection, listener */
-
-/* external interface funtions */
-extern void tcp_mss(struct tcpcb *, int);
-extern int tcp_reass(struct tcpcb *, struct tcphdr *, tcp_seq *, int *, struct mbuf *);
 
 #else   /* !TREX_FBSD */
 
@@ -1489,6 +1487,12 @@ drop:
 	if (m != NULL)
 		m_freem(m);
 	return (IPPROTO_DONE);
+}
+#else
+void
+tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos)
+{
+	tp->t_fb->tfb_tcp_do_segment(m, th, &tp->m_socket, tp, toff, tlen, iptos);
 }
 #endif  /* !TREX_FBSD */
 

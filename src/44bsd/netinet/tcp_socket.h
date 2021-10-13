@@ -1,6 +1,9 @@
 #ifndef _TCP_SOCKET_H_
 #define _TCP_SOCKET_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct sockbuf {
     u_int   sb_cc;          /* (a) chars in buffer */
@@ -44,5 +47,8 @@ void soisconnected(struct socket *so);
 void soisdisconnected(struct socket *so);
 void socantrcvmore(struct socket *so);  /* socantrcvmore need to set SBS_CANTRCVMORE to so_rcv.sb_state */
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_TCP_SOCKET_H_ */

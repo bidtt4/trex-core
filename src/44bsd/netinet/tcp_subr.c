@@ -60,13 +60,6 @@ u_int tcp_maxseg(const struct tcpcb *tp);
 void tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m, tcp_seq ack, tcp_seq seq, int flags);
 void tcp_timer_discard(void *ptp);
 
-/* external interface functions */
-extern int tcp_build_pkt(struct tcpcb *, uint32_t, uint32_t, uint16_t, uint16_t, struct mbuf **);
-extern int tcp_ip_output(struct tcpcb *, struct mbuf *);
-extern void tcp_reass_flush(struct tcpcb *);
-extern int tcp_mssopt(struct tcpcb *);
-extern bool tcp_isipv6(struct tcpcb *);
-
 #else   /* !TREX_FBSD */
 
 #include <sys/cdefs.h>

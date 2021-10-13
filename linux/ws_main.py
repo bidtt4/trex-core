@@ -764,11 +764,11 @@ def build_prog (bld, build_obj):
               target   = build_obj.get_tcp_target())
 
     bld.program(features='cxx cxxprogram', 
-                includes =  includes_path,
-                cxxflags =  cxxflags,
+                includes =  includes_path + tcp_includes_path,
+                cxxflags =  cxxflags + ['-DTREX_FBSD'],
                 linkflags = linkflags,
                 source = build_obj.get_src(),
-                use = build_obj.get_use_libs() + ['tcp'],
+                use = build_obj.get_use_libs() + [build_obj.get_tcp_target()],
                 lib = ['pthread', 'z', 'dl'],
                 rpath  = bld.env.RPATH + build_obj.get_rpath(),
                 target = build_obj.get_target())
@@ -794,7 +794,6 @@ def build(bld):
     for obj in build_types:
         build_type(bld,obj);
 
-    
 
 def build_info(bld):
     pass;

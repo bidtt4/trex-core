@@ -49,7 +49,7 @@ The `mbuf` would be handled by TCP packet handling functions also. The outbound 
   - `int tcp_int_output(struct tcpcb *tp);`
     - by default, `tcp_output(tp)` would be called.
 
-`tcp_output()` will call following functions and you should implement them and handle the packet `mbuf` properly.
+The default `tcp_output()` will call following functions and you should implement them and handle the packet `mbuf` properly.
   - `int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp);`
     - `off`: data offset in the socket buffer to build a packet
     - `len`: data length to build a packet
@@ -63,11 +63,12 @@ The `mbuf` would be handled by TCP packet handling functions also. The outbound 
     - _`trex-core` could use `CTcpIOCb::on_tx()`._
 
 For inbound packet handling, you should call `tcp_int_input()` and implement `tcp_reass()` and several socket callback functions.
-  - `void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen);`
+  - `void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos);`
     - `m`: buffer includes TCP header and data
     - `th`: TCP header
     - `toff`: TCP data offset in the `m` buffer
     - `tlen`: TCP data length
+    - `iptos`: IP TOS value for ECN processing
     - _`trex-core` could call this in the `tcp_flow_input()`._
 
 In addition, TCP stack is aware of the IP header. So, you should implement the following callback function also.

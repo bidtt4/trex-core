@@ -37,6 +37,8 @@
 #define TCPOUTFLAGS             // tcp_outflags @ tcp_fsm.h
 #include "tcp_int.h"
 
+/* tcp_input.c */
+extern int tcp_mssopt(struct tcpcb *);
 /* tcp_debug.c */
 extern void tcp_trace(short, short, struct tcpcb *, void *, struct tcphdr *, int);
 /* tcp_sack.c */
@@ -53,12 +55,6 @@ extern u_int tcp_maxseg(const struct tcpcb *);
 int tcp_output(struct tcpcb *tp);
 void tcp_setpersist(struct tcpcb *tp);
 int tcp_addoptions(struct tcpcb *tp, struct tcpopt *to, u_char *optp);
-
-/* external interface functions */
-extern int tcp_mssopt(struct tcpcb *);
-extern int tcp_build_pkt(struct tcpcb *, uint32_t, uint32_t, uint16_t, uint16_t, struct mbuf **);
-extern int tcp_ip_output(struct tcpcb *, struct mbuf *);
-extern bool tcp_isipv6(struct tcpcb *);
 
 #else   /* !TREX_FBSD */
 
@@ -221,6 +217,13 @@ cc_after_idle(struct tcpcb *tp)
 		CC_ALGO(tp)->after_idle(tp->ccv);
 }
 
+#ifdef TREX_FBSD
+int
+tcp_int_output(struct tcpcb *tp)
+{
+	return tp->t_fb->tfb_tcp_output(tp);
+}
+#endif
 /*
  * Tcp output routine: figure out what should be sent and send it.
  */

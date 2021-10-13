@@ -2521,10 +2521,10 @@ def build_prog (bld, build_obj):
 
     bld.program(features='cxx cxxprogram',
                 includes =inc_path,
-                cxxflags = ( cxxflags + ['-std=gnu++11',]),
+                cxxflags = ( cxxflags + ['-std=gnu++11', '-DTREX_FBSD']),
                 linkflags = linkflags ,
                 lib=['pthread','dl', 'z'] + lib_ext,
-                use =[build_obj.get_dpdk_target(), build_obj.get_bpf_target(), 'zmq', 'tcp'],
+                use =[build_obj.get_dpdk_target(), build_obj.get_bpf_target(), 'zmq', build_obj.get_tcp_target()],
                 source = bp.file_list(top) + debug_file_list,
                 rpath = rpath_linkage,
                 target = build_obj.get_target())
