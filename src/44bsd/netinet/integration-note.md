@@ -80,11 +80,13 @@ In addition, TCP stack is aware of the IP header. So, you should implement the f
 #### _buffer handling callbacks_
   - `void sbreserve(struct sockbuf *sb, u_int cc);`
     - change the socket buffer size
-  - `void sbappend(struct sockbuf *sb, struct mbuf *m, int flags);`
+  - `void sbappend(struct sockbuf *sb, struct mbuf *m, int flags, struct socket *so);`
     - for `so_rcv`, append data from `m` to the socket buffer.
     - `flags`: would be 0, ignore it.
-  - `void sbdrop(struct sockbuf *sb, int len);`
+    - `so`: required to generate socket event
+  - `void sbdrop(struct sockbuf *sb, int len, struct socket *so);`
     - for `so_snd`, drop data by `len` from the socket buffer.
+    - `so`: required to generate socket event
 
 #### _socket event callbacks_
   - `void sorwakeup(struct socket *so);`
@@ -149,7 +151,7 @@ TCP counters are accumulated at `struct tcpstat`. The counters will be updated b
 Since memory allocation may happen during initialization, `tcp_discardcb()` should be called before release it.
   - `void tcp_discardcb(struct tcpcb *tp);`
 
-`tcpcb` has a dedicated `m_socket` inside it, but it should be initialized by yourself before you use it.
+You should implement `struct socket * tcp_socket(struct tcpcb *tp);` to provided a `tp` related user socket. The socket should be initialized before you use it.
   - `so_options`: set SO_DEBUG to enable `tcp_trace()` output. (In `trex-core`, it is the same as US_SO_DEBUG)
   - `so_rcv.sb_hiwat`,`so_snd.sb_hiwat`: set socket buffer size
 

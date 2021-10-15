@@ -760,7 +760,7 @@ tcp_default_fb_init(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	so = tp->t_inpcb->inp_socket;
 #else
-	so = &tp->m_socket;
+	so = tcp_socket(tp);
 #endif
 	if ((!TCPS_HAVEESTABLISHED(tp->t_state) || sbavail(&so->so_snd) ||
 	    tp->snd_una != tp->snd_max) && !(tcp_timer_active(tp, TT_REXMT) ||
@@ -1482,7 +1482,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifndef TREX_FBSD
 			win = sbspace(&inp->inp_socket->so_rcv);
 #else
-			win = sbspace(&tp->m_socket.so_rcv);
+			win = sbspace(&tcp_socket(tp)->so_rcv);
 #endif
 			if (win > TCP_MAXWIN << tp->rcv_scale)
 				win = TCP_MAXWIN << tp->rcv_scale;
@@ -1755,7 +1755,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifndef TREX_FBSD
 	if (tp == NULL || (inp->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp == NULL || (tp->m_socket.so_options & SO_DEBUG))
+	if (tp == NULL || (tcp_socket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_OUTPUT, 0, tp, mtod(m, void *), nth, 0);
 #endif
@@ -2044,7 +2044,7 @@ tcp_drop(struct tcpcb *tp, int errno)
 #ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
 #else
-	struct socket *so = &tp->m_socket;
+	struct socket *so = tcp_socket(tp);
 #endif
 
 	NET_EPOCH_ASSERT();
@@ -2298,7 +2298,7 @@ tcp_close(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	so = inp->inp_socket;
 #else
-	so = &tp->m_socket;
+	so = tcp_socket(tp);
 #endif
 	soisdisconnected(so);
 #ifndef TREX_FBSD

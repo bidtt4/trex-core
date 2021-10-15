@@ -233,13 +233,15 @@ tcp_output(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
 #else
-	struct socket *so = &tp->m_socket;
+	struct socket *so = tcp_socket(tp);
 #endif
 	int32_t len;
 	uint32_t recwin, sendwin;
 	int off, flags, error = 0;	/* Keep compiler happy */
+#ifndef TREX_FBSD
 	u_int if_hw_tsomaxsegcount = 0;
 	u_int if_hw_tsomaxsegsize = 0;
+#endif
 	struct mbuf *m;
 	struct ip *ip = NULL;
 #ifdef TCPDEBUG
@@ -276,7 +278,9 @@ tcp_output(struct tcpcb *tp)
 #ifdef KERN_TLS
 	const bool hw_tls = (so->so_snd.sb_flags & SB_TLS_IFNET) != 0;
 #else
+#ifndef TREX_FBSD
 	const bool hw_tls = false;
+#endif
 #endif
 
 	NET_EPOCH_ASSERT();
@@ -1097,9 +1101,11 @@ send:
 	 * the template for sends on this connection.
 	 */
 	if (len) {
+#ifndef TREX_FBSD
 		struct mbuf *mb;
 		struct sockbuf *msb;
 		u_int moff;
+#endif
 
 		if ((tp->t_flags & TF_FORCEDATA) && len == 1) {
 			TCPSTAT_INC(tcps_sndprobe);
@@ -1187,13 +1193,6 @@ send:
 			}
 		}
 #else /* TREX_FBSD */
-                (void) if_hw_tsomaxsegcount;
-                (void) if_hw_tsomaxsegsize;
-                (void) hw_tls;
-		(void) mb;
-		(void) msb;
-		(void) moff;
-
 		if (tcp_build_pkt(tp, off, len, hdrlen, optlen, &m) != 0) {
 			error = ENOBUFS;
 			sack_rxmit = 0;

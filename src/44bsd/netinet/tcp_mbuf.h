@@ -16,7 +16,7 @@ void m_adj(struct mbuf *, int);
 void m_freem(struct mbuf *);
 
 #ifdef __cplusplus
-}
+} /* extern "C" */
 #endif
 
 

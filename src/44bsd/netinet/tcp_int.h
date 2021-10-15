@@ -34,6 +34,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 /* provided functions */
 int tcp_int_output(struct tcpcb *tp);
 void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos);
@@ -47,9 +48,11 @@ int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen,
 int tcp_ip_output(struct tcpcb *tp, struct mbuf *m);
 int tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, struct mbuf *m);
 bool count_and_check_no_delay(struct tcpcb *, int);
-extern bool tcp_isipv6(struct tcpcb *);
+bool tcp_isipv6(struct tcpcb *);
+struct socket* tcp_socket(struct tcpcb *);
+
 #ifdef __cplusplus
-}
+} /* extern "C" */
 #endif
 
 extern struct cc_algo newreno_cc_algo;

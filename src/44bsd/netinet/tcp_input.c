@@ -1492,7 +1492,7 @@ drop:
 void
 tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos)
 {
-	tp->t_fb->tfb_tcp_do_segment(m, th, &tp->m_socket, tp, toff, tlen, iptos);
+	tp->t_fb->tfb_tcp_do_segment(m, th, tcp_socket(tp), tp, toff, tlen, iptos);
 }
 #endif  /* !TREX_FBSD */
 
@@ -1936,7 +1936,11 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 
 				TCPSTAT_ADD(tcps_rcvackpack, nsegs);
 				TCPSTAT_ADD(tcps_rcvackbyte, acked);
+#ifndef TREX_FBSD
 				sbdrop(&so->so_snd, acked);
+#else
+				sbdrop(&so->so_snd, acked, so);
+#endif
 				if (SEQ_GT(tp->snd_una, tp->snd_recover) &&
 				    SEQ_LEQ(th->th_ack, tp->snd_recover))
 					tp->snd_recover = th->th_ack - 1;
@@ -2048,7 +2052,11 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 						so->so_rcv.sb_flags &= ~SB_AUTOSIZE;
 #endif /* TCP_SB_AUTOSIZE */
 				m_adj(m, drop_hdrlen);	/* delayed header drop */
+#ifndef TREX_FBSD
 				sbappendstream_locked(&so->so_rcv, m, 0);
+#else
+				sbappendstream_locked(&so->so_rcv, m, 0, so);
+#endif
 			}
 			SOCKBUF_UNLOCK(&so->so_rcv);
 			tp->t_flags |= TF_WAKESOR;
@@ -3064,7 +3072,7 @@ process_ACK:
 			else
 				tp->snd_wnd = 0;
 #ifdef TREX_FBSD
-#define sbcut_locked(sb,len)    (sbdrop(sb,len), NULL)
+#define sbcut_locked(sb,len)    (sbdrop(sb,len,so), NULL)
 #endif
 			mfree = sbcut_locked(&so->so_snd,
 			    (int)sbavail(&so->so_snd));
@@ -3326,7 +3334,11 @@ dodata:							/* XXX */
 			if (so->so_rcv.sb_state & SBS_CANTRCVMORE)
 				m_freem(m);
 			else
+#ifndef TREX_FBSD
 				sbappendstream_locked(&so->so_rcv, m, 0);
+#else
+				sbappendstream_locked(&so->so_rcv, m, 0, so);
+#endif
 			SOCKBUF_UNLOCK(&so->so_rcv);
 			tp->t_flags |= TF_WAKESOR;
 		} else {
@@ -3528,7 +3540,7 @@ drop:
 #ifndef TREX_FBSD
 	if (tp == NULL || (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp == NULL || (tp->m_socket.so_options & SO_DEBUG))
+	if (tp == NULL || (tcp_socket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
@@ -4055,7 +4067,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 #ifndef TREX_FBSD
 	so = inp->inp_socket;
 #else
-	so = &tp->m_socket;
+	so = tcp_socket(tp);
 #endif
 	SOCKBUF_LOCK(&so->so_snd);
 #ifndef TREX_FBSD

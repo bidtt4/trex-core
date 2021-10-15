@@ -98,8 +98,6 @@ tcp_ts_getticks(void)
 	getmicrouptime(&tv);
 	return (tv.tv_sec * 1000 + tv.tv_usec / 1000);
 }
-#else /* TREX_FBSD */
-extern uint32_t tcp_ts_getticks(void);
 #endif
 #endif /* _KERNEL */
 

@@ -333,7 +333,6 @@ struct tcpcb {
         /* data structures per tcpcb */
 	struct tcp_timer m_timer;	/* TCP timer */
 	struct cc_var m_ccv;		/* congestion control specific vars */
-	struct socket m_socket;		/* user socket vars */
 #endif /* TREX_FBSD */
 };
 #endif	/* _KERNEL || _WANT_TCPCB */

@@ -496,7 +496,7 @@ tcp_timer_2msl(void *xtp)
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+	if (tp != NULL && (tcp_socket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
@@ -578,7 +578,7 @@ tcp_timer_keep(void *xtp)
 #ifndef TREX_FBSD
 	    inp->inp_socket->so_options & SO_KEEPALIVE) &&
 #else
-	    tp->m_socket.so_options & SO_KEEPALIVE) &&
+	    tcp_socket(tp)->so_options & SO_KEEPALIVE) &&
 #endif
 	    tp->t_state <= TCPS_CLOSING) {
 		if (ticks - tp->t_rcvtime >= TP_KEEPIDLE(tp) + TP_MAXIDLE(tp))
@@ -629,7 +629,7 @@ tcp_timer_keep(void *xtp)
 #ifndef TREX_FBSD
 	if (inp->inp_socket->so_options & SO_DEBUG)
 #else
-	if (tp->m_socket.so_options & SO_DEBUG)
+	if (tcp_socket(tp)->so_options & SO_DEBUG)
 #endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
@@ -654,7 +654,7 @@ dropit:
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+	if (tp != NULL && (tcp_socket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
@@ -759,7 +759,7 @@ tcp_timer_persist(void *xtp)
 #ifndef TREX_FBSD
 	if (tp != NULL && tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
 #else
-	if (tp != NULL && tp->m_socket.so_options & SO_DEBUG)
+	if (tp != NULL && tcp_socket(tp)->so_options & SO_DEBUG)
 #endif
 		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO);
 #endif
@@ -1068,7 +1068,7 @@ tcp_timer_rexmt(void * xtp)
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp != NULL && (tp->m_socket.so_options & SO_DEBUG))
+	if (tp != NULL && (tcp_socket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);

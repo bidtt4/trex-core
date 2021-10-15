@@ -8,6 +8,7 @@ extern "C" {
 struct sockbuf {
     u_int   sb_cc;          /* (a) chars in buffer */
     u_int   sb_hiwat;       /* (a) max actual char count */
+    short   sb_flags;       /* (a) flags, see above */
     short   sb_state;       /* (a) socket state on sockbuf */
 #define SBS_CANTRCVMORE         0x0020  /* can't receive more data from peer */
 };
@@ -20,25 +21,26 @@ struct sockbuf {
 void sbreserve(struct sockbuf *sb, u_int cc);
 
 /* for so_rcv */
-#define sbappendstream_locked(sb,m,flags)   sbappend(sb,m,flags)
-void sbappend(struct sockbuf *sb, struct mbuf *m, int flags);
+#define sbappendstream_locked(sb,m,flags,so)   sbappend(sb,m,flags,so)
+struct socket;
+void sbappend(struct sockbuf *sb, struct mbuf *m, int flags, struct socket *so);
 
 /* for so_snd */
-void sbdrop(struct sockbuf *sb, int len);
+void sbdrop(struct sockbuf *sb, int len, struct socket *so);
 
 
 struct socket {
-    int     so_options;             /* (b) from socket call, see socket.h */
+    short so_options;           /* (b) from socket call, see socket.h */
 #define SO_DEBUG        0x00000001      /* turn on debugging info recording */
 #define SO_KEEPALIVE    0x00000008      /* keep connections alive */
-    struct sockbuf so_rcv, so_snd;
-    short so_state;               /* (b) internal state flags SS_* */
+    int so_error;               /* (f) error affecting connection */
+    int so_state;               /* (b) internal state flags SS_* */
 #define SS_NOFDREF              0x0001  /* no file table ref any more */
 #define SS_ISCONNECTED          0x0002  /* socket connected to a peer */
 #define SS_ISCONNECTING         0x0004  /* in process of connecting to peer */
 #define SS_ISDISCONNECTING      0x0008  /* in process of disconnecting */
 #define SS_ISDISCONNECTED       0x2000  /* socket disconnected from peer */
-    u_short so_error;               /* (f) error affecting connection */
+    struct sockbuf so_rcv, so_snd;
 };
 
 void sorwakeup(struct socket *so);
@@ -48,7 +50,7 @@ void soisdisconnected(struct socket *so);
 void socantrcvmore(struct socket *so);  /* socantrcvmore need to set SBS_CANTRCVMORE to so_rcv.sb_state */
 
 #ifdef __cplusplus
-}
+} /* extern "C" */
 #endif
 
 #endif /* !_TCP_SOCKET_H_ */
