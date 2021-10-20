@@ -25,9 +25,6 @@
 #include <netinet/tcp_var.h>
 
 
-#ifdef _SYS_INET_H_
-#include <netinet/tcpip.h>
-#endif
 #include <netinet/tcp_debug.h>
 
 
@@ -39,17 +36,18 @@ extern "C" {
 int tcp_int_output(struct tcpcb *tp);
 void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos);
 void tcp_handle_timers(struct tcpcb *tp);
+void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
 struct tcpcb* tcp_inittcpcb(struct tcpcb *tp, struct tcp_function_block *fb, struct cc_algo *cc_algo, struct tcp_tune *tune, struct tcpstat *stat);
 void tcp_discardcb(struct tcpcb *tp);
 
 /* required functions */
 uint32_t tcp_ts_getticks(void);
-int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp);
+int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp, struct tcphdr **thp);
 int tcp_ip_output(struct tcpcb *tp, struct mbuf *m);
 int tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, struct mbuf *m);
-bool count_and_check_no_delay(struct tcpcb *, int);
+bool tcp_check_no_delay(struct tcpcb *, int);
 bool tcp_isipv6(struct tcpcb *);
-struct socket* tcp_socket(struct tcpcb *);
+struct socket* tcp_getsocket(struct tcpcb *);
 
 #ifdef __cplusplus
 } /* extern "C" */

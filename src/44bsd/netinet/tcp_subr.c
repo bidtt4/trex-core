@@ -760,7 +760,7 @@ tcp_default_fb_init(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	so = tp->t_inpcb->inp_socket;
 #else
-	so = tcp_socket(tp);
+	so = tcp_getsocket(tp);
 #endif
 	if ((!TCPS_HAVEESTABLISHED(tp->t_state) || sbavail(&so->so_snd) ||
 	    tp->snd_una != tp->snd_max) && !(tcp_timer_active(tp, TT_REXMT) ||
@@ -1443,13 +1443,15 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	struct tcpopt to;
 #ifndef TREX_FBSD
 	struct inpcb *inp;
-#endif
 	struct ip *ip;
 	struct mbuf *optm;
+#endif
 	struct tcphdr *nth;
 	u_char *optp;
 #ifdef INET6
+#ifndef TREX_FBSD
 	struct ip6_hdr *ip6;
+#endif /* !TREX_FBSD */
 	int isipv6;
 #endif /* INET6 */
 	int optlen, tlen, win;
@@ -1482,7 +1484,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifndef TREX_FBSD
 			win = sbspace(&inp->inp_socket->so_rcv);
 #else
-			win = sbspace(&tcp_socket(tp)->so_rcv);
+			win = sbspace(&tcp_getsocket(tp)->so_rcv);
 #endif
 			if (win > TCP_MAXWIN << tp->rcv_scale)
 				win = TCP_MAXWIN << tp->rcv_scale;
@@ -1586,6 +1588,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		m_freem(m);
 	}
 #endif /* TREX_FBSD */
+#ifndef TREX_FBSD
 	tlen = 0;
 #ifdef INET6
 	if (isipv6)
@@ -1597,13 +1600,16 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifdef INET
 		tlen = sizeof (struct tcpiphdr);
 #endif
+#else
+	tlen = sizeof (struct tcphdr);
+#endif
+#ifndef TREX_FBSD
 #ifdef INVARIANTS
 	m->m_len = 0;
 	KASSERT(M_TRAILINGSPACE(m) >= tlen,
 	    ("Not enough trailing space for message (m=%p, need=%d, have=%ld)",
 	    m, tlen, (long)M_TRAILINGSPACE(m)));
 #endif
-#ifndef TREX_FBSD
 	m->m_len = tlen;
 	to.to_flags = 0;
 	if (incl_opts) {
@@ -1623,7 +1629,6 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #else /* TREX_FBSD */
 	to.to_flags = 0;
 
-        (void) optm;
         u_char opt[TCP_MAXOLEN];
         optp = &opt[0];
 #endif /* TREX_FBSD */
@@ -1691,19 +1696,9 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	}
 #endif
 #ifdef TREX_FBSD
-        if (tcp_build_pkt(tp, 0, 0, tlen, optlen, &m) != 0) {
+        if (tcp_build_pkt(tp, 0, 0, tlen, optlen, &m, &nth) != 0) {
                 return;
         }
-#ifdef INET6
-	if (isipv6) {
-		ip6 = mtod(m, struct ip6_hdr *);
-		nth = (struct tcphdr *)(ip6 + 1);
-	} else
-#endif /* INET6 */
-	{
-		ip = mtod(m, struct ip *);
-		nth = (struct tcphdr *)(ip + 1);
-	}
 	if (optlen) {
 		bcopy(opt, nth + 1, optlen);
 	}
@@ -1754,10 +1749,12 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifdef TCPDEBUG
 #ifndef TREX_FBSD
 	if (tp == NULL || (inp->inp_socket->so_options & SO_DEBUG))
-#else
-	if (tp == NULL || (tcp_socket(tp)->so_options & SO_DEBUG))
-#endif
 		tcp_trace(TA_OUTPUT, 0, tp, mtod(m, void *), nth, 0);
+#else
+        ipgen = ((void *)nth) - (isipv6 ? sizeof(struct ip6_hdr) : sizeof(struct ip));
+	if (tp == NULL || (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_OUTPUT, 0, tp, ipgen, nth, 0);
+#endif
 #endif
 	TCP_PROBE3(debug__output, tp, nth, m);
 	if (flags & TH_RST)
@@ -2044,7 +2041,7 @@ tcp_drop(struct tcpcb *tp, int errno)
 #ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
 #else
-	struct socket *so = tcp_socket(tp);
+	struct socket *so = tcp_getsocket(tp);
 #endif
 
 	NET_EPOCH_ASSERT();
@@ -2298,7 +2295,7 @@ tcp_close(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	so = inp->inp_socket;
 #else
-	so = tcp_socket(tp);
+	so = tcp_getsocket(tp);
 #endif
 	soisdisconnected(so);
 #ifndef TREX_FBSD

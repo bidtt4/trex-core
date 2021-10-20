@@ -62,7 +62,16 @@ static __inline u_long ulmax(u_long a, u_long b) { return (a > b ? a : b); }
 #define NET_EPOCH_EXIT(et)
 
 
+// <sys/kernel.h>
+#define ticks   tcp_ts_getticks()
+
+
 // --<inet>--------------------------------------------------------------
+
+
+#include <netinet/ip.h>
+#define IPTOS_ECN_NOTECT    IPTOS_ECN_NOT_ECT
+#include <netinet/ip6.h>
 
 
 // <netinet/in_kdtrace.h>
@@ -76,45 +85,12 @@ static __inline u_long ulmax(u_long a, u_long b) { return (a > b ? a : b); }
 #define TCP_LOG_EVENT(tp, th, rxbuf, txbuf, eventid, errornum, len, stackinfo, th_hostorder)
 
 
-// <netinet/in.h>, <machine/endian.h>
-#ifdef _LITTLE_ENDIAN
-#define ntohl(x)    __builtin_bswap32(x)
-#define htonl(x)    __builtin_bswap32(x)
-#define ntohs(x)    __builtin_bswap16(x)
-#define htons(x)    __builtin_bswap16(x)
-#else
-#define ntohl(x)    (x)
-#define htonl(x)    (x)
-#define ntohs(x)    (x)
-#define htons(x)    (x)
-#endif
-typedef uint32_t  in_addr_t;
-struct in_addr {
-        in_addr_t s_addr;
-};
-#define IPPROTO_TCP             6               /* tcp */
-
-
-// <netinet6/in6.h>
-struct in6_addr {
-        union {
-                uint8_t         __u6_addr8[16];
-                uint16_t        __u6_addr16[8];
-                uint32_t        __u6_addr32[4];
-        } __u6_addr;                    /* 128-bit IP6 address */
-};
-
-
 // <netinet/in_pcb.h>
 #define INP_WLOCK(inp)
 #define INP_WUNLOCK(inp)
 #define INP_LOCK_ASSERT(inp)
 #define INP_WLOCK_ASSERT(inp)
 #define INP_INFO_LOCK_ASSERT(ipi)
-
-
-#include <netinet/ip.h>
-#include <netinet/ip6.h>
 
 
 // <netinet/sockbuf.h>

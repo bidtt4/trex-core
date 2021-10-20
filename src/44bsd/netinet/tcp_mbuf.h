@@ -8,11 +8,7 @@ struct mbuf;
 extern "C" {
 #endif
 
-#define mtod(m, t)      ((t)m_data(m))
-void *m_data(struct mbuf *);
-
 void m_adj(struct mbuf *, int);
-
 void m_freem(struct mbuf *);
 
 #ifdef __cplusplus

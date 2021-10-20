@@ -137,7 +137,11 @@ STAILQ_HEAD(tcp_log_stailq, tcp_log_mem);
  * Organized for 64 byte cacheline efficiency based
  * on common tcp_input/tcp_output processing.
  */
+#ifdef EXTEND_TCPCB
+struct tcpcb_base {
+#else
 struct tcpcb {
+#endif
 	/* Cache line 1 */
 #ifndef TREX_FBSD
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */

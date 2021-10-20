@@ -2520,7 +2520,7 @@ def build_prog (bld, build_obj):
     cxxflags_ext = ['',]
 
     bld.program(features='cxx cxxprogram',
-                includes =inc_path,
+                includes =inc_path + tcp_includes_path,
                 cxxflags = ( cxxflags + ['-std=gnu++11', '-DTREX_FBSD']),
                 linkflags = linkflags ,
                 lib=['pthread','dl', 'z'] + lib_ext,

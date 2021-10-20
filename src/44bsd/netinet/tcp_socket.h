@@ -1,10 +1,6 @@
 #ifndef _TCP_SOCKET_H_
 #define _TCP_SOCKET_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct sockbuf {
     u_int   sb_cc;          /* (a) chars in buffer */
     u_int   sb_hiwat;       /* (a) max actual char count */
@@ -15,22 +11,16 @@ struct sockbuf {
 
 #define sbused(sb)  ((sb)->sb_cc)
 #define sbavail(sb) ((sb)->sb_cc)
-#define sbspace(sb) ((sb)->sb_hiwat - (sb)->sb_cc)
-
-#define sbreserve_locked(sb,cc,so,td)   sbreserve(sb,cc)
-void sbreserve(struct sockbuf *sb, u_int cc);
-
-/* for so_rcv */
-#define sbappendstream_locked(sb,m,flags,so)   sbappend(sb,m,flags,so)
-struct socket;
-void sbappend(struct sockbuf *sb, struct mbuf *m, int flags, struct socket *so);
-
-/* for so_snd */
-void sbdrop(struct sockbuf *sb, int len, struct socket *so);
+static inline long sbspace(struct sockbuf *sb) {
+    return sb->sb_hiwat - sb->sb_cc;
+}
 
 
 struct socket {
     short so_options;           /* (b) from socket call, see socket.h */
+/* Linux setsockopt(2) has the same definition for values(NOT flags!) */
+#undef SO_DEBUG
+#undef SO_KEEPALIVE
 #define SO_DEBUG        0x00000001      /* turn on debugging info recording */
 #define SO_KEEPALIVE    0x00000008      /* keep connections alive */
     int so_error;               /* (f) error affecting connection */
@@ -42,6 +32,18 @@ struct socket {
 #define SS_ISDISCONNECTED       0x2000  /* socket disconnected from peer */
     struct sockbuf so_rcv, so_snd;
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define sbreserve_locked(sb,cc,so,td)   sbreserve(sb,cc)
+void sbreserve(struct sockbuf *sb, u_int cc);
+/* for so_rcv */
+#define sbappendstream_locked(sb,m,flags,so)   sbappend(sb,m,flags,so)
+void sbappend(struct sockbuf *sb, struct mbuf *m, int flags, struct socket *so);
+/* for so_snd */
+void sbdrop(struct sockbuf *sb, int len, struct socket *so);
 
 void sorwakeup(struct socket *so);
 void sowwakeup(struct socket *so);

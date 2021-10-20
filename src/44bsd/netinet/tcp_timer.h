@@ -74,7 +74,6 @@
 #ifdef TREX_FBSD
 // <sys/kernel.h>
 #define hz              1000
-#define ticks           tcp_ts_getticks()
 #endif /* TREX_FBSD */
 
 /*
@@ -198,8 +197,6 @@ struct tcp_timer {
 #define	TP_KEEPINTVL(tp) ((tp)->t_tune->tcp_keepintvl)
 #define	TP_KEEPCNT(tp)	((tp)->t_tune->tcp_keepcnt)
 #define	TP_MAXIDLE(tp)	(TP_KEEPCNT(tp) * TP_KEEPINTVL(tp))
-
-#define tcp_maxpersistidle  TCPTV_KEEP_IDLE
 
 #define tcp_persmin         TCPTV_PERSMIN
 #define tcp_persmax         TCPTV_PERSMAX

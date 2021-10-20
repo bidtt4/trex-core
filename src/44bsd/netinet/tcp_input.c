@@ -599,8 +599,7 @@ cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
 	    (tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
 	    (tlen <= tp->t_maxseg) &&					\
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)) &&	\
-            count_and_check_no_delay(tp, tlen))
-extern bool count_and_check_no_delay(struct tcpcb *, int);
+            tcp_check_no_delay(tp, tlen))
 #endif /* TREX_FBSD */
 
 void inline
@@ -1492,7 +1491,7 @@ drop:
 void
 tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos)
 {
-	tp->t_fb->tfb_tcp_do_segment(m, th, tcp_socket(tp), tp, toff, tlen, iptos);
+	tp->t_fb->tfb_tcp_do_segment(m, th, tcp_getsocket(tp), tp, toff, tlen, iptos);
 }
 #endif  /* !TREX_FBSD */
 
@@ -2324,8 +2323,13 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			} else {
 				TCPSTAT_INC(tcps_badrst);
 				/* Send challenge ACK. */
+#ifndef TREX_FBSD
 				tcp_respond(tp, mtod(m, void *), th, m,
 				    tp->rcv_nxt, tp->snd_nxt, TH_ACK);
+#else
+				tcp_respond(tp, NULL, th, m,
+				    tp->rcv_nxt, tp->snd_nxt, TH_ACK);
+#endif
 				tp->last_ack_sent = tp->rcv_nxt;
 				m = NULL;
 			}
@@ -2347,8 +2351,13 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			rstreason = BANDLIM_UNLIMITED;
 		} else {
 			/* Send challenge ACK. */
+#ifndef TREX_FBSD
 			tcp_respond(tp, mtod(m, void *), th, m, tp->rcv_nxt,
 			    tp->snd_nxt, TH_ACK);
+#else
+			tcp_respond(tp, NULL, th, m, tp->rcv_nxt,
+			    tp->snd_nxt, TH_ACK);
+#endif
 			tp->last_ack_sent = tp->rcv_nxt;
 			m = NULL;
 		}
@@ -3540,7 +3549,7 @@ drop:
 #ifndef TREX_FBSD
 	if (tp == NULL || (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
 #else
-	if (tp == NULL || (tcp_socket(tp)->so_options & SO_DEBUG))
+	if (tp == NULL || (tcp_getsocket(tp)->so_options & SO_DEBUG))
 #endif
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
@@ -3614,15 +3623,25 @@ tcp_dropwithreset(struct mbuf *m, struct tcphdr *th, struct tcpcb *tp,
 
 	/* tcp_respond consumes the mbuf chain. */
 	if (th->th_flags & TH_ACK) {
+#ifndef TREX_FBSD
 		tcp_respond(tp, mtod(m, void *), th, m, (tcp_seq)0,
 		    th->th_ack, TH_RST);
+#else
+		tcp_respond(tp, NULL, th, m, (tcp_seq)0,
+		    th->th_ack, TH_RST);
+#endif
 	} else {
 		if (th->th_flags & TH_SYN)
 			tlen++;
 		if (th->th_flags & TH_FIN)
 			tlen++;
+#ifndef TREX_FBSD
 		tcp_respond(tp, mtod(m, void *), th, m, th->th_seq+tlen,
 		    (tcp_seq)0, TH_RST|TH_ACK);
+#else
+		tcp_respond(tp, NULL, th, m, th->th_seq+tlen,
+		    (tcp_seq)0, TH_RST|TH_ACK);
+#endif
 	}
 	return;
 drop:
@@ -4067,7 +4086,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 #ifndef TREX_FBSD
 	so = inp->inp_socket;
 #else
-	so = tcp_socket(tp);
+	so = tcp_getsocket(tp);
 #endif
 	SOCKBUF_LOCK(&so->so_snd);
 #ifndef TREX_FBSD

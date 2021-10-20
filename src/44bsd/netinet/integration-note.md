@@ -8,7 +8,6 @@ To add FreeBSD TCP source to it, `src/44bsd/netinet/` added independantly.
 
   - (new) `sys_inet.h`: definitions from system and netinet headers
     - `queue.h`: needed for SACK implemention
-    - `ip.h`/`ip6.h`: needed for IP header reference
   - (new) `tcp_int.h`: includes all header files for the TCP stack
     - (new) `tcp_mbuf.h`: `struct mbuf` and required functions
     - (new) `tcp_socket.h`: `struct socket` and required funtions
@@ -17,7 +16,6 @@ To add FreeBSD TCP source to it, `src/44bsd/netinet/` added independantly.
     - `tcp_fsm.h`:
     - `tcp_timer.h`: `struct tcp_timer`
     - `tcp_var.h`: `struct tcpcb`, `struct tcpstat`
-    - `tcpip.h`: 
     - `tcp_debug.h`:
   - `tcp_output.c`:
   - `tcp_input.c`:
@@ -41,7 +39,6 @@ To use this FreeBSD TCP stack, including `netinet/tcp_int.h` header file is reco
 
 ### _**`struct mbuf`**_
 It is used to save TCP/IP packet. In the integrated code, it is just used for the type reference only. So, DPDK `struct rte_mbuf` can be used by type casting of this. But, in addition, the following callback functions should be provided properly. They are declared at `netinet/tcp_mbuf.h`.
-  - `void *m_data(struct mbuf *m);`: get the data pointer in `mbuf`
   - `void m_adj(struct mbuf *m, int req_len);`: trim data by `req_len`. if it has negative value, perform it from tail.
   - `void m_freem(struct mbuf *m);`: release `mbuf`
 
@@ -50,12 +47,13 @@ The `mbuf` would be handled by TCP packet handling functions also. The outbound 
     - by default, `tcp_output(tp)` would be called.
 
 The default `tcp_output()` will call following functions and you should implement them and handle the packet `mbuf` properly.
-  - `int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp);`
+  - `int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp, struct tcphdr **thp);`
     - `off`: data offset in the socket buffer to build a packet
     - `len`: data length to build a packet
     - `hdrlen`: IP + TCP header length (including TCP option length)
     - `optlen`: TCP option length
     - `mp`: return built packet `mbuf` (allocated)
+    - `thp`: return tcp header location in the packet
     - should return 0 for success, other values for failure.
     - _`trex-core` could use `tcp_build_cpkt()` and `tcp_build_dpkt()`_
   - `int tcp_ip_output(struct tcpcb *tp, struct mbuf *m);`
@@ -151,7 +149,7 @@ TCP counters are accumulated at `struct tcpstat`. The counters will be updated b
 Since memory allocation may happen during initialization, `tcp_discardcb()` should be called before release it.
   - `void tcp_discardcb(struct tcpcb *tp);`
 
-You should implement `struct socket * tcp_socket(struct tcpcb *tp);` to provided a `tp` related user socket. The socket should be initialized before you use it.
+You should implement `struct socket * tcp_getsocket(struct tcpcb *tp);` to provided a `tp` related user socket. The socket should be initialized before you use it.
   - `so_options`: set SO_DEBUG to enable `tcp_trace()` output. (In `trex-core`, it is the same as US_SO_DEBUG)
   - `so_rcv.sb_hiwat`,`so_snd.sb_hiwat`: set socket buffer size
 

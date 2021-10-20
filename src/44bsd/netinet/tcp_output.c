@@ -233,7 +233,7 @@ tcp_output(struct tcpcb *tp)
 #ifndef TREX_FBSD
 	struct socket *so = tp->t_inpcb->inp_socket;
 #else
-	struct socket *so = tcp_socket(tp);
+	struct socket *so = tcp_getsocket(tp);
 #endif
 	int32_t len;
 	uint32_t recwin, sendwin;
@@ -245,7 +245,9 @@ tcp_output(struct tcpcb *tp)
 	struct mbuf *m;
 	struct ip *ip = NULL;
 #ifdef TCPDEBUG
+#ifndef TREX_FBSD
 	struct ipovly *ipov = NULL;
+#endif /* !TREX_FBSD */
 #endif
 	struct tcphdr *th;
 	u_char opt[TCP_MAXOLEN];
@@ -838,12 +840,16 @@ send:
 	 *	max_linkhdr + sizeof (struct tcpiphdr) + optlen <= MCLBYTES
 	 */
 	optlen = 0;
+#ifndef TREX_FBSD
 #ifdef INET6
 	if (isipv6)
 		hdrlen = sizeof (struct ip6_hdr) + sizeof (struct tcphdr);
 	else
 #endif
 		hdrlen = sizeof (struct tcpiphdr);
+#else
+	hdrlen = sizeof (struct tcphdr);
+#endif
 
 	if (flags & TH_SYN) {
 		tp->snd_nxt = tp->iss;
@@ -1193,7 +1199,7 @@ send:
 			}
 		}
 #else /* TREX_FBSD */
-		if (tcp_build_pkt(tp, off, len, hdrlen, optlen, &m) != 0) {
+		if (tcp_build_pkt(tp, off, len, hdrlen, optlen, &m, &th) != 0) {
 			error = ENOBUFS;
 			sack_rxmit = 0;
 			goto out;
@@ -1237,7 +1243,7 @@ send:
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
 #else /* TREX_FBSD */
-		if (tcp_build_pkt(tp, 0, 0, hdrlen, optlen, &m) != 0) {
+		if (tcp_build_pkt(tp, 0, 0, hdrlen, optlen, &m, &th) != 0) {
 			error = ENOBUFS;
 			sack_rxmit = 0;
 			goto out;
@@ -1247,7 +1253,6 @@ send:
 	SOCKBUF_UNLOCK_ASSERT(&so->so_snd);
 #ifndef TREX_FBSD
 	m->m_pkthdr.rcvif = (struct ifnet *)0;
-#endif
 #ifdef MAC
 	mac_inpcb_create_mbuf(tp->t_inpcb, m);
 #endif
@@ -1255,9 +1260,7 @@ send:
 	if (isipv6) {
 		ip6 = mtod(m, struct ip6_hdr *);
 		th = (struct tcphdr *)(ip6 + 1);
-#ifndef TREX_FBSD
 		tcpip_fillheaders(tp->t_inpcb, ip6, th);
-#endif
 	} else
 #endif /* INET6 */
 	{
@@ -1266,10 +1269,19 @@ send:
 		ipov = (struct ipovly *)ip;
 #endif
 		th = (struct tcphdr *)(ip + 1);
-#ifndef TREX_FBSD
 		tcpip_fillheaders(tp->t_inpcb, ip, th);
-#endif
 	}
+#else /* TREX_FBSD */
+	/* to support ECN in IP header */
+#ifdef INET6
+	if (isipv6) {
+		ip6 = ((struct ip6_hdr *)th) - 1;
+	} else
+#endif /* INET6 */
+	{
+		ip = ((struct ip *)th) - 1;
+	}
+#endif /* TREX_FBSD */
 
 	/*
 	 * Fill in fields, remembering maximum advertised
@@ -1518,9 +1530,9 @@ send:
 #endif
 		ipov->ih_len = save;
 #else   /* TREX_FBSD */
-                (void) ipov;
+		void *ipgen = isipv6 ? (void *)ip6 : (void *)ip;
 
-		tcp_trace(TA_OUTPUT, tp->t_state, tp, mtod(m, void *), th, 0);
+		tcp_trace(TA_OUTPUT, tp->t_state, tp, ipgen, th, 0);
 #endif
 	}
 #endif /* TCPDEBUG */
