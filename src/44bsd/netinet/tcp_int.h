@@ -45,6 +45,7 @@ uint32_t tcp_ts_getticks(void);
 int tcp_build_pkt(struct tcpcb *tp, uint32_t off, uint32_t len, uint16_t hdrlen, uint16_t optlen, struct mbuf **mp, struct tcphdr **thp);
 int tcp_ip_output(struct tcpcb *tp, struct mbuf *m);
 int tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, struct mbuf *m);
+bool tcp_reass_is_empty(struct tcpcb *tp);
 bool tcp_check_no_delay(struct tcpcb *, int);
 bool tcp_isipv6(struct tcpcb *);
 struct socket* tcp_getsocket(struct tcpcb *);

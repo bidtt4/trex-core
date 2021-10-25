@@ -49,6 +49,7 @@
 #include "astf/astf_template_db.h"
 
 
+#ifndef TREX_FBSD
 #define TCP_PAWS_IDLE   (24 * 24 * 60 * 60 * PR_SLOWHZ)
 
 /* for modulo comparisons of timestamps */
@@ -67,6 +68,7 @@ int16_t tcp_du32(uint32_t a,
     }
     return((int16_t)d);
 }
+#endif /* !TREX_FBSD */
 
 
 bool CTcpReassBlock::operator==(CTcpReassBlock& rhs)const{
@@ -217,6 +219,7 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
     int ci=0;
     int li=0;
     CTcpReassBlock  tblocks[MAX_TCP_REASS_BLOCKS+1];
+    CTcpReassBlock *ti_block = nullptr;
     bool save_ptr=false;
 
 
@@ -230,12 +233,14 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
                 cur.m_len = ti->ti_len;
                 cur.m_flags = (ti->ti_flags & TH_FIN) ?1:0;
                 save_ptr=true;
+                ti_block = &tblocks[ci];
             }else{
                 if (SEQ_GT(m_blocks[li].m_seq,ti->ti_seq)) {
                   cur.m_seq = ti->ti_seq;
                   cur.m_len = ti->ti_len;
                   cur.m_flags = (ti->ti_flags & TH_FIN) ?1:0;
                   save_ptr=true;
+                  ti_block = &tblocks[ci];
                 }else{
                     cur=m_blocks[li];
                     li++;
@@ -277,6 +282,10 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
                 break;
             }
         }
+
+        if (cur.m_seq == ti->ti_seq) {
+            ti_block = &tblocks[ci-1];
+        }
     }
 
     if (ci>MAX_TCP_REASS_BLOCKS) {
@@ -284,7 +293,9 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
         INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
         INC_STAT_CNT(pctx, tg_id, tcps_rcvoobytesdrop,tblocks[MAX_TCP_REASS_BLOCKS].m_len);
     }
-    
+    if (ti_block) {
+        ti->ti_len = ti_block->m_len;
+    }
     m_active_blocks = bsd_umin(ci,MAX_TCP_REASS_BLOCKS);
     for (li=0; li<m_active_blocks; li++ ) {
         m_blocks[li]= tblocks[li];
@@ -348,8 +359,16 @@ int tcp_reass(CTcpPerThreadCtx * ctx,
 #endif
 
 
+#ifdef TREX_FBSD
+bool tcp_reass_is_empty(struct tcpcb *tp) {
+    return !tcp_reass_is_exists(tp);
+}
+
+bool tcp_check_no_delay(struct tcpcb *tp,int bytes) {
+#else
 /* Count current packet and check if ack is needed according to tcp_no_delay_counter tunable */
 inline bool count_and_check_no_delay(struct tcpcb *tp,int bytes) {
+#endif
     if ( tp->m_delay_limit == 0 )
         return false;
 
@@ -377,6 +396,7 @@ inline bool count_and_check_no_delay(struct tcpcb *tp,int bytes) {
  * Set DELACK for segments received in order, but ack immediately
  * when segments are out of order (so fast retransmit can work).
  */
+#ifndef TREX_FBSD
 inline void TCP_REASS(CPerProfileCtx * pctx,
                       struct tcpcb *tp,
                       struct tcpiphdr *ti,
@@ -404,6 +424,28 @@ inline void TCP_REASS(CPerProfileCtx * pctx,
                  &so->so_rcv, m,ti->ti_len); 
         sorwakeup(so);
     } else {
+#else
+int
+tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, struct mbuf *m)
+{
+    CPerProfileCtx *pctx = tp->m_flow->m_pctx;
+    tcpiphdr pheader;
+    tcpiphdr *ti = &pheader;
+    TCPHeader *tcp = (TCPHeader *)th;
+    int tiflags = 0;
+
+    if (th == nullptr) {
+        return tcp_reass_no_data(pctx, tp);
+    }
+    else {
+        ti->ti_seq = tcp->getSeqNumber();
+        ti->ti_ack = tcp->getAckNumber();
+        ti->ti_win = tcp->getWindowSize();
+        ti->ti_urp = tcp->getUrgentOffset();
+        ti->ti_flags = tcp->getFlags();
+        ti->ti_len   = *tlenp; /* L7 len */
+    }
+#endif
         if (tp->m_reass_disabled) {
             uint16_t tg_id = tp->m_flow->m_tg_id;
             INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
@@ -411,16 +453,29 @@ inline void TCP_REASS(CPerProfileCtx * pctx,
             if (m) { 
                 rte_pktmbuf_free(m); 
             }
+#ifdef TREX_FBSD
+            if (tlenp)
+                *tlenp = 0;
+#endif
        } else { 
            tiflags = tcp_reass(pctx,tp, ti, m);
+#ifdef TREX_FBSD
+            if (tlenp)
+                *tlenp = ti->ti_len;
+#endif
        }
+#ifndef TREX_FBSD
        tp->t_flags |= TF_ACKNOW; 
     }
+#else
+    return tiflags;
+#endif
 }
 
 
 
 
+#ifndef TREX_FBSD
 void tcp_dooptions(CPerProfileCtx * pctx,
               struct tcpcb *tp, 
               uint8_t *cp, 
@@ -490,6 +545,7 @@ void tcp_dooptions(CPerProfileCtx * pctx,
         }
     }
 }
+#endif /* !TREX_FBSD */
 
 #if SUPPORT_OF_URG
 
@@ -536,6 +592,20 @@ struct tcpcb *debug_flow;
 #endif
 
 
+#ifdef TREX_FBSD
+HOT_FUNC int tcp_flow_input(CPerProfileCtx * pctx,
+                    struct tcpcb *tp,
+                    struct rte_mbuf *m,
+                    TCPHeader *tcp,
+                    int offset_l7,
+                    int total_l7_len
+                    ){
+    printf("tcp_flow_input: offset_l7=%d,total_l7_len=%d\n", offset_l7, total_l7_len);
+    tcp_int_input(tp, (struct mbuf*)m, (struct tcphdr*)tcp, offset_l7, total_l7_len, 0);
+    return 0;
+}
+#endif
+#ifndef TREX_FBSD
 /* assuming we found the flow */
 HOT_FUNC int tcp_flow_input(CPerProfileCtx * pctx,
                     struct tcpcb *tp, 
@@ -696,7 +766,7 @@ HOT_FUNC int tcp_flow_input(CPerProfileCtx * pctx,
                 if (tp->t_dupacks){
                     tp->t_dupacks=0;
                 }
-                so->so_snd.sbdrop(so,acked);
+                ((CTcpSockBuf*)&so->so_snd)->sbdrop(so,acked);
 
                 tp->snd_una = ti->ti_ack;
                 rte_pktmbuf_free(m);
@@ -1262,11 +1332,11 @@ trimthenstep6:
             INC_STAT_CNT(pctx, tg_id, tcps_rcvackbyte,so->so_snd.sb_cc);
             INC_STAT_CNT(pctx, tg_id, tcps_rcvackbyte_of,(acked-so->so_snd.sb_cc));
             tp->snd_wnd -= so->so_snd.sb_cc;
-            so->so_snd.sbdrop_all(so);
+            ((CTcpSockBuf*)&so->so_snd)->sbdrop_all(so);
             ourfinisacked = 1;
         } else {
             INC_STAT_CNT(pctx, tg_id, tcps_rcvackbyte,acked);
-            so->so_snd.sbdrop(so,acked);
+            ((CTcpSockBuf*)&so->so_snd)->sbdrop(so,acked);
             tp->snd_wnd -= acked;
             ourfinisacked = 0;
         }
@@ -1636,6 +1706,7 @@ void tcp_xmit_timer(CPerProfileCtx * pctx,
      */
     tp->t_softerror = 0;
 }
+#endif /* !TREX_FBSD */
 
 
 CTcpTuneables * tcp_get_parent_tunable(CPerProfileCtx * pctx,
@@ -1669,6 +1740,7 @@ CTcpTuneables * tcp_get_parent_tunable(CPerProfileCtx * pctx,
 }
 
 
+#ifndef TREX_FBSD
 /*
  * Determine a reasonable value for maxseg size.
  * If the route is known, check route for mtu.
@@ -1734,3 +1806,4 @@ int tcp_mss(CPerProfileCtx * pctx,
         return mss;
     }
 }
+#endif /* !TREX_FBSD */

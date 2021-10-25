@@ -118,6 +118,8 @@ The TCP reassembly feature in `netinet/tcp_reass.c` is not integrated for the ex
     - `tlenp`: TCP data length, should be updated by reassembled block length for the following update of SACK block.
     - `m`: contains TCP data only (no TCP header). It can be NULL.
     - should return saved `th->th_flags & TH_FIN` when reassembled data is appended to the socket buffer.
+  - `bool tcp_reass_is_empty(struct tcpcb *tp);`
+    - return true if there is no segment in the reassembly queue.
 
 ### _**TCP Tunables**_
 TCP tunable variables are collected in `struct tcp_tune`. You should instantiate and update it by initial value or given value from the user. It is defined at `netinet/tcp_var.h`.

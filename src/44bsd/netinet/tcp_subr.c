@@ -1451,8 +1451,12 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #ifdef INET6
 #ifndef TREX_FBSD
 	struct ip6_hdr *ip6;
-#endif /* !TREX_FBSD */
 	int isipv6;
+#else /* TREX_FBSD */
+#ifdef TCPDEBUG
+	int isipv6;
+#endif
+#endif /* TREX_FBSD */
 #endif /* INET6 */
 	int optlen, tlen, win;
 	bool incl_opts;
@@ -1474,7 +1478,9 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	} else
 		inp = NULL;
 #else /* TREX_FBSD */
+#ifdef TCPDEBUG
 	isipv6 = tcp_isipv6(tp);
+#endif
 #endif /* TREX_FBSD */
 
 	incl_opts = false;

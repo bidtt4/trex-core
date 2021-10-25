@@ -125,7 +125,7 @@ struct sackhint {
 #ifndef TREX_FBSD
 #define SEGQ_EMPTY(tp) TAILQ_EMPTY(&(tp)->t_segq)
 #else
-#define SEGQ_EMPTY(tp)  ((tp)->t_segq == NULL)
+#define SEGQ_EMPTY(tp)  tcp_reass_is_empty(tp)
 #endif
 
 #ifndef TREX_FBSD
@@ -1201,7 +1201,6 @@ tcp_fields_to_net(struct tcphdr *th)
 #endif /* _KERNEL */
 
 #ifdef TREX_FBSD
-
 /* localized global TCP tunable values */
 struct tcp_tune {
         int tcp_do_rfc1323;     /* (1) Enable rfc1323 (high performance TCP) extensions */

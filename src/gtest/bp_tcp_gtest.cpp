@@ -119,7 +119,7 @@ TEST_F(gt_tcp, tst1) {
 TEST_F(gt_tcp, tst3) {
     printf(" MSS %d \n",(int)TCP_MSS);
     printf(" sizeof_tcpcb %d \n",(int)sizeof(tcpcb));
-    tcpstat tcp_stats;
+    CTcpStats tcp_stats;
     tcp_stats.Clear();
     tcp_stats.m_sts.tcps_accepts++;
     tcp_stats.m_sts.tcps_connects++;

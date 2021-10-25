@@ -62,33 +62,36 @@
 #define MYC_A(f)     fprintf(fd," %-40s: %llu \n",#f,(unsigned long long)m_sts.f)
 
 
-tcpstat::tcpstat(uint16_t num_of_tg_ids){
+CTcpStats::CTcpStats(uint16_t num_of_tg_ids){
     Init(num_of_tg_ids);
 }
 
-tcpstat::~tcpstat() {
+CTcpStats::~CTcpStats() {
     delete[] m_sts_tg_id;
 }
 
-void tcpstat::Init(uint16_t num_of_tg_ids) {
+void CTcpStats::Init(uint16_t num_of_tg_ids) {
         m_sts_tg_id = new tcpstat_int_t[num_of_tg_ids];
-        assert(m_sts_tg_id && "Operator new failed in tcp_subr.cpp/tcpstat::Init");
+        assert(m_sts_tg_id && "Operator new failed in tcp_subr.cpp/CTcpStats::Init");
         m_num_of_tg_ids = num_of_tg_ids;
         Clear();
 }
 
-void tcpstat::Clear(){
+void CTcpStats::Clear(){
     for (uint16_t tg_id = 0; tg_id < m_num_of_tg_ids; tg_id++){
         ClearPerTGID(tg_id);
     }
     memset(&m_sts,0,sizeof(tcpstat_int_t));
 }
 
-void tcpstat::ClearPerTGID(uint16_t tg_id){
+void CTcpStats::ClearPerTGID(uint16_t tg_id){
     memset(m_sts_tg_id+tg_id,0,sizeof(tcpstat_int_t));
+#ifdef TREX_FBSD
+    m_sts_tg_id[tg_id].next = &m_sts;
+#endif
 }
 
-void tcpstat::Dump(FILE *fd){
+void CTcpStats::Dump(FILE *fd){
 
     MYC(tcps_connattempt);
     MYC(tcps_accepts);     
@@ -153,7 +156,7 @@ void tcpstat::Dump(FILE *fd){
     MYC(tcps_notunnel);
 }
 
-void tcpstat::Resize(uint16_t new_num_of_tg_ids) {
+void CTcpStats::Resize(uint16_t new_num_of_tg_ids) {
     delete[] m_sts_tg_id;
     Init(new_num_of_tg_ids);
 }
@@ -182,7 +185,11 @@ int tcp_connect(CPerProfileCtx * pctx,
 
     INC_STAT(pctx, tp->m_flow->m_tg_id, tcps_connattempt);
     tp->t_state = TCPS_SYN_SENT;
+#ifndef TREX_FBSD
     tp->t_timer[TCPT_KEEP] = tctx->tcp_keepinit;
+#else
+    tcp_timer_activate(tp, TT_KEEP, tctx->tcp_keepinit);
+#endif
     tp->iss = ctx->tcp_iss; 
     ctx->tcp_iss += TCP_ISSINCR/4;
     tcp_sendseqinit(tp);
@@ -196,6 +203,7 @@ int tcp_connect(CTcpPerThreadCtx * ctx,struct tcpcb *tp) { return tcp_connect(DE
 int tcp_listen(CPerProfileCtx * pctx,
                 struct tcpcb *tp) {
     assert( tp->t_state == TCPS_CLOSED);
+    printf("tcp_listen(%p)\n", tp);
     tp->t_state = TCPS_LISTEN;
     return(0);
 }
@@ -271,6 +279,9 @@ struct tcpcb * tcp_disconnect(CPerProfileCtx * pctx,
 void CTcpFlow::init(){
     /* build template */
     CFlowBase::init();
+#ifdef TREX_FBSD
+    tcp_inittcpcb(&m_tcp, NULL, &newreno_cc_algo, &m_pctx->m_tunable_ctx, &m_pctx->m_tcpstat.m_sts_tg_id[m_tg_id]);
+#endif
 
     if (m_template.is_tcp_tso()){
         /* to cache the info*/
@@ -347,26 +358,37 @@ void CTcpFlow::Create(CPerProfileCtx *pctx, uint16_t tg_id){
 
     CTcpTunableCtx * tctx = &pctx->m_tunable_ctx;
 
-    tp->m_socket.so_snd.Create(tctx->tcp_tx_socket_bsize);
+    ((CTcpSockBuf*)&tp->m_socket.so_snd)->Create(tctx->tcp_tx_socket_bsize);
     tp->m_socket.so_rcv.sb_hiwat = tctx->tcp_rx_socket_bsize;
 
+#ifndef TREX_FBSD
     tp->t_maxseg = tctx->tcp_mssdflt;
+#endif /* !TREX_FBSD */
     tp->m_max_tso = tctx->tcp_max_tso;
 
     tp->mbuf_socket = pctx->m_ctx->m_mbuf_socket;
 
+#ifndef TREX_FBSD
     tp->t_flags = tctx->tcp_do_rfc1323 ? (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
+#endif /* !TREX_FBSD */
     if (tctx->tcp_no_delay & CTcpTuneables::no_delay_mask_nagle){
         tp->t_flags |= TF_NODELAY;
     }
+#ifdef TREX_FBSD
+    if (!(tctx->tcp_no_delay & CTcpTuneables::no_delay_mask_push)){
+        tp->t_flags |= TF_NOPUSH;
+    }
+#else /* !TREX_FBSD */
     if (tctx->tcp_no_delay & CTcpTuneables::no_delay_mask_push){
         tp->t_flags |= TF_NODELAY_PUSH;
     }
+#endif /* !TREX_FBSD */
 
     tp->m_delay_limit = tctx->tcp_no_delay_counter;
     tp->t_pkts_cnt = 0;
     tp->m_reass_disabled = false;
 
+#ifndef TREX_FBSD
         /*
          * Init srtt to TCPTV_SRTTBASE (0), so we can tell that we have no
          * rtt estimate.  Set rttvar so that srtt + 2 * rttvar gives
@@ -380,6 +402,7 @@ void CTcpFlow::Create(CPerProfileCtx *pctx, uint16_t tg_id){
         TCPTV_MIN, TCPTV_REXMTMAX);
     tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
     tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
+#endif /* !TREX_FBSD */
     /* back pointer */
     tp->m_flow=this;
 }
@@ -706,10 +729,24 @@ void CTcpPerThreadCtx::timer_w_on_tick(){
     m_timer_w.on_tick_level0((void*)this,ctx_timer);
 #endif
 
+#ifndef TREX_FBSD
     if ( m_tick==TCP_SLOW_RATIO_MASTER ) {
         tcp_iss += TCP_ISSINCR/PR_SLOWHZ;       /* increment iss */
         tcp_now++;                  /* for timestamps */
         m_tick=0;
+#else
+#ifndef TREX_SIM
+    if (m_tick == TCP_TIMER_W_1_MS) {
+        tcp_iss += TCP_ISSINCR;
+        tcp_now++;                  /* for timestamps */
+        m_tick=0;
+#else
+    tcp_now += TCP_TIMER_W_TICK;                  /* for timestamps */
+    if ( m_tick==TCP_SLOW_RATIO_MASTER ) {
+        tcp_iss += TCP_ISSINCR;
+        m_tick=0;
+#endif
+#endif
     } else{
         m_tick++;
     }
@@ -730,7 +767,9 @@ CTcpTunableCtx::CTcpTunableCtx() {
     tcp_blackhole = 0;
     tcp_do_rfc1323 = 1;
     tcp_fast_ticks = TCP_FAST_TICK_;
+#ifndef TREX_FBSD
     tcp_initwnd = _update_initwnd(TCP_MSS, TCP_INITWND_FACTOR); 
+#endif
     tcp_initwnd_factor = TCP_INITWND_FACTOR;
     tcp_keepidle = TCPTV_KEEP_IDLE;
     tcp_keepinit = TCPTV_KEEP_INIT;
@@ -746,7 +785,9 @@ CTcpTunableCtx::CTcpTunableCtx() {
 
     sb_max = SB_MAX;        /* patchable, not used  */
     tcp_max_tso = TCP_TSO_MAX_DEFAULT;
+#ifndef TREX_FBSD
     tcp_rttdflt = TCPTV_SRTTDFLT / PR_SLOWHZ;
+#endif
     tcp_keepcnt = TCPTV_KEEPCNT;        /* max idle probes */
     tcp_maxpersistidle = TCPTV_KEEP_IDLE;   /* max idle time in persist */
     tcp_maxidle = std::min(tcp_keepcnt * tcp_keepintvl, TCPTV_2MSL);
@@ -1920,5 +1961,64 @@ void tcp_quench(struct tcpcb *tp){
 }
 
 
+#if 0
 
+#include "os_time.h"
+#include "mbuf.h"   /* strcut rte_mbuf for struct mbuf */
+#include "tcp_var.h"
+
+#include "netinet/tcp_int.h"
+#endif
+
+void *
+m_data(struct mbuf *m)
+{
+    return rte_pktmbuf_mtod((struct rte_mbuf *)m, void *);
+}
+
+void
+m_adj(struct mbuf *m, int req_len)
+{
+    if (req_len >= 0)
+        rte_pktmbuf_adj((struct rte_mbuf *)m, req_len);
+    else
+        rte_pktmbuf_trim((struct rte_mbuf *)m, req_len);
+}
+
+void
+m_freem(struct mbuf *m)
+{
+    if (m != NULL) {
+        rte_pktmbuf_free((struct rte_mbuf *)m);
+    }
+}
+
+
+uint32_t
+tcp_ts_getticks(void)
+{
+    return now_sec()*1000;
+}
+
+
+bool
+tcp_isipv6(struct tcpcb *tp)
+{
+    return tp->m_flow->m_template.m_is_ipv6;
+}
+
+struct socket *
+tcp_getsocket(struct tcpcb *tp)
+{
+    return (struct socket*)&tp->m_socket;
+}
+
+int
+tcp_ip_output(struct tcpcb *tp, struct mbuf *m)
+{
+    CTcpPerThreadCtx* ctx = tp->m_flow->m_pctx->m_ctx;
+
+    ctx->m_cb->on_tx(ctx, tp, (struct rte_mbuf*)m);
+    return 0;
+}
 
