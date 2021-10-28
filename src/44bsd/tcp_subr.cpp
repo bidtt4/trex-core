@@ -203,7 +203,6 @@ int tcp_connect(CTcpPerThreadCtx * ctx,struct tcpcb *tp) { return tcp_connect(DE
 int tcp_listen(CPerProfileCtx * pctx,
                 struct tcpcb *tp) {
     assert( tp->t_state == TCPS_CLOSED);
-    printf("tcp_listen(%p)\n", tp);
     tp->t_state = TCPS_LISTEN;
     return(0);
 }
@@ -735,15 +734,16 @@ void CTcpPerThreadCtx::timer_w_on_tick(){
         tcp_now++;                  /* for timestamps */
         m_tick=0;
 #else
+#define PR_SLOWHZ   2
 #ifndef TREX_SIM
     if (m_tick == TCP_TIMER_W_1_MS) {
-        tcp_iss += TCP_ISSINCR;
+        tcp_iss += TCP_ISSINCR/PR_SLOWHZ;
         tcp_now++;                  /* for timestamps */
         m_tick=0;
 #else
     tcp_now += TCP_TIMER_W_TICK;                  /* for timestamps */
     if ( m_tick==TCP_SLOW_RATIO_MASTER ) {
-        tcp_iss += TCP_ISSINCR;
+        tcp_iss += TCP_ISSINCR/PR_SLOWHZ;
         m_tick=0;
 #endif
 #endif
@@ -1995,11 +1995,21 @@ m_freem(struct mbuf *m)
 
 
 uint32_t
-tcp_ts_getticks(void)
+tcp_getticks(struct tcpcb *tp)
 {
+#if 0
     return now_sec()*1000;
+#endif
+    CTcpPerThreadCtx* ctx = tp->m_flow->m_pctx->m_ctx;
+    return ctx->tcp_now;
 }
 
+uint32_t
+tcp_iss(struct tcpcb *tp)
+{
+    CTcpPerThreadCtx* ctx = tp->m_flow->m_pctx->m_ctx;
+    return ctx->tcp_iss;
+}
 
 bool
 tcp_isipv6(struct tcpcb *tp)

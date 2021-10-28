@@ -56,6 +56,9 @@ int tcp_output(struct tcpcb *tp);
 void tcp_setpersist(struct tcpcb *tp);
 int tcp_addoptions(struct tcpcb *tp, struct tcpopt *to, u_char *optp);
 
+#define ticks               tcp_getticks(tp)
+#define tcp_ts_getticks()   tcp_getticks(tp)
+
 #else   /* !TREX_FBSD */
 
 #include <sys/cdefs.h>

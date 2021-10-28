@@ -1206,7 +1206,7 @@ struct tcp_tune {
         int tcp_do_rfc1323;     /* (1) Enable rfc1323 (high performance TCP) extensions */
         int tcp_do_sack;        /* (1) Enable/Disable TCP SACK support */
         int tcp_mssdflt;        /* (TCP_MSS) Default TCP Maximum Segment Size */
-        int tcp_v6mssdflt;      /* (TCP6_MSS) Default TCP Maximum Segment Size for IPv6 */
+        //int tcp_v6mssdflt;      /* (TCP6_MSS) Default TCP Maximum Segment Size for IPv6 */
         int tcp_initcwnd_segments;  /* (10) Slow-start flight size (initial congestion window) in number of segments (10) */
         int tcprexmtthresh;     /* (3) number of duplicate ack to trigger retransmission */
 
@@ -1256,7 +1256,7 @@ struct tcp_tune {
 #define V_tcp_do_newcwv             0
 
 #define V_tcp_mssdflt               TCP_TUNE(tcp_mssdflt)
-#define V_tcp_v6mssdflt             TCP_TUNE(tcp_v6mssdflt)
+#define V_tcp_v6mssdflt             TCP_TUNE(tcp_mssdflt)
 #define V_tcp_initcwnd_segments     TCP_TUNE(tcp_initcwnd_segments)    // 10
 #define V_tcp_do_rfc1323            TCP_TUNE(tcp_do_rfc1323)           // 1
 #define V_tcprexmtthresh            TCP_TUNE(tcprexmtthresh)           // 3

@@ -600,7 +600,7 @@ HOT_FUNC int tcp_flow_input(CPerProfileCtx * pctx,
                     int offset_l7,
                     int total_l7_len
                     ){
-    printf("tcp_flow_input: offset_l7=%d,total_l7_len=%d\n", offset_l7, total_l7_len);
+//printf("tcp_flow_input: tp=%p, m=%p, tcp=%p, offset_l7=%d, total_l7_len=%d\n", tp, rte_pktmbuf_mtod(m, void *), tcp, offset_l7, total_l7_len);
     tcp_int_input(tp, (struct mbuf*)m, (struct tcphdr*)tcp, offset_l7, total_l7_len, 0);
     return 0;
 }

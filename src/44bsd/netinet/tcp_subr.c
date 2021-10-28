@@ -44,6 +44,7 @@ extern int tcp_addoptions(struct tcpcb *, struct tcpopt *, u_char *);
 extern void tcp_setpersist(struct tcpcb *);
 /* tcp_inpput.c */
 extern void tcp_do_segment(struct mbuf *, struct tcphdr *, struct socket *, struct tcpcb *, int, int, uint8_t);
+extern int tcp_mssopt(struct tcpcb *);
 /* tcp_timer.c */
 extern int tcp_timer_active(struct tcpcb *, uint32_t);
 extern void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
@@ -59,6 +60,9 @@ struct tcpcb * tcp_drop(struct tcpcb *tp, int errno);
 u_int tcp_maxseg(const struct tcpcb *tp);
 void tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m, tcp_seq ack, tcp_seq seq, int flags);
 void tcp_timer_discard(void *ptp);
+
+#define tcp_ts_getticks()   tcp_getticks(tp)
+#define ticks               tcp_getticks(tp)
 
 #else   /* !TREX_FBSD */
 
@@ -1486,11 +1490,16 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	incl_opts = false;
 	win = 0;
 	if (tp != NULL) {
+#if 0 /* trex-core compatible */
 		if (!(flags & TH_RST)) {
+#else
+                {
+#endif
 #ifndef TREX_FBSD
 			win = sbspace(&inp->inp_socket->so_rcv);
 #else
 			win = sbspace(&tcp_getsocket(tp)->so_rcv);
+//printf("tp=%p, so_rcv.sb_hiwat=%x, win=%x, tp->rcv_scale=%x\n", tp, tcp_getsocket(tp)->so_rcv.sb_hiwat, win, tp->rcv_scale);
 #endif
 			if (win > TCP_MAXWIN << tp->rcv_scale)
 				win = TCP_MAXWIN << tp->rcv_scale;
@@ -1639,6 +1648,18 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
         optp = &opt[0];
 #endif /* TREX_FBSD */
 	if (incl_opts) {
+#ifdef TREX_FBSD /* support SYN respose, from syncache_respond */
+                if (flags & TH_SYN) {
+                        to.to_mss = tcp_mssopt(tp);
+                        to.to_flags = TOF_MSS;
+                        if (tp->t_flags & TF_REQ_SCALE) {
+                                to.to_wscale = tp->request_r_scale;
+                                to.to_flags |= TOF_SCALE;
+                        }
+                        if (tp->t_flags & TF_SACK_PERMIT)
+                                to.to_flags |= TOF_SACKPERM;
+                }
+#endif
 		/* Timestamps. */
 		if (tp->t_flags & TF_RCVD_TSTMP) {
 			to.to_tsval = tcp_ts_getticks() + tp->ts_offset;

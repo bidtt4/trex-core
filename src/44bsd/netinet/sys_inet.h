@@ -62,10 +62,6 @@ static __inline u_long ulmax(u_long a, u_long b) { return (a > b ? a : b); }
 #define NET_EPOCH_EXIT(et)
 
 
-// <sys/kernel.h>
-#define ticks   tcp_ts_getticks()
-
-
 // --<inet>--------------------------------------------------------------
 
 

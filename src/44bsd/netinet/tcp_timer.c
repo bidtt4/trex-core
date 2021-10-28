@@ -63,6 +63,7 @@ int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
 void tcp_cancel_timers(struct tcpcb *tp);
 
 #define tcp_maxpersistidle  TCPTV_KEEP_IDLE
+#define ticks   tcp_getticks(tp)
 
 #else   /* !TREX_FBSD */
 
@@ -877,6 +878,7 @@ tcp_timer_rexmt(void * xtp)
 		rexmt = TCP_REXMTVAL(tp) * tcp_backoff[tp->t_rxtshift];
 #else /* TREX_FBSD */
 	if ((tp->t_state == TCPS_SYN_SENT) ||
+            (tp->t_state == TCPS_LISTEN) ||
 	    (tp->t_state == TCPS_SYN_RECEIVED)) {
 		rexmt = tcp_rexmit_initial * tcp_syn_backoff[tp->t_rxtshift];
 		TCPSTAT_INC(tcps_rexmttimeo_syn);
@@ -887,6 +889,13 @@ tcp_timer_rexmt(void * xtp)
 #endif /* TREX_FBSD */
 	TCPT_RANGESET(tp->t_rxtcur, rexmt,
 		      tp->t_rttmin, TCPTV_REXMTMAX);
+#ifdef TREX_FBSD
+        if (tp->t_state == TCPS_LISTEN) {
+                tcp_respond(tp, NULL, (struct tcphdr *)NULL, (struct mbuf *)NULL, tp->irs + 1, tp->iss, TH_ACK|TH_SYN);
+                tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
+                return;
+        }
+#endif
 
 #ifndef TREX_FBSD
 	/*

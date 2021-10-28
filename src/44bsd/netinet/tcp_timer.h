@@ -98,7 +98,7 @@
 #define	TCPTV_MSL	(  hz/4)		/* max seg lifetime (hah!) */
 #define	TCPTV_SRTTBASE	0			/* base roundtrip time;
 						   if 0, no idea yet */
-#define	TCPTV_RTOBASE	(  1*hz)		/* assumed RTO if no info */
+#define	TCPTV_RTOBASE	(  hz/2)		/* assumed RTO if no info */
 
 #define	TCPTV_PERSMIN	(  5*hz)		/* minimum persist interval */
 #define	TCPTV_PERSMAX	( 10*hz)		/* maximum persist interval */
@@ -202,7 +202,7 @@ struct tcp_timer {
 #define tcp_persmax         TCPTV_PERSMAX
 #define tcp_rexmit_initial  TCPTV_RTOBASE
 #define tcp_rexmit_min      TCPTV_MIN
-#define tcp_rexmit_slop     TCPTV_CPU_VAR
+#define tcp_rexmit_slop     0           // TCPTV_CPU_VAR
 extern const int tcp_backoff[];
 extern const int tcp_totbackoff;
 

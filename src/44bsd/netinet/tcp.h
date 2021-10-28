@@ -127,7 +127,11 @@ struct tcphdr {
  *
  * We use explicit numerical definition here to avoid header pollution.
  */
+#ifndef TREX_FBSD
 #define	TCP_MSS		536
+#else /* TREX_FBSD */
+#define	TCP_MSS		(1500-20-20)
+#endif /* TREX_FBSD */
 #define	TCP6_MSS	1220
 
 /*

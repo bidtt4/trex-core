@@ -219,18 +219,46 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
 #ifdef INET6
 		    isipv6 ? ntohs(((struct ip6_hdr *)ipgen)->ip6_plen) :
 #endif
-		    ntohs(((struct ip *)ipgen)->ip_len);
+		    ntohs(((struct ip *)ipgen)->ip_len) - sizeof(struct ip);
 		if (act == TA_OUTPUT) {
 			seq = ntohl(seq);
 			ack = ntohl(ack);
 		}
+#if 0
 		if (act == TA_OUTPUT)
 			len -= sizeof (struct tcphdr);
+#else
+			len -= th->th_off * 4;
+#endif
+#ifndef TREX_FBSD
 		if (len)
 			printf("[%x..%x)", seq, seq+len);
 		else
 			printf("%x", seq);
 		printf("@%x, urp=%x", ack, th->th_urp);
+#else
+                tcp_seq iseq, iack;
+                switch(act) {
+                case TA_OUTPUT:
+                    iseq = tp->iss;
+                    iack = tp->irs;
+                    break;
+                case TA_INPUT:
+                case TA_DROP:
+                    iseq = tp->irs;
+                    iack = tp->iss;
+                    break;
+                }
+#if 0
+                if (act == TA_INPUT && th->th_flags & TH_SYN)
+                        ack = iack;
+#endif
+		if (len)
+			printf("[%x..%x)", seq-iseq, seq+len-iseq);
+		else
+			printf("%x", seq-iseq);
+		printf("@%x, urp=%x", ack-iack, th->th_urp);
+#endif
 		flags = th->th_flags;
 		if (flags) {
 			char *cp = "<";
@@ -257,11 +285,20 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
 	printf("\n");
 	if (tp == NULL)
 		return;
+#ifndef TREX_FBSD
 	printf(
 	"\trcv_(nxt,wnd,up) (%lx,%lx,%lx) snd_(una,nxt,max) (%lx,%lx,%lx)\n",
 	    (u_long)tp->rcv_nxt, (u_long)tp->rcv_wnd, (u_long)tp->rcv_up,
 	    (u_long)tp->snd_una, (u_long)tp->snd_nxt, (u_long)tp->snd_max);
 	printf("\tsnd_(wl1,wl2,wnd) (%lx,%lx,%lx)\n",
 	    (u_long)tp->snd_wl1, (u_long)tp->snd_wl2, (u_long)tp->snd_wnd);
+#else
+	printf(
+	"\trcv_(nxt,wnd,up) (%lx,%lx,%lx) snd_(una,nxt,max) (%lx,%lx,%lx)\n",
+	    (u_long)(tp->rcv_nxt-tp->irs), (u_long)tp->rcv_wnd, (u_long)(tp->rcv_up-tp->irs),
+	    (u_long)(tp->snd_una-tp->iss), (u_long)(tp->snd_nxt-tp->iss), (u_long)(tp->snd_max-tp->iss));
+	printf("\tsnd_(wl1,wl2,wnd) (%lx,%lx,%lx)\n",
+	    (u_long)tp->snd_wl1, (u_long)tp->snd_wl2, (u_long)tp->snd_wnd);
+#endif
 #endif /* TCPDEBUG */
 }

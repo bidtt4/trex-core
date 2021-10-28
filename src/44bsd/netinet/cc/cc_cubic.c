@@ -59,6 +59,8 @@ extern int tcp_compute_pipe(struct tcpcb *);
 /* tcp_subr.c */
 extern u_int tcp_maxseg(const struct tcpcb *);
 
+#define ticks   tcp_getticks(ccv->ccvc.tcp)
+
 #else   /* !TREX_FBSD */
 
 #include <sys/cdefs.h>
