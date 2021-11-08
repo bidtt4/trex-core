@@ -333,6 +333,7 @@ struct tcpcb {
 #ifdef TREX_FBSD
 	struct tcp_tune *t_tune;	/* pointer to TCP tunable values */
 	struct tcpstat *t_stat;		/* pointer to TCP counters */
+	struct tcpstat *t_stat_ex;	/* extra pointer to TCP counters */
 
         /* data structures per tcpcb */
 	struct tcp_timer m_timer;	/* TCP timer */
@@ -774,9 +775,7 @@ struct	tcpstat {
 	uint64_t tcps_pmtud_blackhole_failed;		 /* Black Hole Failure Count */
 
 	uint64_t _pad[12];		/* 6 UTO, 6 TBD */
-#else /* TREX_FBSD */
-	struct tcpstat *next;		/* additional statistics */
-#endif /* TREX_FBSD */
+#endif /* !TREX_FBSD */
 };
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
@@ -784,8 +783,9 @@ struct	tcpstat {
 #ifdef TREX_FBSD
 #define TCPSTAT_ADD(name, val)                  \
     do {                                        \
-        for (struct tcpstat *_stat = tp->t_stat; _stat; _stat = _stat->next)    \
-            _stat->name += val;                 \
+        tp->t_stat->name += val;                \
+        if (tp->t_stat_ex)                      \
+            tp->t_stat_ex->name += val;         \
     } while(0)
 #define TCPSTAT_INC(name)           TCPSTAT_ADD(name, 1)
 #endif /* TREX_FBSD */

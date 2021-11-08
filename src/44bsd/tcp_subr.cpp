@@ -86,9 +86,6 @@ void CTcpStats::Clear(){
 
 void CTcpStats::ClearPerTGID(uint16_t tg_id){
     memset(m_sts_tg_id+tg_id,0,sizeof(tcpstat_int_t));
-#ifdef TREX_FBSD
-    m_sts_tg_id[tg_id].next = &m_sts;
-#endif
 }
 
 void CTcpStats::Dump(FILE *fd){
@@ -280,6 +277,7 @@ void CTcpFlow::init(){
     CFlowBase::init();
 #ifdef TREX_FBSD
     tcp_inittcpcb(&m_tcp, NULL, &newreno_cc_algo, &m_pctx->m_tunable_ctx, &m_pctx->m_tcpstat.m_sts_tg_id[m_tg_id]);
+    m_tcp.t_stat_ex = static_cast<tcpstat*>(&m_pctx->m_tcpstat.m_sts);
 #endif
 
     if (m_template.is_tcp_tso()){

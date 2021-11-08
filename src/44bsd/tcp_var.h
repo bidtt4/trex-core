@@ -114,10 +114,14 @@ struct tcpcb: public tcpcb_base {
 
     /* ====== size 8 bytes  */
 
+#ifndef TREX_FBSD
     uint16_t t_timer[TCPT_NTIMERS];  /* tcp timers */
     char    t_force;        /* 1 if forcing out a byte */
+#endif
     uint8_t mbuf_socket;    /* mbuf socket */
+#ifndef TREX_FBSD
     uint8_t t_dupacks;      /* consecutive dup acks recd */
+#endif
     uint16_t t_pkts_cnt;    /* packets arrived until ack */
     uint16_t m_delay_limit; /* packets limit without ack */
 #define TUNE_HAS_PARENT_FLOW         0x01 /* means that this object is part of a bigger object */
