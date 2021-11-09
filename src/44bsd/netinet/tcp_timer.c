@@ -1350,6 +1350,6 @@ tcp_timer_stop(struct tcpcb *tp, uint32_t timer_type)
 		tp->t_timers->tt_draincnt++;
 	}
 #else
-	tp->m_timer.tt_flags = 0;
+	tp->m_timer.tt_flags &= ~(1 << timer_type);
 #endif
 }

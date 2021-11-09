@@ -508,6 +508,11 @@ void CTcpFlow::update_new_template_assoc_info() {
     pctx->m_flow_cnt += 1;
 
     delete this->m_pctx;    // free interim profile
+#ifdef TREX_FBSD
+    // replace statistics pointers by pctx
+    this->m_tcp.t_stat = &pctx->m_tcpstat.m_sts_tg_id[tg_id];
+    this->m_tcp.t_stat_ex = &pctx->m_tcpstat.m_sts;
+#endif
 
     this->m_pctx = pctx;
     this->m_tg_id = tg_id;
@@ -619,6 +624,9 @@ void CTcpFlow::Delete(){
         m_payload_info = nullptr;
     }
     CFlowBase::Delete();
+#ifdef TREX_FBSD
+    tcp_discardcb(tp);
+#endif
 }
 
 

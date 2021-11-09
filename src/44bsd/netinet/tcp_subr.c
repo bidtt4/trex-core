@@ -2099,6 +2099,11 @@ tcp_discardcb(struct tcpcb *tp)
 #endif /* !TREX_FBSD */
 	int released __unused;
 
+#ifdef TREX_FBSD
+        if (tp->t_fb == NULL) {
+                return;
+        }
+#endif
 	INP_WLOCK_ASSERT(inp);
 
 	/*
@@ -2111,12 +2116,12 @@ tcp_discardcb(struct tcpcb *tp)
 	 */
 #ifndef TREX_FBSD
 	tp->t_timers->tt_draincnt = 0;
+#endif
 	tcp_timer_stop(tp, TT_REXMT);
 	tcp_timer_stop(tp, TT_PERSIST);
 	tcp_timer_stop(tp, TT_KEEP);
 	tcp_timer_stop(tp, TT_2MSL);
 	tcp_timer_stop(tp, TT_DELACK);
-#endif
 	if (tp->t_fb->tfb_tcp_timer_stop_all) {
 		/*
 		 * Call the stop-all function of the methods,
