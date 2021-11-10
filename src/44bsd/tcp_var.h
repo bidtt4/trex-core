@@ -971,11 +971,7 @@ public:
 #endif
     int tcp_maxidle;            /* time to drop after starting probes */
     int tcp_maxpersistidle;
-#ifndef TREX_FBSD
     uint32_t tcp_fast_ticks;
-#else
-#define tcp_fast_ticks  tcp_delacktime
-#endif
     uint32_t tcp_slow_fast_ratio;
     int tcp_ttl;            /* time to live for TCP segs */
 

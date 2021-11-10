@@ -597,11 +597,11 @@ cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)))
 #else /* TREX_FBSD */
 #define DELAY_ACK(tp, tlen)						\
-	((!tcp_timer_active(tp, TT_DELACK) &&				\
-	    (tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
+	(((tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
 	    (tlen <= tp->t_maxseg) &&					\
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)) &&	\
-            tcp_check_no_delay(tp, tlen))
+            !tcp_check_no_delay(tp, tlen))
+/* !tcp_timer_active(tp, TT_DELACK) forces ACK on every another packet */
 #endif /* TREX_FBSD */
 
 void inline

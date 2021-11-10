@@ -773,6 +773,9 @@ CTcpTunableCtx::CTcpTunableCtx() {
     tcp_blackhole = 0;
     tcp_do_rfc1323 = 1;
     tcp_fast_ticks = TCP_FAST_TICK_;
+#ifdef TREX_FBSD
+    tcp_delacktime = TCP_TIMER_TICK_FAST_MS;
+#endif
 #ifndef TREX_FBSD
     tcp_initwnd = _update_initwnd(TCP_MSS, TCP_INITWND_FACTOR); 
 #endif
@@ -858,6 +861,9 @@ void CTcpTunableCtx::update_tuneables(CTcpTuneables *tune) {
     if (tune->is_valid_field(CTcpTuneables::tcp_delay_ack)) {
         tcp_fast_ticks =  tw_time_msec_to_ticks(tune->m_tcp_delay_ack_msec);
         tcp_slow_fast_ratio = _update_slow_fast_ratio(tune->m_tcp_delay_ack_msec);
+#ifdef TREX_FBSD
+        tcp_delacktime = tune->m_tcp_delay_ack_msec;
+#endif
     }
     #endif
 
