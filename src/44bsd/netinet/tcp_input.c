@@ -1290,8 +1290,8 @@ tfo_socket_result:
 #else /* TREX_FBSD */
 			//tcp_dooptions(tp, &to, optp, optlen, 0); //?? check TS ...
 
+			tcp_timer_activate(tp, TT_REXMT, 0);
 			tcp_state_change(tp, TCPS_SYN_RECEIVED);
-
 #if 0
                         tp->irs = th->th_seq;
 #endif
@@ -3283,7 +3283,7 @@ process_ACK:
 		if (acked > sbavail(&so->so_snd)) {
 #ifdef TREX_FBSD
 			TCPSTAT_ADD(tcps_rcvackbyte, sbavail(&so->so_snd));
-			TCPSTAT_ADD(tcps_rcvackbyte_of, sbavail(&so->so_snd));
+			TCPSTAT_ADD(tcps_rcvackbyte_of, acked-sbavail(&so->so_snd));
 #endif
 			if (tp->snd_wnd >= sbavail(&so->so_snd))
 				tp->snd_wnd -= sbavail(&so->so_snd);

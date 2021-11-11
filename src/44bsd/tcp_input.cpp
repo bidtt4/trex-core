@@ -431,18 +431,13 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, s
     CPerProfileCtx *pctx = tp->m_flow->m_pctx;
     tcpiphdr pheader;
     tcpiphdr *ti = &pheader;
-    TCPHeader *tcp = (TCPHeader *)th;
     int tiflags = 0;
 
     if (th == nullptr) {
         return tcp_reass_no_data(pctx, tp);
     }
     else {
-        ti->ti_seq = tcp->getSeqNumber();
-        ti->ti_ack = tcp->getAckNumber();
-        ti->ti_win = tcp->getWindowSize();
-        ti->ti_urp = tcp->getUrgentOffset();
-        ti->ti_flags = tcp->getFlags();
+        ti->ti_t     = *th;
         ti->ti_len   = *tlenp; /* L7 len */
     }
 #endif

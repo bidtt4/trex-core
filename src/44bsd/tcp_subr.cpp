@@ -744,7 +744,7 @@ void CTcpPerThreadCtx::timer_w_on_tick(){
 #define PR_SLOWHZ   2
 #ifndef TREX_SIM
     if (m_tick == TCP_TIMER_W_1_MS) {
-        tcp_iss += TCP_ISSINCR/PR_SLOWHZ;
+        tcp_iss += TCP_ISSINCR/(PR_SLOWHZ*TCP_TIMER_TICK_SLOW_MS);
         tcp_now++;                  /* for timestamps */
         m_tick=0;
 #else
