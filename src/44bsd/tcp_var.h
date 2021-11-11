@@ -923,6 +923,7 @@ class CAstfTemplatesRW;
 class CTcpTuneables;
 class CGenNode;
 
+#ifndef TREX_FBSD
 static inline uint16_t _update_initwnd(uint16_t mss,uint16_t initwnd){
     uint32_t calc =mss*initwnd;
 
@@ -931,6 +932,7 @@ static inline uint16_t _update_initwnd(uint16_t mss,uint16_t initwnd){
     }
     return((uint16_t)calc);
 }
+#endif
 
 typedef void (*on_stopped_cb_t)(void *data, profile_id_t profile_id);
 
@@ -948,10 +950,10 @@ public:
     int tcprexmtthresh;
     int tcp_mssdflt;
     int tcp_initwnd_factor; /* slow start initwnd, should be 1 in default but for optimization we start at 5 */
+    int tcp_initwnd;        /*  tcp_initwnd_factor *tcp_mssdflt*/
 #else
 #define tcp_initwnd_factor  tcp_initcwnd_segments
 #endif
-    int tcp_initwnd;        /*  tcp_initwnd_factor *tcp_mssdflt*/
     uint32_t  sb_max ; /* socket max char */
     int tcp_max_tso;   /* max tso default */
     int tcp_rttdflt;

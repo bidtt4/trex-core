@@ -598,10 +598,12 @@ cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
 #else /* TREX_FBSD */
 #define DELAY_ACK(tp, tlen)						\
 	(((tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
+	    !(thflags & TH_PUSH) &&					\
 	    (tlen <= tp->t_maxseg) &&					\
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)) &&	\
             !tcp_check_no_delay(tp, tlen))
 /* !tcp_timer_active(tp, TT_DELACK) forces ACK on every another packet */
+/* !(thflags & TH_PUSH) for trex-core compatible */
 #endif /* TREX_FBSD */
 
 void inline
@@ -1299,10 +1301,9 @@ tfo_socket_result:
                         tp->snd_wl1 = tp->irs;
                         tp->snd_max = tp->iss + 1;
                         tp->snd_nxt = tp->iss + 1;
-                        //tp->rcv_wnd = sc->sc_wnd;
+                        tp->rcv_wnd = imax(sbspace(&so->so_rcv), 0);
                         tp->rcv_adv += tp->rcv_wnd;
                         tp->last_ack_sent = tp->rcv_nxt;
-
 
 			//tp->t_flags |= TF_REQ_TSTMP|TF_RCVD_TSTMP;
 			//tp->t_flags |= TF_ACKNOW;
@@ -3403,7 +3404,6 @@ process_ACK:
         TREX_FBSD_DEBUG(__LINE__);
 
 step6:
-#ifndef TREX_FBSD /* SUPPORT_OF_URG */
 	INP_WLOCK_ASSERT(tp->t_inpcb);
 
 	/*
@@ -3426,6 +3426,7 @@ step6:
 		needoutput = 1;
 	}
 
+#ifndef TREX_FBSD /* SUPPORT_OF_URG */
 	/*
 	 * Process segments with URG.
 	 */

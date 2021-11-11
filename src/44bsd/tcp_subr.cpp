@@ -509,6 +509,7 @@ void CTcpFlow::update_new_template_assoc_info() {
 
     delete this->m_pctx;    // free interim profile
 #ifdef TREX_FBSD
+    this->m_tcp.t_tune = &pctx->m_tunable_ctx;
     // replace statistics pointers by pctx
     this->m_tcp.t_stat = &pctx->m_tcpstat.m_sts_tg_id[tg_id];
     this->m_tcp.t_stat_ex = &pctx->m_tcpstat.m_sts;
@@ -812,12 +813,16 @@ void CTcpTunableCtx::update_tuneables(CTcpTuneables *tune) {
 
     if (tune->is_valid_field(CTcpTuneables::tcp_mss_bit)) {
         tcp_mssdflt = tune->m_tcp_mss;
+#ifndef TREX_FBSD
         tcp_initwnd = _update_initwnd(tcp_mssdflt,tcp_initwnd_factor);
+#endif
     }
 
     if (tune->is_valid_field(CTcpTuneables::tcp_initwnd_bit)) {
         tcp_initwnd_factor = tune->m_tcp_initwnd;
+#ifndef TREX_FBSD
         tcp_initwnd = _update_initwnd(tcp_mssdflt,tcp_initwnd_factor);
+#endif
     }
 
     if (tune->is_valid_field(CTcpTuneables::tcp_rx_buf_size)) {
