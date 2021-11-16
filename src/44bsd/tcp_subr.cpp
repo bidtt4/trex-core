@@ -957,7 +957,11 @@ void CTcpPerThreadCtx::init_sch_rampup(profile_id_t profile_id){
 }
 
 int CTcpTunableCtx::convert_slow_sec_to_ticks(uint16_t sec) {
+#ifndef TREX_FBSD
     float sec_to_ticks = 1000.0f / TCP_TIMER_TICK_SLOW_MS;
+#else
+    float sec_to_ticks = 1000.0f;
+#endif
     return int(round(float(sec) * sec_to_ticks));
 }
 
