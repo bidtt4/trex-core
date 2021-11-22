@@ -160,7 +160,7 @@ struct tcpcb {
 		bits_spare : 2;
 #else /* TREX_FBSD */
 	uint32_t t_maxseg:24;		/* maximum segment size */
-	uint32_t t_state:4;		/* Tunneling (over udp) port */
+	uint32_t t_state:4;		/* state of this connection */
 #endif /* TREX_FBSD */
 	u_int	t_flags;
 	tcp_seq	snd_una;		/* sent but unacknowledged */

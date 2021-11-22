@@ -49,8 +49,6 @@
 
 
 #ifdef TREX_FBSD
-#undef SO_DEBUG
-#undef SO_KEEPALIVE
 #include "netinet/tcp_socket.h"
 struct mbuf: public rte_mbuf {};
 #else /* !TREX_FBSD */

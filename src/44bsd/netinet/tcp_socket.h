@@ -18,9 +18,14 @@ static inline long sbspace(struct sockbuf *sb) {
 
 struct socket {
     short so_options;           /* (b) from socket call, see socket.h */
-/* Linux setsockopt(2) has the same definition for values(NOT flags!) */
+/* Linux asm-generic/socket.h header defines the different value for setsockopt(2) */
+#if defined(SO_KEEPALIVE)
 #undef SO_DEBUG
 #undef SO_KEEPALIVE
+#else
+/* experimental! to prevent re-definition of SO_KEEPALIVE from Linux header */
+#define __ASM_GENERIC_SOCKET_H
+#endif
 #define SO_DEBUG        0x00000001      /* turn on debugging info recording */
 #define SO_KEEPALIVE    0x00000008      /* keep connections alive */
     int so_error;               /* (f) error affecting connection */
