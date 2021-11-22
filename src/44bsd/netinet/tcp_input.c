@@ -1569,8 +1569,9 @@ tfo_socket_result:
 		if (to.to_flags & TOF_MSS)
 			tcp_mss(tp, to.to_mss);
 
+                if (!tcp_timer_active(tp, TT_REXMT))
+                        tp->iss = tcp_iss(tp);
 		tp->irs = th->th_seq;
-                tp->iss = tcp_iss(tp);
 		//tcp_rcvseqinit(tp);
 		//tcp_sendseqinit(tp);
 
@@ -1759,11 +1760,7 @@ tcp_handle_wakeup(struct tcpcb *tp, struct socket *so)
 }
 
 #ifdef xTCPDEBUG
-#define TREX_FBSD_DEBUG(lineno) printf("%s(tp=%p) state:%d line:%d\n", __func__, tp, tp->t_state, lineno)
-#define TREX_FBSD_PRINTF        printf
 #else
-#define TREX_FBSD_DEBUG(lineno) (void) lineno
-#define TREX_FBSD_PRINTF(args...)
 #endif
 void
 tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
@@ -1790,9 +1787,15 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	struct tcphdr tcp_savetcp = *th;
 #ifndef TREX_FBSD
 	short ostate = 0;
-#else
+#else /* TREX_FBSD */
 	short ostate = tp->t_state;
+#ifdef INET6
+	if (tcp_isipv6(tp))
+		bcopy(((char *)th)-sizeof(struct ip6_hdr), (char *)tcp_saveipgen, sizeof(struct ip6_hdr));
+	else
 #endif
+		bcopy(((char *)th)-sizeof(struct ip), (char *)tcp_saveipgen, sizeof(struct ip));
+#endif /* TREX_FBSD */
 #endif
 	thflags = th->th_flags;
 #ifndef TREX_FBSD /* TCP_lOG_DEBUG */
@@ -1829,23 +1832,18 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			free(s, M_TCPLOG);
 		}
 #endif /* !TREX_FBSD */
-                TREX_FBSD_DEBUG(__LINE__);
 		goto drop;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * If a segment with the ACK-bit set arrives in the SYN-SENT state
 	 * check SEQ.ACK first.
 	 */
-        TREX_FBSD_PRINTF("th_ack:%x, th_seq:%x, tp->t_flags:%x\n", th->th_ack, th->th_seq, tp->t_flags);
 	if ((tp->t_state == TCPS_SYN_SENT) && (thflags & TH_ACK) &&
 	    (SEQ_LEQ(th->th_ack, tp->iss) || SEQ_GT(th->th_ack, tp->snd_max))) {
-                TREX_FBSD_PRINTF("th_ack <= tp->iss:%x or th_ack > snd_max:%x\n", tp->iss, tp->snd_max);
 		rstreason = BANDLIM_UNLIMITED;
 		goto dropwithreset;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * Segment received on connection.
@@ -2012,11 +2010,9 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				free(s, M_TCPLOG);
 			}
 #endif /* !TREX_FBSD */
-                        TREX_FBSD_DEBUG(__LINE__);
 			goto drop;
 		}
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 	/*
 	 * If timestamps were not negotiated during SYN/ACK and a
 	 * segment with a timestamp is received, ignore the
@@ -2259,7 +2255,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			goto check_delack;
 		}
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * Calculate amount of space in receive window,
@@ -2278,7 +2273,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 *	if seg contains an ACK, but not for our SYN/ACK, send a RST.
 	 */
 	case TCPS_SYN_RECEIVED:
-                TREX_FBSD_PRINTF("ack <= snd_una:%x || ack > snd_max:%x\n", tp->snd_una, tp->snd_max);
 		if ((thflags & TH_ACK) &&
 		    (SEQ_LEQ(th->th_ack, tp->snd_una) ||
 		     SEQ_GT(th->th_ack, tp->snd_max))) {
@@ -2458,7 +2452,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	case TCPS_CLOSING:
 		break;  /* continue normal processing */
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * States other than LISTEN or SYN_SENT.
@@ -2530,7 +2523,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		}
 		goto drop;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * RFC5961 Section 4.2
@@ -2558,7 +2550,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		}
 		goto drop;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * RFC 1323 PAWS: If we have a timestamp reply on this segment
@@ -2566,8 +2557,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 */
 	if ((to.to_flags & TOF_TS) != 0 && tp->ts_recent &&
 	    TSTMP_LT(to.to_tsval, tp->ts_recent)) {
-                TREX_FBSD_PRINTF("ts_recent:%x < to.to_tsval:%x\n", tp->ts_recent, to.to_tsval);
-                TREX_FBSD_PRINTF("ts_getticks():%x - ts_recent_age:%x\n", tcp_ts_getticks(), tp->ts_recent_age);
 		/* Check to see if ts_recent is over 24 days old.  */
 		if (tcp_ts_getticks() - tp->ts_recent_age > TCP_PAWS_IDLE) {
 			/*
@@ -2583,7 +2572,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			 */
 			tp->ts_recent = 0;
 		} else {
-                        TREX_FBSD_PRINTF("    tcps_rcvduppack(byte:%d)\n", tlen);
 			TCPSTAT_INC(tcps_rcvduppack);
 			TCPSTAT_ADD(tcps_rcvdupbyte, tlen);
 			TCPSTAT_INC(tcps_pawsdrop);
@@ -2592,7 +2580,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			goto drop;
 		}
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * In the SYN-RECEIVED state, validate that the packet belongs to
@@ -2605,10 +2592,8 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		rstreason = BANDLIM_RST_OPENPORT;
 		goto dropwithreset;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	todrop = tp->rcv_nxt - th->th_seq;
-        TREX_FBSD_PRINTF("rcv_nxt:%x - th_seq:%x = %d\n", tp->rcv_nxt, th->th_seq, todrop);
 	if (todrop > 0) {
 		if (thflags & TH_SYN) {
 			thflags &= ~TH_SYN;
@@ -2637,7 +2622,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			 */
 			tp->t_flags |= TF_ACKNOW;
 			todrop = tlen;
-                        TREX_FBSD_PRINTF("    tcps_rcvduppack(byte:%d)\n", tlen);
 			TCPSTAT_INC(tcps_rcvduppack);
 			TCPSTAT_ADD(tcps_rcvdupbyte, todrop);
 		} else {
@@ -2687,14 +2671,12 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		rstreason = BANDLIM_UNLIMITED;
 		goto dropwithreset;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * If segment ends after window, drop trailing data
 	 * (and PUSH and FIN); if nothing left, just ACK.
 	 */
 	todrop = (th->th_seq + tlen) - (tp->rcv_nxt + tp->rcv_wnd);
-        TREX_FBSD_PRINTF("(th_seq:%x + tlen:%x) - (rcv_nxt:%x + rcv_wnd:%x) = %d\n", th->th_seq, tlen, tp->rcv_nxt, tp->rcv_wnd, todrop);
 	if (todrop > 0) {
 		TCPSTAT_INC(tcps_rcvpackafterwin);
 		if (todrop >= tlen) {
@@ -2717,7 +2699,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		tlen -= todrop;
 		thflags &= ~(TH_PUSH|TH_FIN);
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * If last ACK falls within this segment's sequence numbers,
@@ -2766,7 +2747,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		else
 			goto drop;
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 	/*
 	 * Ack processing.
@@ -3059,7 +3039,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 						tp->snd_recover = tp->snd_nxt;
 						tp->snd_cwnd = maxseg;
 						(void) tp->t_fb->tfb_tcp_output(tp);
-                                                TREX_FBSD_DEBUG(__LINE__);
 						goto drop;
 					}
 					tp->snd_nxt = th->th_ack;
@@ -3073,7 +3052,6 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					     (tp->t_dupacks - tp->snd_limited);
 					if (SEQ_GT(onxt, tp->snd_nxt))
 						tp->snd_nxt = onxt;
-                                        TREX_FBSD_DEBUG(__LINE__);
 					goto drop;
 				} else if (V_tcp_do_rfc3042) {
 					/*
@@ -3395,13 +3373,11 @@ process_ACK:
 		case TCPS_LAST_ACK:
 			if (ourfinisacked) {
 				tp = tcp_close(tp);
-                                TREX_FBSD_DEBUG(__LINE__);
 				goto drop;
 			}
 			break;
 		}
 	}
-        TREX_FBSD_DEBUG(__LINE__);
 
 step6:
 	INP_WLOCK_ASSERT(tp->t_inpcb);
@@ -3687,16 +3663,13 @@ dodata:							/* XXX */
 #endif
 	TCP_PROBE3(debug__input, tp, th, m);
 
-        TREX_FBSD_DEBUG(__LINE__);
 	/*
 	 * Return any desired output.
 	 */
 	if (needoutput || (tp->t_flags & TF_ACKNOW))
 		(void) tp->t_fb->tfb_tcp_output(tp);
-        TREX_FBSD_DEBUG(__LINE__);
 
 check_delack:
-        TREX_FBSD_PRINTF("check_delack: line:%d\n", __LINE__);
 	INP_WLOCK_ASSERT(tp->t_inpcb);
 
 	if (tp->t_flags & TF_DELACK) {
@@ -3712,7 +3685,6 @@ check_delack:
 	return;
 
 dropafterack:
-        TREX_FBSD_PRINTF("dropafterack: line:%d\n", __LINE__);
 	/*
 	 * Generate an ACK dropping incoming segment if it occupies
 	 * sequence space, where the ACK reflects our state.
@@ -3748,7 +3720,6 @@ dropafterack:
 	return;
 
 dropwithreset:
-        TREX_FBSD_PRINTF("dropwithreset: line:%d\n", __LINE__);
 	if (tp != NULL) {
 		tcp_dropwithreset(m, th, tp, tlen, rstreason);
 		tcp_handle_wakeup(tp, so);
@@ -3758,7 +3729,6 @@ dropwithreset:
 	return;
 
 drop:
-        TREX_FBSD_PRINTF("drop: line:%d\n", __LINE__);
 	/*
 	 * Drop space held by incoming segment and return.
 	 */

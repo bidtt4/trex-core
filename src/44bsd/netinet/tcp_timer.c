@@ -315,13 +315,14 @@ tcp_handle_timers(struct tcpcb *tp)
 			continue;
 
 		if (tp->m_timer.tt_timer[i] <= tick_passed) {
-			tcp_timer_activate(tp, i, 0);
+			tp->m_timer.tt_flags &= ~(1 << i);
 			(tcp_timer_handlers[i])(tp);
 		} else {
 			tp->m_timer.tt_timer[i] -= tick_passed;
 		}
 	}
 	tp->m_timer.last_tick = now_tick;
+	tp->m_timer.tt_flags |= (1 << TCPT_NTIMERS);
 }
 
 void
@@ -471,12 +472,13 @@ tcp_timer_2msl(void *xtp)
 		goto out;
 	} else {
 #endif /* !TREX_FBSD */
-		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
 #ifndef TREX_FBSD
+		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
 			callout_reset(&tp->t_timers->tt_2msl,
 				      TP_KEEPINTVL(tp), tcp_timer_2msl, tp);
 #else
-			tcp_timer_activate(tp, TT_2MSL, TP_KEEPINTVL(tp));
+		if (ticks - tp->t_rcvtime < TP_MAXIDLE(tp)) {
+			tcp_timer_activate(tp, TT_2MSL, TP_MAXIDLE(tp));
 #endif
 		} else {
 #ifndef TREX_FBSD
@@ -498,11 +500,12 @@ tcp_timer_2msl(void *xtp)
 #ifdef TCPDEBUG
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
-#else
-	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
-#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
+#else
+	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_2MSL<<8));
+#endif
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 
@@ -624,18 +627,19 @@ tcp_timer_keep(void *xtp)
 #ifndef TREX_FBSD
 		callout_reset(&tp->t_timers->tt_keep, TP_KEEPIDLE(tp),
 			      tcp_timer_keep, tp);
-#else
+#else /* TREX_RBSD */
 		tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
-#endif
+#endif /* TREX_RBSD */
 
-#ifdef TCPDEBUG
 #ifndef TREX_FBSD
+#ifdef TCPDEBUG
 	if (inp->inp_socket->so_options & SO_DEBUG)
-#else
-	if (tcp_getsocket(tp)->so_options & SO_DEBUG)
-#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
+#else
+        if (tcp_getsocket(tp)->so_options & SO_DEBUG)
+                tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_KEEP<<8));
+#endif
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	INP_WUNLOCK(inp);
@@ -656,11 +660,12 @@ dropit:
 #ifdef TCPDEBUG
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
-#else
-	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
-#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
+#else
+	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_KEEP<<8));
+#endif
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	NET_EPOCH_EXIT(et);
@@ -726,11 +731,15 @@ tcp_timer_persist(void *xtp)
 			goto out;
 		}
 #endif
+#ifndef TREX_FBSD
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
 		tcp_inpinfo_lock_del(inp, tp);
 		goto out;
+#else
+		goto dropout;
+#endif
 	}
 	/*
 	 * If the user has closed the socket then drop a persisting
@@ -745,11 +754,15 @@ tcp_timer_persist(void *xtp)
 			goto out;
 		}
 #endif
+#ifndef TREX_FBSD
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
 		tcp_inpinfo_lock_del(inp, tp);
 		goto out;
+#else
+		goto dropout;
+#endif
 	}
 	tcp_setpersist(tp);
 	tp->t_flags |= TF_FORCEDATA;
@@ -761,13 +774,27 @@ tcp_timer_persist(void *xtp)
 #ifdef TCPDEBUG
 #ifndef TREX_FBSD
 	if (tp != NULL && tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO);
 #else
 	if (tp != NULL && tcp_getsocket(tp)->so_options & SO_DEBUG)
+		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO|(TT_PERSIST<<8));
 #endif
-		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO);
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	INP_WUNLOCK(inp);
+#ifdef TREX_FBSD
+        goto out;
+
+dropout:
+	NET_EPOCH_ENTER(et);
+	tp = tcp_drop(tp, ETIMEDOUT);
+	NET_EPOCH_EXIT(et);
+	tcp_inpinfo_lock_del(inp, tp);
+#ifdef TCPDEBUG
+	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_USER, ostate, tp, NULL, NULL, PRU_SLOWTIMO|(TT_PERSIST<<8));
+#endif
+#endif
 out:
 	CURVNET_RESTORE();
 }
@@ -827,11 +854,15 @@ tcp_timer_rexmt(void * xtp)
 			goto out;
 		}
 #endif
+#ifndef TREX_FBSD
 		NET_EPOCH_ENTER(et);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		NET_EPOCH_EXIT(et);
 		tcp_inpinfo_lock_del(inp, tp);
 		goto out;
+#else
+		goto dropout;
+#endif
 	}
 	if (tp->t_state == TCPS_SYN_SENT) {
 		/*
@@ -893,6 +924,10 @@ tcp_timer_rexmt(void * xtp)
         if (tp->t_state == TCPS_LISTEN) {
                 tcp_respond(tp, NULL, (struct tcphdr *)NULL, (struct mbuf *)NULL, tp->irs + 1, tp->iss, TH_ACK|TH_SYN);
                 tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
+#ifdef TCPDEBUG
+                if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+                        tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_REXMT<<8));
+#endif
                 return;
         }
 #endif
@@ -1078,14 +1113,28 @@ tcp_timer_rexmt(void * xtp)
 #ifdef TCPDEBUG
 #ifndef TREX_FBSD
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
-#else
-	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
-#endif
 		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0,
 			  PRU_SLOWTIMO);
+#else
+	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_REXMT<<8));
+#endif
 #endif
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	INP_WUNLOCK(inp);
+#ifdef TREX_FBSD
+        goto out;
+
+dropout:
+	NET_EPOCH_ENTER(et);
+	tp = tcp_drop(tp, ETIMEDOUT);
+	NET_EPOCH_EXIT(et);
+	tcp_inpinfo_lock_del(inp, tp);
+#ifdef TCPDEBUG
+	if (tp != NULL && (tcp_getsocket(tp)->so_options & SO_DEBUG))
+		tcp_trace(TA_USER, ostate, tp, (void *)0, (struct tcphdr *)0, PRU_SLOWTIMO|(TT_REXMT<<8));
+#endif
+#endif
 out:
 	CURVNET_RESTORE();
 }
@@ -1149,6 +1198,7 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta)
 
 	if (tp->m_timer.tt_flags == 0) {
 		tp->m_timer.last_tick = now_tick;
+		tp->m_timer.tt_flags |= (1 << TCPT_NTIMERS);
 	}
 
 	if (delta == 0) {

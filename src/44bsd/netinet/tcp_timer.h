@@ -157,8 +157,13 @@
 #define TCP_RTT_INVALIDATE (TCP_MAXRXTSHIFT / 4)
 
 #ifdef	TCPTIMERS
+#ifndef TREX_FBSD
 static const char *tcptimers[] =
     { "REXMT", "PERSIST", "KEEP", "2MSL", "DELACK" };
+#else
+static const char *tcptimers[] =
+    { "DELACK", "REXMT", "PERSIST", "KEEP", "2MSL" };
+#endif
 #endif
 
 /*
@@ -196,7 +201,8 @@ struct tcp_timer {
 #define	TP_KEEPIDLE(tp)	((tp)->t_tune->tcp_keepidle)
 #define	TP_KEEPINTVL(tp) ((tp)->t_tune->tcp_keepintvl)
 #define	TP_KEEPCNT(tp)	((tp)->t_tune->tcp_keepcnt)
-#define	TP_MAXIDLE(tp)	(TP_KEEPCNT(tp) * TP_KEEPINTVL(tp))
+
+#define	TP_MAXIDLE(tp)	(2 * TCPTV_MSL)
 
 #define tcp_persmin         TCPTV_PERSMIN
 #define tcp_persmax         TCPTV_PERSMAX
