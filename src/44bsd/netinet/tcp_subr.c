@@ -1780,7 +1780,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 #else
         ipgen = ((void *)nth) - (isipv6 ? sizeof(struct ip6_hdr) : sizeof(struct ip));
 	if (tp == NULL || (tcp_getsocket(tp)->so_options & SO_DEBUG))
-		tcp_trace(TA_OUTPUT, 0, tp, ipgen, nth, 0);
+		tcp_trace(TA_RESPOND, tp->t_state, tp, ipgen, nth, 0);
 #endif
 #endif
 	TCP_PROBE3(debug__output, tp, nth, m);
