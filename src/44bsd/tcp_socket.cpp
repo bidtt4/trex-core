@@ -685,7 +685,15 @@ void CEmulApp::on_bh_event(tcp_app_events_t event){
             m_flags|=taDO_DPC_NEXT;
             m_flags&=(~taDO_WAIT_CONNECTED);
         }
+#ifdef TREX_FBSD
+        m_pctx->set_time_connects();
+#endif
     }
+#ifdef TREX_FBSD
+    if (event==te_SOISDISCONNECTED) {
+        m_pctx->set_time_closed();
+    }
+#endif
     EMUL_LOG(0, "EVENT [%d]- %s \n",m_debug_id,get_tcp_app_events_name(event).c_str());
 }
 

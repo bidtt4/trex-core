@@ -776,6 +776,7 @@ CTcpTunableCtx::CTcpTunableCtx() {
     tcp_fast_ticks = TCP_FAST_TICK_;
 #ifdef TREX_FBSD
     tcp_delacktime = TCP_TIMER_TICK_FAST_MS;
+    //tcp_do_sack = 1;
 #endif
 #ifndef TREX_FBSD
     tcp_initwnd = _update_initwnd(TCP_MSS, TCP_INITWND_FACTOR); 
@@ -1800,6 +1801,7 @@ void CFlowTemplate::build_template(CPerProfileCtx * pctx,
 struct tcpcb * tcp_drop_now(CPerProfileCtx * pctx,
                             struct tcpcb *tp, 
                             int res){
+#ifndef TREX_FBSD
     struct tcp_socket *so = &tp->m_socket;
     uint16_t tg_id = tp->m_flow->m_tg_id;
     if (TCPS_HAVERCVDSYN(tp->t_state)) {
@@ -1814,6 +1816,9 @@ struct tcpcb * tcp_drop_now(CPerProfileCtx * pctx,
     }
     so->so_error = res;
     return (tcp_close(pctx,tp));
+#else
+    return tcp_drop(tp, res);
+#endif
 }
 
 
@@ -1901,14 +1906,19 @@ tcp_close(CPerProfileCtx * pctx,
 #endif /* RTV_RTT */
     /* free the reassembly queue, if any */
 
+#ifndef TREX_FBSD
     /* mark it as close and return zero */
     tp->t_state = TCPS_CLOSED;
     /* TBD -- back pointer to flow and delete it */
     INC_STAT(pctx, tp->m_flow->m_tg_id, tcps_closed);
     pctx->set_time_closed();
     return((struct tcpcb *)tp);
+#else
+    return tcp_close(tp);
+#endif
 }
 
+#ifndef TREX_FBSD
 void tcp_drain(){
 
 }
@@ -1980,8 +1990,9 @@ void tcp_quench(struct tcpcb *tp){
 
     tp->snd_cwnd = tp->t_maxseg;
 }
+#endif /* !TREX_FBSD */
 
-
+#ifdef TREX_FBSD
 #if 0
 
 #include "os_time.h"
@@ -2026,10 +2037,13 @@ tcp_getticks(struct tcpcb *tp)
 }
 
 uint32_t
-tcp_iss(struct tcpcb *tp)
+tcp_new_isn(struct tcpcb *tp)
 {
     CTcpPerThreadCtx* ctx = tp->m_flow->m_pctx->m_ctx;
-    return ctx->tcp_iss;
+    uint32_t new_isn = ctx->tcp_iss;
+
+    ctx->tcp_iss += TCP_ISSINCR/4;
+    return new_isn;
 }
 
 bool
@@ -2052,4 +2066,4 @@ tcp_ip_output(struct tcpcb *tp, struct mbuf *m)
     ctx->m_cb->on_tx(ctx, tp, (struct rte_mbuf*)m);
     return 0;
 }
-
+#endif /* TREX_FBSD */

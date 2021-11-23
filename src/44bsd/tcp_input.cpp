@@ -424,7 +424,22 @@ inline void TCP_REASS(CPerProfileCtx * pctx,
                  &so->so_rcv, m,ti->ti_len); 
         sorwakeup(so);
     } else {
-#else
+        if (tp->m_reass_disabled) {
+            uint16_t tg_id = tp->m_flow->m_tg_id;
+            INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
+            INC_STAT_CNT(pctx, tg_id, tcps_rcvoobytesdrop,ti->ti_len);
+            if (m) { 
+                rte_pktmbuf_free(m); 
+            }
+       } else { 
+           tiflags = tcp_reass(pctx,tp, ti, m);
+       }
+       tp->t_flags |= TF_ACKNOW; 
+    }
+}
+#endif /* !TREX_FBSD */
+
+#ifdef TREX_FBSD
 int
 tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, struct mbuf *m)
 {
@@ -436,36 +451,26 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, tcp_seq *seq_start, int *tlenp, s
     if (th == nullptr) {
         return tcp_reass_no_data(pctx, tp);
     }
-    else {
-        ti->ti_t     = *th;
-        ti->ti_len   = *tlenp; /* L7 len */
+    assert(tlenp != nullptr);
+
+    ti->ti_t     = *th;
+    ti->ti_len   = *tlenp; /* L7 len */
+
+    if (tp->m_reass_disabled) {
+        uint16_t tg_id = tp->m_flow->m_tg_id;
+        INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
+        INC_STAT_CNT(pctx, tg_id, tcps_rcvoobytesdrop,ti->ti_len);
+        if (m) {
+            rte_pktmbuf_free(m);
+        }
+        *tlenp = 0;
+    } else {
+        tiflags = tcp_reass(pctx,tp, ti, m);
+        *tlenp = ti->ti_len; /* updated by reassembled data length */
     }
-#endif
-        if (tp->m_reass_disabled) {
-            uint16_t tg_id = tp->m_flow->m_tg_id;
-            INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
-            INC_STAT_CNT(pctx, tg_id, tcps_rcvoobytesdrop,ti->ti_len);
-            if (m) { 
-                rte_pktmbuf_free(m); 
-            }
-#ifdef TREX_FBSD
-            if (tlenp)
-                *tlenp = 0;
-#endif
-       } else { 
-           tiflags = tcp_reass(pctx,tp, ti, m);
-#ifdef TREX_FBSD
-            if (tlenp)
-                *tlenp = ti->ti_len;
-#endif
-       }
-#ifndef TREX_FBSD
-       tp->t_flags |= TF_ACKNOW; 
-    }
-#else
     return tiflags;
-#endif
 }
+#endif /* TREX_FBSD */
 
 
 
@@ -595,7 +600,6 @@ HOT_FUNC int tcp_flow_input(CPerProfileCtx * pctx,
                     int offset_l7,
                     int total_l7_len
                     ){
-//printf("tcp_flow_input: tp=%p, m=%p, tcp=%p, offset_l7=%d, total_l7_len=%d\n", tp, rte_pktmbuf_mtod(m, void *), tcp, offset_l7, total_l7_len);
     tcp_int_input(tp, (struct mbuf*)m, (struct tcphdr*)tcp, offset_l7, total_l7_len, 0);
     return 0;
 }

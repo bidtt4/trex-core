@@ -34,11 +34,14 @@ extern "C" {
 
 /* provided functions */
 int tcp_int_output(struct tcpcb *tp);
+void tcp_int_respond(struct tcpcb *tp, tcp_seq ack, tcp_seq seq, int flags);
 void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos);
 void tcp_handle_timers(struct tcpcb *tp);
 void tcp_timer_activate(struct tcpcb *, uint32_t, u_int);
 struct tcpcb* tcp_inittcpcb(struct tcpcb *tp, struct tcp_function_block *fb, struct cc_algo *cc_algo, struct tcp_tune *tune, struct tcpstat *stat);
 void tcp_discardcb(struct tcpcb *tp);
+struct tcpcb * tcp_drop(struct tcpcb *, int res);
+struct tcpcb * tcp_close(struct tcpcb *);
 
 /* required functions */
 uint32_t tcp_getticks(struct tcpcb *tp);
@@ -49,7 +52,7 @@ bool tcp_reass_is_empty(struct tcpcb *tp);
 bool tcp_check_no_delay(struct tcpcb *, int);
 bool tcp_isipv6(struct tcpcb *);
 struct socket* tcp_getsocket(struct tcpcb *);
-uint32_t tcp_iss(struct tcpcb *);
+uint32_t tcp_new_isn(struct tcpcb *);
 
 #ifdef __cplusplus
 } /* extern "C" */

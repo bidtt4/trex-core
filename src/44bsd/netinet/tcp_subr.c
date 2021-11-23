@@ -1426,6 +1426,13 @@ tcpip_maketemplate(struct inpcb *inp)
 }
 #endif /* !TREX_FBSD */
 
+#ifdef TREX_FBSD
+void
+tcp_int_respond(struct tcpcb *tp, tcp_seq ack, tcp_seq seq, int flags)
+{
+	tcp_respond(tp, NULL, NULL, NULL, ack, seq, flags);
+}
+#endif
 /*
  * Send a single message to the TCP at address specified by
  * the given TCP/IP header.  If m == NULL, then we make a copy
@@ -1490,7 +1497,7 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	incl_opts = false;
 	win = 0;
 	if (tp != NULL) {
-#if 0 /* trex-core compatible */
+#ifndef TREX_FBSD /* trex-core compatible */
 		if (!(flags & TH_RST)) {
 #else
                 {
@@ -1499,7 +1506,6 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 			win = sbspace(&inp->inp_socket->so_rcv);
 #else
 			win = sbspace(&tcp_getsocket(tp)->so_rcv);
-//printf("tp=%p, so_rcv.sb_hiwat=%x, win=%x, tp->rcv_scale=%x\n", tp, tcp_getsocket(tp)->so_rcv.sb_hiwat, win, tp->rcv_scale);
 #endif
 			if (win > TCP_MAXWIN << tp->rcv_scale)
 				win = TCP_MAXWIN << tp->rcv_scale;

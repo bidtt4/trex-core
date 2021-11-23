@@ -390,6 +390,7 @@ void tcp_respond(CPerProfileCtx * pctx,
             tcp_seq seq, 
             int flags){
     assert(tp);
+#ifndef TREX_FBSD
     uint32_t win = sbspace(&tp->m_socket.so_rcv);
     CTcpPerThreadCtx * ctx = pctx->m_ctx;
 
@@ -405,6 +406,9 @@ void tcp_respond(CPerProfileCtx * pctx,
     ti->setWindowSize((uint16_t) (win >> tp->rcv_scale));
 
     ctx->m_cb->on_tx(ctx,tp,pkt.m_buf);
+#else
+    tcp_int_respond(tp, ack, seq, flags);
+#endif
 }
 
 

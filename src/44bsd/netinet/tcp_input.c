@@ -1292,9 +1292,7 @@ tfo_socket_result:
 
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tcp_state_change(tp, TCPS_SYN_RECEIVED);
-#if 0
-                        tp->irs = th->th_seq;
-#endif
+
                         tcp_rcvseqinit(tp);
                         tcp_sendseqinit(tp);
 
@@ -1570,10 +1568,8 @@ tfo_socket_result:
 			tcp_mss(tp, to.to_mss);
 
                 if (!tcp_timer_active(tp, TT_REXMT))
-                        tp->iss = tcp_iss(tp);
+                        tp->iss = tcp_new_isn(tp);
 		tp->irs = th->th_seq;
-		//tcp_rcvseqinit(tp);
-		//tcp_sendseqinit(tp);
 
                 /* send SYN+ACK, tp->iss should be intialized already */
 		tcp_respond(tp, NULL, NULL, m, tp->irs + 1, tp->iss, TH_SYN|TH_ACK);

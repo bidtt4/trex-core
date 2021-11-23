@@ -60,6 +60,12 @@ The default `tcp_output()` will call following functions and you should implemen
     - should return 0 for success
     - _`trex-core` could use `CTcpIOCb::on_tx()`._
 
+In addition, internal `tcp_respond()` will call above functions also. This function will generate a control packet (without data) for the response. The interface function `tcp_int_respond()` is provided for your usage.
+  - `void tcp_int_respond(struct tcpcb *tp, tcp_seq ack, tcp_seq seq, int flags);`
+    - `ack`: TCP acknowlegement number in the response packet
+    - `seq`: TCP sequence number in the response packet
+    - `flags`: TCP flags in the response packet
+
 For inbound packet handling, you should call `tcp_int_input()` and implement `tcp_reass()` and several socket callback functions.
   - `void tcp_int_input(struct tcpcb *tp, struct mbuf *m, struct tcphdr *th, int toff, int tlen, uint8_t iptos);`
     - `m`: buffer includes TCP header and data
@@ -121,6 +127,10 @@ The TCP reassembly feature in `netinet/tcp_reass.c` is not integrated for the ex
   - `bool tcp_reass_is_empty(struct tcpcb *tp);`
     - return true if there is no segment in the reassembly queue.
 
+TCP reassembly is a part of received packet processing and it needs to call following functions.
+  - `struct tcpcb * tcp_drop(struct tcpcb *, int res);`
+  - `struct tcpcb * tcp_close(struct tcpcb *);`
+
 ### _**TCP Tunables**_
 TCP tunable variables are collected in `struct tcp_tune`. You should instantiate and update it by initial value or given value from the user. It is defined at `netinet/tcp_var.h`.
 
@@ -148,6 +158,8 @@ TCP counters are accumulated at `struct tcpstat`. The counters will be updated b
     - `tune`: for the reference of tunable variables in `tp`
     - `stat`: to collect TCP statistics.
 
+`trex-core` can set an extra TCP statistics pointer to `tp->t_stat_ex` directly. It should be set another `struct tcpstat` instance compared to `tcp_inittcpcb` `stat` argument.
+
 Since memory allocation may happen during initialization, `tcp_discardcb()` should be called before release it.
   - `void tcp_discardcb(struct tcpcb *tp);`
 
@@ -155,3 +167,8 @@ You should implement `struct socket * tcp_getsocket(struct tcpcb *tp);` to provi
   - `so_options`: set SO_DEBUG to enable `tcp_trace()` output. (In `trex-core`, it is the same as US_SO_DEBUG)
   - `so_rcv.sb_hiwat`,`so_snd.sb_hiwat`: set socket buffer size
 
+
+### _**`Miscellaneous`**_
+
+The initial sequence number is needed send first SYN and SYN+ACK packet. Since `trex-core` already has the generation mechanism, new TCP stack integration declares following interface function.
+  - `uint32_t tcp_new_isn(struct tcpcb *);`
