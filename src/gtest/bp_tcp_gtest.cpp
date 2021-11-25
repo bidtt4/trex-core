@@ -859,6 +859,7 @@ void tcp_gen_test(std::string pcap_file,
                   std::vector<CTxRxCallback*> *callbacks=NULL){
 
     CClientServerTcp *lpt1=new CClientServerTcp;
+    CTunnelTxRxCallback tunnel_tx_rx_callback(tunnel);
 
     lpt1->Create("generated",pcap_file);
     if (debug_mode){
@@ -886,7 +887,6 @@ void tcp_gen_test(std::string pcap_file,
 
     if (tunnel != NULL) {
         lpt1->m_tunnel = tunnel;
-        CTunnelTxRxCallback tunnel_tx_rx_callback(tunnel);
         lpt1->m_callbacks.push_back(&tunnel_tx_rx_callback);
     }
 
