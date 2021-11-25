@@ -57,12 +57,12 @@ int tcp_totbackoff = 511;   /* sum of tcp_backoff[] */
 
 #endif /* !TREX_FBSD */
 
+#ifndef TREX_FBSD
 /*
  * Fast timeout routine for processing delayed acks
  */
 void tcp_fasttimo(CPerProfileCtx * pctx, struct tcpcb *tp){
 
-#ifndef TREX_FBSD
         if (tp->t_flags & TF_DELACK) {
             tp->t_flags &= ~TF_DELACK;
             tp->t_flags |= TF_ACKNOW;
@@ -70,10 +70,8 @@ void tcp_fasttimo(CPerProfileCtx * pctx, struct tcpcb *tp){
             INC_STAT(pctx, tp->m_flow->m_tg_id, tcps_delack);
             (void) tcp_output(pctx,tp);
         }
-#else
-        tcp_handle_timers(tp);
-#endif
 }
+#endif
 
 
 

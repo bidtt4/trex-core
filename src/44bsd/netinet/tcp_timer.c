@@ -307,12 +307,16 @@ static timer_handle_t tcp_timer_handlers[TCPT_NTIMERS] = {
 void
 tcp_handle_timers(struct tcpcb *tp)
 {
-	uint32_t now_tick = ticks;
-	uint32_t tick_passed = now_tick - tp->m_timer.last_tick;
+        uint32_t tt_flags = tp->m_timer.tt_flags & ((1 << TCPT_NTIMERS) - 1);
+        uint32_t now_tick = ticks;
+        uint32_t tick_passed = now_tick - tp->m_timer.last_tick;
 
-	for (int i = 0; i < TCPT_NTIMERS; i++ ) {
-		if ((tp->m_timer.tt_flags & (1 << i)) == 0)
+	tp->m_timer.last_tick = now_tick;
+
+	for (int i = 0; tt_flags && i < TCPT_NTIMERS; i++ ) {
+		if ((tt_flags & (1 << i)) == 0)
 			continue;
+                tt_flags &= ~(1 << i);
 
 		if (tp->m_timer.tt_timer[i] <= tick_passed) {
 			tp->m_timer.tt_flags &= ~(1 << i);
@@ -321,8 +325,6 @@ tcp_handle_timers(struct tcpcb *tp)
 			tp->m_timer.tt_timer[i] -= tick_passed;
 		}
 	}
-	tp->m_timer.last_tick = now_tick;
-	tp->m_timer.tt_flags |= (1 << TCPT_NTIMERS);
 }
 
 void
@@ -615,7 +617,7 @@ tcp_timer_keep(void *xtp)
 #else /* TREX_FBSD */
 		(void) t_template;
 		tcp_respond(tp, NULL, (struct tcphdr *)NULL, (struct mbuf *)NULL,
-			    tp->rcv_nxt, tp->snd_una - 1, 0);
+			    tp->rcv_nxt, tp->snd_una - 1, TH_ACK);
 #endif /* TREX_FBSD */
 #ifndef TREX_FBSD
 		callout_reset(&tp->t_timers->tt_keep, TP_KEEPINTVL(tp),
@@ -1194,18 +1196,11 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta)
 		callout_reset_on(t_callout, delta, f_callout, tp, cpu);
 	}
 #else
-	uint32_t now_tick = ticks;
-
-	if (tp->m_timer.tt_flags == 0) {
-		tp->m_timer.last_tick = now_tick;
-		tp->m_timer.tt_flags |= (1 << TCPT_NTIMERS);
-	}
-
 	if (delta == 0) {
 		tp->m_timer.tt_flags &= ~(1 << timer_type);
 	} else {
 		tp->m_timer.tt_flags |= (1 << timer_type);
-		delta += (now_tick - tp->m_timer.last_tick);
+		delta += (ticks - tp->m_timer.last_tick);
 	}
 	tp->m_timer.tt_timer[timer_type] = delta;
 #endif

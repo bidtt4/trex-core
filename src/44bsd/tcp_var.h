@@ -974,7 +974,9 @@ public:
     int tcp_maxidle;            /* time to drop after starting probes */
     int tcp_maxpersistidle;
     uint32_t tcp_fast_ticks;
+#ifndef TREX_FBSD
     uint32_t tcp_slow_fast_ratio;
+#endif
     int tcp_ttl;            /* time to live for TCP segs */
 
     uint8_t use_inbound_mac;    /* whether to use MACs from incoming pkts */
@@ -1774,12 +1776,17 @@ public:
 
 
 inline void CTcpFlow::on_tick(){
+#ifndef TREX_FBSD
         on_fast_tick();
         m_tick++;
         if (m_tick == m_pctx->m_tunable_ctx.tcp_slow_fast_ratio) {
             on_slow_tick();
             m_tick=0;
         }
+#else
+        m_tick++;
+        tcp_handle_timers(&m_tcp);
+#endif
 }
 
 

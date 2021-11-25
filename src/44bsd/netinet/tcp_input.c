@@ -1574,8 +1574,6 @@ tfo_socket_result:
                 /* send SYN+ACK, tp->iss should be intialized already */
 		tcp_respond(tp, NULL, NULL, m, tp->irs + 1, tp->iss, TH_SYN|TH_ACK);
                 tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
-		TCPSTAT_INC(tcps_sndacks);
-		TCPSTAT_INC(tcps_sndtotal);
 #endif /* TREX_FBSD */
 
 		/*

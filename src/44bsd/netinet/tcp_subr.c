@@ -1498,10 +1498,9 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 	win = 0;
 	if (tp != NULL) {
 #ifndef TREX_FBSD /* trex-core compatible */
-		if (!(flags & TH_RST)) {
-#else
-                {
+		if (!(flags & TH_RST))
 #endif
+		{
 #ifndef TREX_FBSD
 			win = sbspace(&inp->inp_socket->so_rcv);
 #else
@@ -1622,6 +1621,12 @@ tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
 		tlen = sizeof (struct tcpiphdr);
 #endif
 #else
+	if (flags & TH_ACK)
+		TCPSTAT_INC(tcps_sndacks);
+	else if (flags & (TH_SYN|TH_FIN|TH_RST))
+		TCPSTAT_INC(tcps_sndctrl);
+	TCPSTAT_INC(tcps_sndtotal);
+
 	tlen = sizeof (struct tcphdr);
 #endif
 #ifndef TREX_FBSD
@@ -1931,6 +1936,8 @@ tcp_inittcpcb(struct tcpcb *tp, struct tcp_function_block *fb, struct cc_algo *c
 	callout_init(&tp->t_timers->tt_keep, 1);
 	callout_init(&tp->t_timers->tt_2msl, 1);
 	callout_init(&tp->t_timers->tt_delack, 1);
+#else
+        tcp_handle_timers(tp);  /* initial update of last_tick */
 #endif
 
 	if (V_tcp_do_rfc1323)

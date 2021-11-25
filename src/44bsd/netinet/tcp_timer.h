@@ -74,6 +74,10 @@
 #ifdef TREX_FBSD
 // <sys/kernel.h>
 #define hz              1000
+
+#define tcp_timer_msec_to_ticks(msec)   ((msec)*hz/1000)
+#define tcp_timer_ticks_to_msec(tick)   ((tick)*1000/hz)
+#define TCPTV_RES_MS    20                      /* timer handle resolustion */
 #endif /* TREX_FBSD */
 
 /*
@@ -204,11 +208,13 @@ struct tcp_timer {
 
 #define	TP_MAXIDLE(tp)	(2 * TCPTV_MSL)
 
+// from tcp_init() at tcp_subr.c
 #define tcp_persmin         TCPTV_PERSMIN
 #define tcp_persmax         TCPTV_PERSMAX
 #define tcp_rexmit_initial  TCPTV_RTOBASE
 #define tcp_rexmit_min      TCPTV_MIN
-#define tcp_rexmit_slop     0           // TCPTV_CPU_VAR
+#define tcp_rexmit_slop     TCPTV_CPU_VAR
+
 extern const int tcp_backoff[];
 extern const int tcp_totbackoff;
 

@@ -605,7 +605,7 @@ void CTcpFlow::set_s_tcp_info(const CAstfDbRO * ro_db, CTcpTuneables *tune) {
 
 }
 
-
+#ifndef TREX_FBSD
 void CTcpFlow::on_slow_tick(){
     tcp_slowtimo(m_pctx, &m_tcp);
 }
@@ -614,6 +614,7 @@ void CTcpFlow::on_slow_tick(){
 void CTcpFlow::on_fast_tick(){
     tcp_fasttimo(m_pctx, &m_tcp);
 }
+#endif /* !TREX_FBSD */
 
 
 void CTcpFlow::Delete(){
@@ -728,6 +729,17 @@ bool CTcpPerThreadCtx::is_open_flow_enabled(){
 
 /* tick every 50msec TCP_TIMER_W_TICK */
 void CTcpPerThreadCtx::timer_w_on_tick(){
+#ifdef TREX_FBSD
+    m_tick++;
+#ifdef TREX_SIM
+    tcp_now += tcp_timer_msec_to_ticks(TCP_TIMER_W_TICK);
+#else
+    if (m_tick == tcp_timer_ticks_to_msec(TCP_TIMER_W_1_MS)) {
+        tcp_now++;                  /* for timestamps */
+        m_tick=0;
+    }
+#endif
+#endif
 #ifndef TREX_SIM
     /* we have two levels on non-sim */
     m_timer_w.on_tick_level((void*)this,ctx_timer,16);
@@ -740,26 +752,14 @@ void CTcpPerThreadCtx::timer_w_on_tick(){
         tcp_iss += TCP_ISSINCR/PR_SLOWHZ;       /* increment iss */
         tcp_now++;                  /* for timestamps */
         m_tick=0;
-#else
-#define PR_SLOWHZ   2
-#ifndef TREX_SIM
-    if (m_tick == TCP_TIMER_W_1_MS) {
-        tcp_iss += TCP_ISSINCR/(PR_SLOWHZ*TCP_TIMER_TICK_SLOW_MS);
-        tcp_now++;                  /* for timestamps */
-        m_tick=0;
-#else
-    tcp_now += TCP_TIMER_W_TICK;                  /* for timestamps */
-    if ( m_tick==TCP_SLOW_RATIO_MASTER ) {
-        tcp_iss += TCP_ISSINCR/PR_SLOWHZ;
-        m_tick=0;
-#endif
-#endif
     } else{
         m_tick++;
     }
+#endif
 }
 
 #ifndef TREX_SIM
+#ifndef TREX_FBSD
 static uint16_t _update_slow_fast_ratio(uint16_t tcp_delay_ack_msec){
     double factor = round((double)TCP_TIMER_TICK_SLOW_MS/(double)tcp_delay_ack_msec);
     uint16_t res=(uint16_t)factor;
@@ -769,13 +769,20 @@ static uint16_t _update_slow_fast_ratio(uint16_t tcp_delay_ack_msec){
     return(res);
 }
 #endif
+#endif
 
 CTcpTunableCtx::CTcpTunableCtx() {
     tcp_blackhole = 0;
     tcp_do_rfc1323 = 1;
+#ifndef TREX_FBSD
     tcp_fast_ticks = TCP_FAST_TICK_;
-#ifdef TREX_FBSD
-    tcp_delacktime = TCP_TIMER_TICK_FAST_MS;
+#else
+    tcp_delacktime = TCPTV_DELACK;
+#ifdef TREX_SIM
+    tcp_fast_ticks = tw_time_msec_to_ticks(TCP_TIMER_W_TICK);
+#else
+    tcp_fast_ticks = tw_time_msec_to_ticks(TCPTV_RES_MS);
+#endif
     //tcp_do_sack = 1;
 #endif
 #ifndef TREX_FBSD
@@ -789,7 +796,9 @@ CTcpTunableCtx::CTcpTunableCtx() {
     tcp_no_delay = 0;
     tcp_no_delay_counter = 0;
     tcp_rx_socket_bsize = 32*1024;
+#ifndef TREX_FBSD
     tcp_slow_fast_ratio = TCP_SLOW_FAST_RATIO_;
+#endif
     tcp_tx_socket_bsize = 32*1024;
     tcprexmtthresh = 3;
     use_inbound_mac = 1;
@@ -865,10 +874,12 @@ void CTcpTunableCtx::update_tuneables(CTcpTuneables *tune) {
 
     #ifndef TREX_SIM
     if (tune->is_valid_field(CTcpTuneables::tcp_delay_ack)) {
+#ifndef TREX_FBSD
         tcp_fast_ticks =  tw_time_msec_to_ticks(tune->m_tcp_delay_ack_msec);
         tcp_slow_fast_ratio = _update_slow_fast_ratio(tune->m_tcp_delay_ack_msec);
+#endif
 #ifdef TREX_FBSD
-        tcp_delacktime = tune->m_tcp_delay_ack_msec;
+        tcp_delacktime = tcp_timer_msec_to_ticks(tune->m_tcp_delay_ack_msec);
 #endif
     }
     #endif
@@ -2029,9 +2040,6 @@ m_freem(struct mbuf *m)
 uint32_t
 tcp_getticks(struct tcpcb *tp)
 {
-#if 0
-    return now_sec()*1000;
-#endif
     CTcpPerThreadCtx* ctx = tp->m_flow->m_pctx->m_ctx;
     return ctx->tcp_now;
 }

@@ -202,7 +202,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
 #define TF2_SERVER_ROLE 0x80000000
         if (tp->t_state == TCPS_LISTEN)
                 tp->t_flags2 |= TF2_SERVER_ROLE;
-        printf("\n(%3.3f) ", tcp_getticks(tp)/1000.0f);
+        printf("\n(%3.3f) ", tcp_timer_ticks_to_msec(tcp_getticks(tp))/1000.0f);
         if (act == TA_USER)
                 printf("--- ");
 #endif /* TREX_FBSD */
@@ -254,17 +254,19 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, void *ipgen,
 			printf("%x", seq);
 		printf("@%x, urp=%x", ack, th->th_urp);
 #else /* TREX_FBSD */
-                tcp_seq iseq, iack;
-                switch(act) {
-                case TA_OUTPUT:
-                    iseq = tp->iss;
-                    iack = tp->irs;
-                    break;
-                case TA_INPUT:
-                case TA_DROP:
-                    iseq = tp->irs;
-                    iack = tp->iss;
-                    break;
+                tcp_seq iseq = 0, iack = 0;
+                if (tp != NULL) {
+                        switch(act) {
+                        case TA_OUTPUT:
+                            iseq = tp->iss;
+                            iack = tp->irs;
+                            break;
+                        case TA_INPUT:
+                        case TA_DROP:
+                            iseq = tp->irs;
+                            iack = tp->iss;
+                            break;
+                        }
                 }
 #if 0
                 if (act == TA_INPUT && th->th_flags & TH_SYN)
