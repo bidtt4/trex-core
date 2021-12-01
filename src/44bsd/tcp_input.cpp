@@ -225,7 +225,7 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
 
     CTcpReassBlock cur;
 
-    while (true) {
+    while ((save_ptr!=true) || (li < m_active_blocks)) {
 
         if (save_ptr==false) {
             if (li==(m_active_blocks)) {
@@ -277,10 +277,6 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
                     tblocks[ci-1].m_flags |=cur.m_flags; /* or the overlay FIN */
                 }
             }
-
-            if ( (save_ptr==true) && (li==m_active_blocks) ) {
-                break;
-            }
         }
 
         if (cur.m_seq == ti->ti_seq) {
@@ -292,6 +288,7 @@ int CTcpReass::pre_tcp_reass(CPerProfileCtx * pctx,
         /* drop last segment */
         INC_STAT(pctx, tg_id, tcps_rcvoopackdrop);
         INC_STAT_CNT(pctx, tg_id, tcps_rcvoobytesdrop,tblocks[MAX_TCP_REASS_BLOCKS].m_len);
+        tblocks[MAX_TCP_REASS_BLOCKS].m_len = 0;    /* to update ti_len as dropped */
     }
     if (ti_block) {
         ti->ti_len = ti_block->m_len;
