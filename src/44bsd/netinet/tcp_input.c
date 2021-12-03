@@ -602,7 +602,7 @@ cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
 	    (tlen <= tp->t_maxseg) &&					\
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)) &&	\
             !tcp_check_no_delay(tp, tlen))
-/* !tcp_timer_active(tp, TT_DELACK) forces ACK on every another packet */
+/* !tcp_timer_active(tp, TT_DELACK) forces ACK on every other packet */
 /* !(thflags & TH_PUSH) for trex-core compatible */
 #endif /* TREX_FBSD */
 
@@ -2863,6 +2863,10 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					tp->t_dupacks = 0;
 					break;
 				}
+#ifdef TREX_FBSD /* trex-core compatible */
+                            /* we can get ack on FIN-ACK and it should not considered dup */
+                            if (tp->t_state != TCPS_FIN_WAIT_2)
+#endif
 				TCPSTAT_INC(tcps_rcvdupack);
 				/*
 				 * If we have outstanding data (other than

@@ -1129,6 +1129,12 @@ send:
 		} else if (SEQ_LT(tp->snd_nxt, tp->snd_max) || sack_rxmit) {
 			tp->t_sndrexmitpack++;
 			TCPSTAT_INC(tcps_sndrexmitpack);
+#ifdef TREX_FBSD
+			if (!sack_rxmit && len > (tp->snd_max - tp->snd_nxt)) {
+				TCPSTAT_ADD(tcps_sndrexmitbyte, tp->snd_max - tp->snd_nxt);
+				TCPSTAT_ADD(tcps_sndbyte_ok, len - (tp->snd_max - tp->snd_nxt));
+			} else
+#endif
 			TCPSTAT_ADD(tcps_sndrexmitbyte, len);
 #ifdef STATS
 			stats_voi_update_abs_u32(tp->t_stats, VOI_TCP_RETXPB,
