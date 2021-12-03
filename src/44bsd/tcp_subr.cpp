@@ -151,6 +151,15 @@ void CTcpStats::Dump(FILE *fd){
     MYC(tcps_reasfree);
     MYC(tcps_nombuf);
     MYC(tcps_notunnel);
+
+#ifdef TREX_FBSD
+    MYC(tcps_sack_recovery_episode);
+    MYC(tcps_sack_rexmits);
+    MYC(tcps_sack_rexmit_bytes);
+    MYC(tcps_sack_rcv_blocks);
+    MYC(tcps_sack_send_blocks);
+    MYC(tcps_sack_sboverflow);
+#endif
 }
 
 void CTcpStats::Resize(uint16_t new_num_of_tg_ids) {
@@ -783,7 +792,7 @@ CTcpTunableCtx::CTcpTunableCtx() {
 #else
     tcp_fast_ticks = tw_time_msec_to_ticks(TCPTV_RES_MS);
 #endif
-    //tcp_do_sack = 1;
+    tcp_do_sack = 1;
 #endif
 #ifndef TREX_FBSD
     tcp_initwnd = _update_initwnd(TCP_MSS, TCP_INITWND_FACTOR); 
