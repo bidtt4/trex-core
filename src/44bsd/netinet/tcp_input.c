@@ -3334,7 +3334,7 @@ process_ACK:
 					    tcp_finwait2_timeout :
 					    TP_MAXIDLE(tp)));
 #else
-					tcp_timer_activate(tp, TT_2MSL, TP_MAXIDLE(tp));
+					tcp_timer_activate(tp, TT_2MSL, TCPTV_2MSL);
 #endif
 				}
 				tcp_state_change(tp, TCPS_FIN_WAIT_2);
@@ -3357,7 +3357,7 @@ process_ACK:
 				tcp_state_change(tp, TCPS_TIME_WAIT);
 				soisdisconnected(so);
 				tcp_cancel_timers(tp);
-				tcp_timer_activate(tp, TT_2MSL, 2 * TCPTV_MSL);
+				tcp_timer_activate(tp, TT_2MSL, TCPTV_2MSL);
 #endif
 			}
 			break;
@@ -3648,7 +3648,7 @@ dodata:							/* XXX */
 #else
 			tcp_state_change(tp, TCPS_TIME_WAIT);
 			tcp_cancel_timers(tp);
-			tcp_timer_activate(tp, TT_2MSL, 2 * TCPTV_MSL);
+			tcp_timer_activate(tp, TT_2MSL, TCPTV_2MSL);
 			soisdisconnected(so);
 			break;
 #endif

@@ -111,6 +111,8 @@
 #define	TCPTV_KEEP_IDLE	(  5*hz)		/* dflt time before probing */
 #define	TCPTV_KEEPINTVL	(  7*hz)		/* default probe interval */
 #define	TCPTV_KEEPCNT	8			/* max probes before drop */
+
+#define	TCPTV_2MSL	(2 * TCPTV_MSL)
 #endif /* TREX_FBSD */
 
 /*
@@ -206,7 +208,7 @@ struct tcp_timer {
 #define	TP_KEEPINTVL(tp) ((tp)->t_tune->tcp_keepintvl)
 #define	TP_KEEPCNT(tp)	((tp)->t_tune->tcp_keepcnt)
 
-#define	TP_MAXIDLE(tp)	(2 * TCPTV_MSL)
+#define	TP_MAXIDLE(tp)	(TP_KEEPCNT(tp) * TP_KEEPINTVL(tp))
 
 // from tcp_init() at tcp_subr.c
 #define tcp_persmin         TCPTV_PERSMIN

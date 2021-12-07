@@ -38,7 +38,6 @@
 
 #ifdef TREX_FBSD
 #include "netinet/tcp_timer.h"
-#define TCPTV_2MSL   (2*TCPTV_MSL)
 #else /* !TREX_FBSD */
 /*
  * Definitions of the TCP timers.  These timers are counted

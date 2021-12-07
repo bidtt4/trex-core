@@ -479,8 +479,8 @@ tcp_timer_2msl(void *xtp)
 			callout_reset(&tp->t_timers->tt_2msl,
 				      TP_KEEPINTVL(tp), tcp_timer_2msl, tp);
 #else
-		if (ticks - tp->t_rcvtime < TP_MAXIDLE(tp)) {
-			tcp_timer_activate(tp, TT_2MSL, TP_MAXIDLE(tp));
+		if (ticks - tp->t_rcvtime < TCPTV_2MSL) {
+			tcp_timer_activate(tp, TT_2MSL, TCPTV_2MSL - (ticks - tp->t_rcvtime));
 #endif
 		} else {
 #ifndef TREX_FBSD
