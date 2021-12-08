@@ -295,6 +295,9 @@ void CTcpFlow::init(){
     }
 
     if (m_tcp.is_tso()){
+#ifdef TREX_FBSD
+        m_tcp.t_flags |= TF_TSO;
+#endif
         if (m_tcp.t_maxseg >m_tcp.m_max_tso ){
             m_tcp.m_max_tso=m_tcp.t_maxseg;
         }
