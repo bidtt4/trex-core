@@ -4283,9 +4283,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 	if (bufsize < mss)
 		mss = bufsize;
 	else {
-#ifndef TREX_FBSD   /* trex-core compatible: to pass gtest */
 		bufsize = roundup(bufsize, mss);
-#endif
 #ifndef TREX_FBSD
 		if (bufsize > sb_max)
 			bufsize = sb_max;
@@ -4312,9 +4310,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 #endif
 		bufsize = so->so_rcv.sb_hiwat;
 	if (bufsize > mss) {
-#ifndef TREX_FBSD   /* trex-core compatible: to pass gtest */
 		bufsize = roundup(bufsize, mss);
-#endif
 #ifndef TREX_FBSD
 		if (bufsize > sb_max)
 			bufsize = sb_max;
