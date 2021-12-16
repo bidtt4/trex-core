@@ -1546,11 +1546,9 @@ tfo_socket_result:
                         }
                         if (to.to_flags & TOF_SCALE) {
                                 int wscale = 0;
-#if 0
                                 while (wscale < TCP_MAX_WINSHIFT &&
                                     (TCP_MAXWIN << wscale) < (2*1024*1024))
                                         wscale++;
-#endif
                                 tp->t_flags |= TF_REQ_SCALE|TF_RCVD_SCALE;
                                 tp->snd_scale = to.to_wscale;
                                 tp->request_r_scale = wscale;
