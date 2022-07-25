@@ -30,6 +30,7 @@
  * and also numerous discussions with Neal, Yuchung and Van.
  */
 
+#if 0   // BBR_INT
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -126,7 +127,44 @@ __FBSDID("$FreeBSD$");
 #ifdef MAC
 #include <security/mac/mac_framework.h>
 #endif
+#else   // BBR_INT
+#include "sys_inet.h"
+#include "tcp_var.h"
+#include "tcp_seq.h"
+#include "tcp_mbuf.h"
+#define _KERNEL
+#endif  // BBR_INT
 #include "rack_bbr_common.h"
+#if 1   // BBR_INT
+
+/* tcp_input.c */
+extern void tcp_dropwithreset(struct mbuf *, struct tcphdr *, struct tcpcb *, int, int);
+
+/* tcp_sack.c */
+extern void tcp_update_sack_list(struct tcpcb *tp, tcp_seq rcv_laststart, tcp_seq rcv_lastend);
+
+/* tcp_subr.c */
+extern void tcp_state_change(struct tcpcb *, int);
+extern void tcp_respond(struct tcpcb *, void *, struct tcphdr *, struct mbuf *, tcp_seq, tcp_seq, int);
+//extern void tcp_log_end_status(struct tcpcb *tp, uint8_t status);
+#define tcp_log_end_status(tp,status)
+extern u_int tcp_fixed_maxseg(const struct tcpcb *);
+
+/* from tcp_subr.c */
+#define tcp_ack_war_time_window 1000
+#define tcp_ack_war_cnt 5
+
+void __ctf_do_dropafterack(struct mbuf *m, struct tcpcb *tp, struct tcphdr *th, int32_t thflags, int32_t tlen, int32_t *ret_val, uint32_t *ts, uint32_t *cnt);
+
+#define INP_WUNLOCK(x)
+#define KMOD_TCPSTAT_INC    TCPSTAT_INC
+#define KMOD_TCPSTAT_ADD    TCPSTAT_ADD
+#define NET_EPOCH_ASSERT()
+
+// for badport_bandlim rstreason, from netinet/icmp_var.h
+#define BANDLIM_RST_OPENPORT 4   /* No connection, listener */
+
+#endif  // BBR_INT
 
 /*
  * Common TCP Functions - These are shared by borth
@@ -162,6 +200,7 @@ again:
 }
 #endif
 
+#if 0   // BBR_INT: will remove ctf_do_queued_segments from do_segment
 static int
 ctf_get_enet_type(struct ifnet *ifp, struct mbuf *m)
 {
@@ -542,6 +581,7 @@ ctf_do_queued_segments(struct socket *so, struct tcpcb *tp, int have_pkt)
 	}
 	return (0);
 }
+#endif  // BBR_INT
 
 uint32_t
 ctf_outstanding(struct tcpcb *tp)
@@ -707,7 +747,7 @@ _ctf_drop_checks(struct tcpopt *to, struct mbuf *m, struct tcphdr *th,
 			}
 		} else
 			KMOD_TCPSTAT_ADD(tcps_rcvbyteafterwin, todrop);
-		m_adj(m, -todrop);
+		m_adj_fix(m, -todrop, tlen);
 		tlen -= todrop;
 		thflags &= ~(TH_PUSH | TH_FIN);
 	}
@@ -815,8 +855,7 @@ ctf_process_rst(struct mbuf *m, struct tcphdr *th, struct socket *so, struct tcp
 		} else {
 			KMOD_TCPSTAT_INC(tcps_badrst);
 			/* Send challenge ACK. */
-			tcp_respond(tp, mtod(m, void *), th, m,
-			    tp->rcv_nxt, tp->snd_nxt, TH_ACK);
+			tcp_respond(tp, NULL, th, m, tp->rcv_nxt, tp->snd_nxt, TH_ACK);
 			tp->last_ack_sent = tp->rcv_nxt;
 		}
 	} else {
@@ -846,8 +885,7 @@ ctf_challenge_ack(struct mbuf *m, struct tcphdr *th, struct tcpcb *tp, int32_t *
 		ctf_do_drop(m, tp);
 	} else {
 		/* Send challenge ACK. */
-		tcp_respond(tp, mtod(m, void *), th, m, tp->rcv_nxt,
-		    tp->snd_nxt, TH_ACK);
+		tcp_respond(tp, NULL, th, m, tp->rcv_nxt, tp->snd_nxt, TH_ACK);
 		tp->last_ack_sent = tp->rcv_nxt;
 		m = NULL;
 		*ret_val = 0;
@@ -941,9 +979,11 @@ ctf_do_dropwithreset_conn(struct mbuf *m, struct tcpcb *tp, struct tcphdr *th,
     int32_t rstreason, int32_t tlen)
 {
 
+#if 0   // BBR_INT: tcp_set_inp_to_drop is HPTS
 	if (tp->t_inpcb) {
 		tcp_set_inp_to_drop(tp->t_inpcb, ETIMEDOUT);
 	}
+#endif
 	tcp_dropwithreset(m, th, tp, tlen, rstreason);
 	INP_WUNLOCK(tp->t_inpcb);
 }
@@ -954,6 +994,7 @@ ctf_fixed_maxseg(struct tcpcb *tp)
 	return (tcp_fixed_maxseg(tp));
 }
 
+#if 0   // BBR_INT: remove log and events
 void
 ctf_log_sack_filter(struct tcpcb *tp, int num_sack_blks, struct sackblk *sack_blocks)
 {
@@ -987,6 +1028,7 @@ ctf_log_sack_filter(struct tcpcb *tp, int num_sack_blks, struct sackblk *sack_bl
 		    0, &log, false, &tv);
 	}
 }
+#endif  // BBR_INT
 
 uint32_t
 ctf_decay_count(uint32_t count, uint32_t decay)
@@ -1017,6 +1059,7 @@ ctf_decay_count(uint32_t count, uint32_t decay)
 int32_t
 ctf_progress_timeout_check(struct tcpcb *tp, bool log)
 {
+#if 0   // BBR_INT: dead code? - t_maxunacktime is not initialized
 	if (tp->t_maxunacktime && tp->t_acktime && TSTMP_GT(ticks, tp->t_acktime)) {
 		if ((ticks - tp->t_acktime) >= tp->t_maxunacktime) {
 			/*
@@ -1032,5 +1075,6 @@ ctf_progress_timeout_check(struct tcpcb *tp, bool log)
 			return (1);
 		}
 	}
+#endif
 	return (0);
 }

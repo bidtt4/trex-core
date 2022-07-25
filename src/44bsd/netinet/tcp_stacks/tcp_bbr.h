@@ -28,6 +28,34 @@
 #ifndef _NETINET_TCP_BBR_H_
 #define _NETINET_TCP_BBR_H_
 
+#if 1   // BBR_INT: from required headers
+
+
+// tcp_hpts.h
+/* Magic flags to tell whats cooking on the pacing wheel */
+#define PACE_TMR_DELACK 0x01    /* Delayed ack timer running */
+#define PACE_TMR_RACK   0x02    /* RACK timer running */
+#define PACE_TMR_TLP    0x04    /* TLP timer running */
+#define PACE_TMR_RXT    0x08    /* Retransmit timer running */
+#define PACE_TMR_PERSIT 0x10    /* Persists timer running */
+#define PACE_TMR_KEEP   0x20    /* Keep alive timer running */
+#define PACE_PKT_OUTPUT 0x40    /* Output Packets being paced */
+#define PACE_TMR_MASK   (PACE_TMR_KEEP|PACE_TMR_PERSIT|PACE_TMR_RXT|PACE_TMR_TLP|PACE_TMR_RACK|PACE_TMR_DELACK)
+
+
+// sys/time.h
+#define TICKS_2_MSEC(t) max(1, (uint32_t)(hz == 1000) ? \
+          (t) : (((uint64_t)(t) * (uint64_t)1000)/(uint64_t)hz))
+#define TICKS_2_USEC(t) max(1, (uint32_t)(hz == 1000) ? \
+          ((t) * 1000) : (((uint64_t)(t) * (uint64_t)1000000)/(uint64_t)hz))
+#define MSEC_2_TICKS(m) max(1, (uint32_t)((hz == 1000) ? \
+          (m) : ((uint64_t)(m) * (uint64_t)hz)/(uint64_t)1000))
+#define USEC_2_TICKS(u) max(1, (uint32_t)((hz == 1000) ? \
+         ((u) / 1000) : ((uint64_t)(u) * (uint64_t)hz)/(uint64_t)1000000))
+
+
+#endif  // BBR_INT
+
 #define BBR_INITIAL_RTO  1000000	/* 1 second in micro-seconds */
 /* Send map flags */
 #define BBR_ACKED	  0x0001	/* The remote endpoint acked this */

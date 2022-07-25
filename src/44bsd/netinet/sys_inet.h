@@ -14,6 +14,9 @@
 #include <malloc.h>                         // malloc(),free()
 #include <assert.h>                         // assert()
 
+#include <string.h>                         // memmove()
+#include <strings.h>                        // bcopy()
+
 
 // --<sys>---------------------------------------------------------------
 
@@ -28,8 +31,8 @@
 // <sys/systm.h>
 #define KASSERT(exp,msg)    do {} while(0)
 #if !defined(__cplusplus)
-#define bcopy(from, to, len) __builtin_memmove((to), (from), (len))
-#define memmove(dest, src, n) __builtin_memmove((dest), (src), (n))
+//#define bcopy(src,dest,n) __builtin_memmove((void *)(dest), (const void *)(src), (size_t)(n))
+//#define memmove(dest,src,n) __builtin_memmove((void *)(dest), (const void *)(src), (size_t)(n))
 #endif
 
 
@@ -37,6 +40,7 @@
 #define roundup2(x, y)  (((x)+((y)-1))&(~((y)-1))) /* if y is powers of two */
 #define howmany(x, y)   (((x)+((y)-1))/(y))
 #define roundup(x, y)   ((((x)+((y)-1))/(y))*(y))  /* to any y */
+#define rounddown(x, y) (((x)/(y))*(y))
 
 
 // <sys/libkern.h>

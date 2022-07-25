@@ -445,6 +445,40 @@ tcp_maxseg(const struct tcpcb *tp)
     return (tp->t_maxseg - optlen);
 }
 
+u_int
+tcp_fixed_maxseg(const struct tcpcb *tp)
+{
+    u_int optlen;
+
+    if (tp->t_flags & TF_NOOPT)
+        return (tp->t_maxseg);
+
+    /*
+     * Here we have a simplified code from tcp_addoptions(),
+     * without a proper loop, and having most of paddings hardcoded.
+     * We might make mistakes with padding here in some edge cases,
+     * but this is harmless, since result of tcp_maxseg() is used
+     * only in cwnd and ssthresh estimations.
+     */
+    if (TCPS_HAVEESTABLISHED(tp->t_state)) {
+        if (tp->t_flags & TF_RCVD_TSTMP)
+            optlen = TCPOLEN_TSTAMP_APPA;
+        else
+            optlen = 0;
+    } else {
+        if (tp->t_flags & TF_REQ_TSTMP)
+            optlen = TCPOLEN_TSTAMP_APPA;
+        else
+            optlen = PADTCPOLEN(TCPOLEN_MAXSEG);
+        if (tp->t_flags & TF_REQ_SCALE)
+            optlen += PADTCPOLEN(TCPOLEN_WINDOW);
+        if (tp->t_flags & TF_SACK_PERMIT)
+            optlen += PADTCPOLEN(TCPOLEN_SACK_PERMITTED);
+    }
+    optlen = min(optlen, TCP_MAXOLEN);
+    return (tp->t_maxseg - optlen);
+}
+
 
 /*
  * A subroutine which makes it easy to track TCP state changes with DTrace.

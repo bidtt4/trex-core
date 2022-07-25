@@ -364,6 +364,12 @@ tcp_src = SrcGroup(dir='src/44bsd/netinet',
 
         'cc/cc_newreno.c',
         'cc/cc_cubic.c',
+
+        'subr_filter.c',
+
+        'tcp_stacks/sack_filter.c',
+        'tcp_stacks/rack_bbr_common.c',
+        'tcp_stacks/bbr.c',
         ]);
 
 # STX - common code

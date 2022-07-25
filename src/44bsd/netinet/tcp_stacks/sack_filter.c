@@ -23,6 +23,7 @@
  * SUCH DAMAGE.
  *
  */
+#if 0   // BBR_INT
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 #ifndef _KERNEL
@@ -47,6 +48,19 @@ __FBSDID("$FreeBSD$");
 #include <limits.h>
 #include <getopt.h>
 #endif
+#else   // BBR_INT
+#include "sys_inet.h"
+#include "tcp_var.h"
+#include "tcp_seq.h"
+
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define _KERNEL
+#define panic(x...)    assert(0)
+
+#endif  // BBR_INT
 #include "sack_filter.h"
 
 /*

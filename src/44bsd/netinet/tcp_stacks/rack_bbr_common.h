@@ -86,7 +86,7 @@
 
 #ifdef _KERNEL
 /* We have only 7 bits in rack so assert its true */
-CTASSERT((PACE_TMR_MASK & 0x80) == 0);
+//CTASSERT((PACE_TMR_MASK & 0x80) == 0);
 #ifdef KERN_TLS
 uint32_t ctf_get_opt_tls_size(struct socket *so, uint32_t rwnd);
 #endif

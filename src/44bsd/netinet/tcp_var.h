@@ -142,8 +142,11 @@ struct tcpcb {
 
     /* Cache line 1 */
     struct tcp_function_block *t_fb;/* TCP function call block */
+    void	*t_fb_ptr;		/* Pointer to t_fb specific data */
     u_short t_maxseg;		/* maximum segment size */
-    u_short t_state;		/* state of this connection */
+    u_char t_state;		/* state of this connection */
+    u_char t_delayed_ack: 7;    /* (BBR) Delayed ack variable */
+    u_char t_fin_is_rst: 1;     /* (BBR) Are fin's treated as resets */
     u_int	t_flags;
     tcp_seq	snd_una;		/* sent but unacknowledged */
     tcp_seq	snd_max;		/* highest sequence number sent;
@@ -153,6 +156,7 @@ struct tcpcb {
     tcp_seq	snd_up;			/* send urgent pointer */
     uint32_t  snd_wnd;		/* send window */
     uint32_t  snd_cwnd;		/* congestion-controlled window */
+    uint32_t t_peakrate_thr;        /* (BBR) pre-calculated peak rate threshold */
     /* Cache line 2 */
     u_int32_t  ts_offset;		/* our timestamp offset */
     int	rcv_numsacks;		/* # distinct sack blks present */
@@ -183,6 +187,7 @@ struct tcpcb {
 
     tcp_seq	irs;			/* initial receive sequence number */
     tcp_seq	iss;			/* initial send sequence number */
+    u_int       t_acktime;              /* RACK and BBR incoming new data was acked */
     u_int	t_sndtime;		/* time last data was sent */
     u_int	ts_recent_age;		/* when last updated */
     tcp_seq	snd_recover;		/* for use in NewReno Fast Recovery */
