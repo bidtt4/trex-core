@@ -89,7 +89,9 @@ struct hpts_diag {
 /* Each hpts has its own p_mtx which is used for locking */
 struct tcp_hpts_entry {
 	/* Cache line 0x00 */
+#if 0
 	struct mtx p_mtx;	/* Mutex for hpts */
+#endif
 	struct timeval p_mysleep;	/* Our min sleep time */
 	uint64_t syscall_cnt;
 	uint64_t sleeping;	/* What the actual sleep was (if sleeping) */
@@ -123,15 +125,19 @@ struct tcp_hpts_entry {
 	uint32_t saved_prev_slot;       /* for logging */
 	uint32_t p_delayed_by;	/* How much were we delayed by */
 	/* Cache line 0x80 */
+#if 0
 	struct sysctl_ctx_list hpts_ctx;
 	struct sysctl_oid *hpts_root;
+#endif
 	struct intr_event *ie;
 	void *ie_cookie;
 	uint16_t p_num;		/* The hpts number one per cpu */
 	uint16_t p_cpu;		/* The hpts CPU */
 	/* There is extra space in here */
 	/* Cache line 0x100 */
+#if 0
 	struct callout co __aligned(CACHE_LINE_SIZE);
+#endif
 }               __aligned(CACHE_LINE_SIZE);
 
 struct tcp_hptsi {
@@ -287,7 +293,9 @@ tcp_tv_to_lusectick(const struct timeval *sv)
 static __inline void
 tcp_hpts_unlock(struct tcp_hpts_entry *hpts)
 {
+#if 0
 	mtx_unlock(&hpts->p_mtx);
+#endif
 }
 
 static __inline uint32_t
@@ -297,7 +305,9 @@ tcp_gethptstick(struct timeval *sv)
 
 	if (sv == NULL)
 		sv = &tv;
+#if 0
 	microuptime(sv);
+#endif
 	return (tcp_tv_to_hptstick(sv));
 }
 
@@ -308,7 +318,9 @@ tcp_get_usecs(struct timeval *tv)
 
 	if (tv == NULL)
 		tv = &tvd;
+#if 0
 	microuptime(tv);
+#endif
 	return (tcp_tv_to_usectick(tv));
 }
 

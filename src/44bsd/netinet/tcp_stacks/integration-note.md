@@ -96,10 +96,20 @@ Included
     - `bbr_stopall`, `bbr_timer_activate`, `bbr_timer_active`, `bbr_timer_stop`
     - `bbr_handoff_ok`, `bbr_mtu_chg`, `bbr_pru_options`
 
+  - `bbr_log_...`: remove unsupported log features
+
   (1) removed in the original stack also
 
 
 ### Required Features
+
+#### PACER
+
+"BBR uses pacing as the primary control. A cwnd control is left in as a safety net, for cases where the pacing rate temporarily exceeds the delivery rate. This is normal in BBR during bandwidth probes, and also occurs when the delivery rate reduces." -- <https://groups.google.com/g/bbr-dev/c/KHvgqYIl1cE>
+
+But the pacing by HW is optional and will not be integrated in this phase.
+It is controlled by RATELIMIT feature in `tcp_ratelimit.c`. So it is not included.
+
 
 #### Time Filter
 
@@ -109,8 +119,12 @@ BBR uses the routines provided by `sys/tim_filter.h` and `kern/subr_filter.c`.
 
 #### HPTS
 
+The main purpose of HPTS is to provide a mechanism for pacing packets out onto the wire.
+BBR would schedule `tcp_output()` itself by calling `tcp_hpts_insert(tp, ...)`.
 
-#### PACER
+Several routines are associated to TCP stack implementation.
+So the routines should be kept but the timer event handler could be replaced by T-Rex one.
+`netinet/tcp_hpts.h` and `netinet/tcp_hpts.c` files implemented this feature.
 
 
 

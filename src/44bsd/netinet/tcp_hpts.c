@@ -23,6 +23,7 @@
  * SUCH DAMAGE.
  *
  */
+#if 0
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -30,6 +31,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet6.h"
 #include "opt_rss.h"
 #include "opt_tcpdebug.h"
+#endif
 
 /**
  * Some notes about usage.
@@ -125,6 +127,7 @@ __FBSDID("$FreeBSD$");
  *
  */
 
+#if 0
 #include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/interrupt.h>
@@ -186,8 +189,25 @@ __FBSDID("$FreeBSD$");
 #ifdef tcp_offload
 #include <netinet/tcp_offload.h>
 #endif
+#else
+#include "sys_inet.h"
+#define TCPSTATES		/* for logging */
+#include "tcp_var.h"
+#include "tcp_seq.h"
+#include "tcp_mbuf.h"
 
-MALLOC_DEFINE(M_TCPHPTS, "tcp_hpts", "TCP hpts");
+#define _KERNEL
+#define CACHE_LINE_SIZE 128
+#include "tcp_hpts.h"
+
+typedef uint64_t *counter_u64_t;
+#undef  HPTS_MTX_ASSERT
+#define HPTS_MTX_ASSERT(x)
+#define INP_WLOCK_ASSERT(x)
+#define mtx_unlock(x)
+#endif
+
+//MALLOC_DEFINE(M_TCPHPTS, "tcp_hpts", "TCP hpts");
 #ifdef RSS
 static int tcp_bind_threads = 1;
 #else
@@ -212,10 +232,12 @@ static int32_t dynamic_max_sleep = DYNAMIC_MAX_SLEEP;
 
 
 
+#if 0
 SYSCTL_NODE(_net_inet_tcp, OID_AUTO, hpts, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "TCP Hpts controls");
 SYSCTL_NODE(_net_inet_tcp_hpts, OID_AUTO, stats, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
     "TCP Hpts statistics");
+#endif
 
 #define	timersub(tvp, uvp, vvp)						\
 	do {								\
@@ -229,15 +251,18 @@ SYSCTL_NODE(_net_inet_tcp_hpts, OID_AUTO, stats, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
 
 static int32_t tcp_hpts_precision = 120;
 
+#ifdef NUMA
 struct hpts_domain_info {
 	int count;
 	int cpu[MAXCPU];
 };
 
 struct hpts_domain_info hpts_domains[MAXMEMDOM];
+#endif
 
 counter_u64_t hpts_hopelessly_behind;
 
+#if 0
 SYSCTL_COUNTER_U64(_net_inet_tcp_hpts_stats, OID_AUTO, hopeless, CTLFLAG_RD,
     &hpts_hopelessly_behind,
     "Number of times hpts could not catch up and was behind hopelessly");
@@ -318,20 +343,24 @@ SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, dyn_minsleep, CTLFLAG_RW,
 SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, dyn_maxsleep, CTLFLAG_RW,
     &dynamic_max_sleep, 5000,
     "What is the dynamic maxsleep value?");
+#endif
 
 
 
 
 
 static int32_t max_pacer_loops = 10;
+#if 0
 SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, loopmax, CTLFLAG_RW,
     &max_pacer_loops, 10,
     "What is the maximum number of times the pacer will loop trying to catch up");
+#endif
 
 #define HPTS_MAX_SLEEP_ALLOWED (NUM_OF_HPTSI_SLOTS/2)
 
 static uint32_t hpts_sleep_max = HPTS_MAX_SLEEP_ALLOWED;
 
+#if 0
 static int
 sysctl_net_inet_tcp_hpts_max_sleep(SYSCTL_HANDLER_ARGS)
 {
@@ -378,11 +407,13 @@ SYSCTL_PROC(_net_inet_tcp_hpts, OID_AUTO, minsleep,
     &tcp_min_hptsi_time, 0,
     &sysctl_net_inet_tcp_hpts_min_sleep, "IU",
     "The minimum time the hpts must sleep before processing more slots");
+#endif
 
 static int ticks_indicate_more_sleep = TICKS_INDICATE_MORE_SLEEP;
 static int ticks_indicate_less_sleep = TICKS_INDICATE_LESS_SLEEP;
 static int tcp_hpts_no_wake_over_thresh = 1;
 
+#if 0
 SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, more_sleep, CTLFLAG_RW,
     &ticks_indicate_more_sleep, 0,
     "If we only process this many or less on a timeout, we need longer sleep on the next callout");
@@ -392,11 +423,13 @@ SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, less_sleep, CTLFLAG_RW,
 SYSCTL_INT(_net_inet_tcp_hpts, OID_AUTO, nowake_over_thresh, CTLFLAG_RW,
     &tcp_hpts_no_wake_over_thresh, 0,
     "When we are over the threshold on the pacer do we prohibit wakeups?");
+#endif
 
 static void
 tcp_hpts_log(struct tcp_hpts_entry *hpts, struct tcpcb *tp, struct timeval *tv,
 	     int slots_to_run, int idx, int from_callout)
 {
+#if 0
 	union tcp_log_stackspecific log;
 	/*
 	 * Unused logs are
@@ -429,6 +462,7 @@ tcp_hpts_log(struct tcp_hpts_entry *hpts, struct tcpcb *tp, struct timeval *tv,
 		       &tp->t_inpcb->inp_socket->so_snd,
 		       BBR_LOG_HPTSDIAG, 0,
 		       0, &log, false, tv);
+#endif
 }
 
 static void
@@ -442,7 +476,9 @@ tcp_wakehpts(struct tcp_hpts_entry *hpts)
 	}
 	if (hpts->p_hpts_wake_scheduled == 0) {
 		hpts->p_hpts_wake_scheduled = 1;
+#ifdef BBR_INT
 		swi_sched(hpts->ie_cookie, 0);
+#endif
 	}
 }
 
@@ -452,7 +488,9 @@ hpts_timeout_swi(void *arg)
 	struct tcp_hpts_entry *hpts;
 
 	hpts = (struct tcp_hpts_entry *)arg;
+#ifdef BBR_INT
 	swi_sched(hpts->ie_cookie, 0);
+#endif
 }
 
 static inline void
@@ -461,7 +499,9 @@ hpts_sane_pace_remove(struct tcp_hpts_entry *hpts, struct inpcb *inp, struct hpt
 	HPTS_MTX_ASSERT(hpts);
 	KASSERT(hpts->p_cpu == inp->inp_hpts_cpu, ("%s: hpts:%p inp:%p incorrect CPU", __FUNCTION__, hpts, inp));
 	KASSERT(inp->inp_in_hpts != 0, ("%s: hpts:%p inp:%p not on the hpts?", __FUNCTION__, hpts, inp));
+#ifdef BBR_INT
 	TAILQ_REMOVE(head, inp, inp_hpts);
+#endif
 	hpts->p_on_queue_cnt--;
 	KASSERT(hpts->p_on_queue_cnt >= 0,
 		("Hpts goes negative inp:%p hpts:%p",
@@ -486,7 +526,9 @@ hpts_sane_pace_insert(struct tcp_hpts_entry *hpts, struct inpcb *inp, struct hpt
 	inp->inp_in_hpts = 1;
 	hpts->p_on_queue_cnt++;
 	if (noref == 0) {
+#ifdef BBR_INT
 		in_pcbref(inp);
+#endif
 	}
 }
 
@@ -536,6 +578,7 @@ tcp_cur_hpts(struct inpcb *inp)
 	return (hpts);
 }
 
+#if 0
 struct tcp_hpts_entry *
 tcp_hpts_lock(struct inpcb *inp)
 {
@@ -575,6 +618,7 @@ again:
 	}
 	return (hpts);
 }
+#endif
 
 static void
 tcp_remove_hpts_ref(struct inpcb *inp, struct tcp_hpts_entry *hpts, int line)
@@ -2164,6 +2208,7 @@ tcp_init_hptsi(void *st)
 		for (j = 0; j < NUM_OF_HPTSI_SLOTS; j++) {
 			TAILQ_INIT(&hpts->p_hptss[j]);
 		}
+#if 0
 		sysctl_ctx_init(&hpts->hpts_ctx);
 		sprintf(unit, "%d", i);
 		hpts->hpts_root = SYSCTL_ADD_NODE(&hpts->hpts_ctx,
@@ -2222,6 +2267,7 @@ tcp_init_hptsi(void *st)
 		    OID_AUTO, "syscall_cnt", CTLFLAG_RD,
 		    &hpts->syscall_cnt, 0,
 		    "How many times we had syscalls on this hpts");
+#endif
 
 		hpts->p_hpts_sleep_time = hpts_sleep_max;
 		hpts->p_num = i;
@@ -2294,5 +2340,7 @@ tcp_init_hptsi(void *st)
 #endif
 }
 
+#if 0
 SYSINIT(tcphptsi, SI_SUB_SOFTINTR, SI_ORDER_ANY, tcp_init_hptsi, NULL);
 MODULE_VERSION(tcphpts, 1);
+#endif
