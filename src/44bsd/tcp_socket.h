@@ -348,6 +348,7 @@ struct CEmulAppCmdKeepAlive {
 
 struct CEmulAppCmdTemplate {
     uint16_t    m_tg_id;
+    bool        m_block;    /* waiting for the flow done or not */
 };
 
 
@@ -750,7 +751,7 @@ public:
 
     void inc_app_stats(uint8_t id, uint64_t val);
 
-    void exec_template_flow(uint16_t tg_id);
+    void exec_template_flow(uint16_t tg_id, bool do_wait);
     void resume_by(CEmulApp* app);
 
     void run_dpc_callbacks();

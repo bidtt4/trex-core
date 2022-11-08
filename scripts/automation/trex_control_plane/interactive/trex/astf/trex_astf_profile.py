@@ -301,16 +301,24 @@ class ASTFCmdTxMode(ASTFCmd):
         self.fields['flags'] = flags
 
 # Template Control Commands #
-class ASTFCmdSetTemplate(ASTFCmd):
+class ASTFCmdTemplateBase(ASTFCmd):
     def __init__(self, id_val):
-        super(ASTFCmdSetTemplate, self).__init__()
-        self.fields['name'] = 'set_template'
+        super(ASTFCmdTemplateBase, self).__init__()
         self.fields['tg_id'] =  id_val
 
-class ASTFCmdExecTemplate(ASTFCmd):
-    def __init__(self):
-        super(ASTFCmdExecTemplate, self).__init__()
+class ASTFCmdSetTemplate(ASTFCmdTemplateBase):
+    def __init__(self, id_val):
+        super(ASTFCmdSetTemplate, self).__init__(id_val)
+        self.fields['name'] = 'set_template'
+
+class ASTFCmdExecTemplate(ASTFCmdTemplateBase):
+    def __init__(self, id_val = 0, block = True):
+        super(ASTFCmdExecTemplate, self).__init__(id_val)
         self.fields['name'] = 'exec_template'
+        if not id_val:
+            del self.fields['tg_id']
+        if not block:
+            self.fields['block'] = block
 
 
 class ASTFProgram(object):
@@ -973,10 +981,11 @@ class ASTFProgram(object):
 
     def set_next_template(self, tg_id):
         """
-        Set next template to generate new flow with the same association
+        Set next template to generate new flow with the same association.
+        exec_template will use the template at any template program in the same profile.
 
         :parameters:
-            tg_name  : string
+            tg_id  : string
                 template name to generate new flow
         """
         ver_args = {"types":
@@ -986,12 +995,24 @@ class ASTFProgram(object):
 
         self.fields['commands'].append(ASTFCmdSetTemplate(tg_id))
 
-    def exec_template(self):
+    def exec_template(self, tg_id = None, block = True):
         """
         Generate a flow from given template and wait for it done
 
+        :parameters:
+            tg_id  : string
+                template name to generate new flow.
+                optional, default value is template name from set_next_template.
+            block  : bool
+                optional, when the value is False, immediately return without waiting for the flow done.
+                default value is True.
         """
-        self.fields['commands'].append(ASTFCmdExecTemplate())
+        ver_args = {"types":
+                    [{"name": "tg_id", 'arg': tg_id, "t": [str], "must": False},
+                     {"name": "block", 'arg': block, "t": bool, "must": False}]
+                    }
+
+        self.fields['commands'].append(ASTFCmdExecTemplate(tg_id, block))
 
 
     def _set_cmds(self, cmds):
@@ -1128,7 +1149,7 @@ class ASTFProgram(object):
                 id_name=cmd.fields['var_id']
                 if isinstance(id_name,str):
                     cmd.fields['var_id']=self.__get_tick_var_index(id_name)
-            if isinstance(cmd, ASTFCmdSetTemplate):
+            if isinstance(cmd, ASTFCmdTemplateBase) and 'tg_id' in cmd.fields:
                 id_name=cmd.fields['tg_id']
                 if isinstance(id_name,str):
                     cmd.fields['tg_id']=self.tg_name_to_id[id_name]

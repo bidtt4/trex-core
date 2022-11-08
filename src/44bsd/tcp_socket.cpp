@@ -629,9 +629,14 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         }
     case tcEXEC_TEMPLATE:
         {
-            if (m_next_tg_id) {
-                exec_template_flow(m_next_tg_id);
-            } else {
+            uint16_t tg_id = cmd->u.m_template.m_tg_id ? : m_next_tg_id;
+            bool block = tg_id ? cmd->u.m_template.m_block: false;
+
+            if (tg_id) {
+                exec_template_flow(tg_id, block);
+            }
+
+            if (!block) {
                 return next_cmd();
             }
         }
@@ -674,13 +679,16 @@ void CEmulApp::inc_app_stats(uint8_t id, uint64_t val){
     m_pctx->m_appstat.AddStatsVal(m_flow->m_tg_id, id, val);
 }
 
-void CEmulApp::exec_template_flow(uint16_t tg_id){
+void CEmulApp::exec_template_flow(uint16_t tg_id, bool do_wait){
 
     m_state=te_NONE;
 
     auto lpt = m_pctx->m_ctx->get_thread();
     if (lpt) {
         lpt->generate_flow(m_pctx, tg_id, m_flow);
+        if (!do_wait) {
+            m_flow->clear_exec_flow();
+        }
     }
 
     INC_APP_STAT(m_pctx, m_flow->m_tg_id, flows_total);

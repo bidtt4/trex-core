@@ -637,6 +637,26 @@ void CAstfDB::fill_set_template(uint32_t program_index,
     assert((res.u.m_template.m_tg_id - 1) < m_val["tg_names"].size());
 }
 
+void CAstfDB::fill_exec_template(uint32_t program_index,
+                                uint32_t cmd_index,
+                                CEmulAppCmd &res) {
+    Json::Value cmd;
+    assert_cmd(program_index, cmd_index, "exec_template", cmd);
+
+    uint16_t tg_id = 0; // default is that template is not specified
+    bool block = true;  // default is blocking
+
+    if (cmd["tg_id"] != Json::nullValue) {
+        tg_id = cmd["tg_id"].asUInt();
+    }
+    if (cmd["block"] != Json::nullValue) {
+        block = cmd["block"].asBool();
+    }
+
+    res.u.m_template.m_tg_id = tg_id;
+    res.u.m_template.m_block = block;
+}
+
 void CAstfDB::fill_tx_pkt(uint32_t program_index, 
                             uint32_t cmd_index,
                             uint8_t socket_id,
@@ -1784,6 +1804,7 @@ bool CAstfDB::convert_progs(uint8_t socket_id) {
                 break;
             case tcEXEC_TEMPLATE :
                 cmd.m_cmd = tcEXEC_TEMPLATE;
+                fill_exec_template(program_index, cmd_index,cmd);
                 prog->add_cmd(cmd);
                 break;
 

@@ -555,6 +555,7 @@ private:
     void fill_add_stats(uint32_t program_index, uint32_t cmd_index, CEmulAppCmd &res);
     void fill_add_tick_stats(uint32_t program_index, uint32_t cmd_index, CEmulAppCmd &res);
     void fill_set_template(uint32_t program_index, uint32_t cmd_index, CEmulAppCmd &res);
+    void fill_exec_template(uint32_t program_index, uint32_t cmd_index, CEmulAppCmd &res);
 
     void fill_tx_pkt(uint32_t program_index, 
                      uint32_t cmd_index,
