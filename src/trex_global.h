@@ -636,6 +636,7 @@ public:
         m_tunnel_loopback = false;
         m_tunnel_enabled = false;
         m_rx_dp_ring_size = 0;
+        m_garp_ignore = false;
     }
 
     CParserOption(){
@@ -709,6 +710,7 @@ public:
     bool            m_astf_best_effort_mode;
     bool            m_tunnel_loopback;
     uint16_t        m_rx_dp_ring_size;              // Size of rings between Dp and Rx.
+    bool            m_garp_ignore;
 
 
 public:
