@@ -109,18 +109,21 @@ HOT_FUNC void CUdpFlow::update_checksum_and_lenght(CFlowTemplate *ftp,
             ipv6->setPayloadLen(udp_pyld_bytes+UDP_HEADER_LEN);
             udp->setChecksumRaw(pkt_AddInetChecksumRaw(ftp->m_l4_pseudo_checksum ,PKT_NTOHS(udp_pyld_bytes+UDP_HEADER_LEN)));
         }
+    }//else{
+    /* no optimization */
+    udp->setChecksumRaw(0);
+    if (!ftp->m_is_ipv6){
+        IPHeader * ipv4=(IPHeader *)(p+ftp->m_offset_ip);
+        ipv4->setTotalLength(udp_pyld_bytes+UDP_HEADER_LEN+IPV4_HDR_LEN);
+        udp->calcCheckSum(ipv4, udp->getLength(),0);
+        ipv4->updateCheckSumFast();         
     }else{
-        /* no optimization */
-        udp->setChecksumRaw(0);
-        if (!ftp->m_is_ipv6){
-            IPHeader * lpv4=(IPHeader *)(p+ftp->m_offset_ip);
-            lpv4->setTotalLength(udp_pyld_bytes+UDP_HEADER_LEN+IPV4_HDR_LEN);
-            lpv4->updateCheckSumFast();
-        }else{
-            IPv6Header * Ipv6=(IPv6Header *)(p+ftp->m_offset_ip);
-            Ipv6->setPayloadLen(udp_pyld_bytes+UDP_HEADER_LEN);
-        }
+        IPv6Header * Ipv6=(IPv6Header *)(p+ftp->m_offset_ip);
+        Ipv6->setPayloadLen(udp_pyld_bytes+UDP_HEADER_LEN);
+        udp->calcCheckSum(Ipv6, udp->getLength(),0);
+        
     }
+    //}
 }
 
 

@@ -1954,21 +1954,104 @@ tcp_getsocket(struct tcpcb *tp)
 {
     return (struct socket*)&((CTcpCb*)tp)->m_socket;
 }
+static inline uint16_t
+checksum_fold(uint64_t sum) {
+    while (sum & ~0x00000000FFFFFFFFull) {
+        sum = (sum >> 32) + (sum & 0x00000000FFFFFFFFull);
+    }
+    while (sum & 0xFFFF0000ul) {
+        sum = (sum >> 16) + (sum & 0xFFFFull);
+    }
+
+    return ~sum;
+}
+
+static inline uint64_t
+raw_csum_calc(const void* payload, size_t payloadLen) {
+    /* Main loop: 16 bits at a time.*/
+    uint64_t sum = 0x0;
+    const uint16_t* wordPayload = static_cast<const uint16_t*>(payload);
+    for (; payloadLen >= sizeof(*wordPayload); payloadLen -= sizeof(*wordPayload)) {
+        sum += *wordPayload++;
+    }
+
+    if (payloadLen > 0) {
+        const uint8_t* bytePayload = reinterpret_cast<const uint8_t*>(wordPayload);
+        sum += PAL_NTOHS(*bytePayload << 8); /* RFC says pad last byte */
+    }
+
+    return sum;
+}
+
+/**
+ * @brief Calculate the checksum for ip packet.
+ *
+ * @param packet
+ *     Pointer to packet.
+ * @return
+ *     The checksum to set in the L4 header.
+ */
+static inline uint16_t mbuf_tcpudp_cksum(struct rte_mbuf *packet, uint64_t ol_flags)
+{
+    uint64_t cksum;
+    if (packet->ol_flags & RTE_MBUF_F_TX_IPV4) {
+        struct rte_ipv4_hdr *ipv4_hdr = rte_pktmbuf_mtod_offset(packet, struct rte_ipv4_hdr *, packet->l2_len);
+        cksum = (uint64_t)rte_ipv4_phdr_cksum(ipv4_hdr, ol_flags);
+    }
+    else {
+        struct rte_ipv6_hdr *ipv6_hdr = rte_pktmbuf_mtod_offset(packet, struct rte_ipv6_hdr *, packet->l2_len);
+        cksum = (uint64_t)rte_ipv6_phdr_cksum(ipv6_hdr, ol_flags);
+    }
+    struct rte_mbuf *m;
+    void *l4_hdr = rte_pktmbuf_mtod_offset(packet, void *, packet->l2_len + packet->l3_len);
+
+    cksum += raw_csum_calc(l4_hdr, packet->l3_len * 2);
+
+    m = packet->next;
+    while (m) {
+        cksum += raw_csum_calc(rte_pktmbuf_mtod(m, void *), m->data_len);
+
+        m = m->next;
+    }
+
+    return checksum_fold(cksum);
+}
+
+static inline void tcp_pkt_update_csum(struct mbuf *m) {
+    TCPHeader *tcp = rte_pktmbuf_mtod_offset(m, TCPHeader*, m->l2_len + m->l3_len);
+    tcp->setChecksumRaw(0x0000);
+    uint16_t sum = 0;
+    if (m->ol_flags & RTE_MBUF_F_TX_IPV4) {
+        sum = mbuf_tcpudp_cksum(m, RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_TCP_CKSUM);
+    }
+    if (m->ol_flags & RTE_MBUF_F_TX_IPV6) {
+        sum = mbuf_tcpudp_cksum(m, RTE_MBUF_F_TX_IPV6 | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_TCP_CKSUM);
+    }
+    tcp->setChecksumRaw(sum);
+}
 
 int
 tcp_ip_output(struct tcpcb *tp, struct mbuf *m, int iptos)
 {
     CTcpPerThreadCtx* ctx = ((CTcpCb*)tp)->m_ctx;
 
-    if (unlikely(iptos)) {
-        if (m->ol_flags & RTE_MBUF_F_TX_IPV4) {
-            IPHeader* ipv4 = rte_pktmbuf_mtod_offset(m, IPHeader*, m->l2_len);
+    
+    if (m->ol_flags & RTE_MBUF_F_TX_IPV4) {
+        IPHeader* ipv4 = rte_pktmbuf_mtod_offset(m, IPHeader*, m->l2_len);
+        if (unlikely(iptos)) {
             ipv4->updateTos(ipv4->getTOS() | iptos);
         }
-        if (m->ol_flags & RTE_MBUF_F_TX_IPV6) {
-            IPv6Header* ipv6 = rte_pktmbuf_mtod_offset(m, IPv6Header*, m->l2_len);
+        // update checksums
+        ipv4->ClearCheckSum();
+        tcp_pkt_update_csum(m);
+        ipv4->updateCheckSumFast();
+    }
+    if (m->ol_flags & RTE_MBUF_F_TX_IPV6) {
+        IPv6Header* ipv6 = rte_pktmbuf_mtod_offset(m, IPv6Header*, m->l2_len);
+        if (unlikely(iptos)) {
             ipv6->setTrafficClass(ipv6->getTrafficClass() | iptos);
         }
+        tcp_pkt_update_csum(m);
     }
 
     return ctx->m_cb->on_tx(ctx, (CTcpCb*)tp, (struct rte_mbuf*)m);
