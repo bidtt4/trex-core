@@ -67,7 +67,7 @@ extern int tcp_compute_pipe(struct tcpcb *);
 /* tcp_subr.c */
 extern u_int tcp_maxseg(const struct tcpcb *);
 
-#define V_tcp_abc_l_var     2
+#define V_tcp_abc_l_var     44
 #define V_tcp_do_rfc3465    1
 
 #define V_cc_do_abe             0
