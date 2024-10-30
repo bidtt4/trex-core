@@ -554,7 +554,6 @@ struct tcp_tune {
 #define V_tcp_do_rfc1323            TCP_TUNE(tcp_do_rfc1323)           // 1
 #define V_tcprexmtthresh            TCP_TUNE(tcprexmtthresh)           // 3
 #define V_tcp_delacktime            TCP_TUNE(tcp_delacktime)
-#define V_tcp_abc_l_var             TCP_TUNE(tcp_abc_l_var)
 
 /* inline functions from tcp_timer.c */
 

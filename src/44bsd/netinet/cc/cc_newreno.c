@@ -58,6 +58,7 @@
 
 #include "sys_inet.h"
 #include "tcp_var.h"
+#include <stdio.h>
 
 #include "cc/cc_newreno.h"
 
@@ -149,9 +150,10 @@ newreno_ack_received(struct cc_var *ccv, uint16_t type)
              * XXXLAS: Find a way to signal SS after RTO that
              * doesn't rely on tcpcb vars.
              */
+            printf("!!!!!!!!!!!!!!!!! V_tcp_abc_l_var = %d !!!!!!!!!!!!!!!!", ccv->ccvc.tcp->t_tune->tcp_abc_l_var);
             if (CCV(ccv, snd_nxt) == CCV(ccv, snd_max))
                 incr = min(ccv->bytes_this_ack,
-                    ccv->nsegs * V_tcp_abc_l_var *
+                    ccv->nsegs * ccv->ccvc.tcp->t_tune->tcp_abc_l_var *
                     CCV(ccv, t_maxseg));
             else
                 incr = min(ccv->bytes_this_ack, CCV(ccv, t_maxseg));

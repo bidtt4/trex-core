@@ -719,6 +719,7 @@ CTcpTunableCtx::CTcpTunableCtx() {
     tcp_ttl=0;
 
     tcp_reass_maxqlen = 100;
+    tcp_abc_l_var = 2;
 }
 
 void CTcpTunableCtx::update_tuneables(CTcpTuneables *tune) {
@@ -801,6 +802,10 @@ void CTcpTunableCtx::update_tuneables(CTcpTuneables *tune) {
 
     if (tune->is_valid_field(CTcpTuneables::tcp_reass_maxqlen)) {
         tcp_reass_maxqlen = (int)tune->m_tcp_reass_maxqlen;
+    }
+
+    if (tune->is_valid_field(CTcpTuneables::tcp_abc_l_var)) {
+        tcp_abc_l_var = (int)tune->m_tcp_abc_l_var;
     }
 }
 
