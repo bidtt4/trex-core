@@ -126,6 +126,7 @@ class ASTFGlobalInfo(ASTFGlobalInfoBase):
                 {"name": "do_ecn", "type": [int]},
                 {"name": "cc_algo", "type": [int]},
                 {"name": "reass_maxqlen", "type": [int]},
+                {"name": "abc_l_var", "type": [int]},
             ],
         "ip": [
             {"name": "tos", "type": [int]},
