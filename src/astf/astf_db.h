@@ -88,6 +88,7 @@ class CTcpTuneables {
         tcp_do_ecn      = 0x800000,
 
         tcp_reass_maxqlen = 0x1000000,
+        tcp_abc_l_var = 0x2000000,
     };
     enum {
         no_delay_mask_nagle = 0x1,
@@ -124,6 +125,7 @@ class CTcpTuneables {
         m_tcp_do_ecn=0;
 
         m_tcp_reass_maxqlen=0;
+        m_tcp_abc_l_var=0;
 
         memset(m_ipv6_src,0,16);
         memset(m_ipv6_dst,0,16);
@@ -176,6 +178,7 @@ class CTcpTuneables {
     uint8_t  m_tcp_cc_algo;
 
     uint16_t  m_tcp_reass_maxqlen;
+    uint16_t  m_tcp_abc_l_var;
 
  private:
     uint32_t m_bitfield;

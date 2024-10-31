@@ -1103,6 +1103,10 @@ bool CAstfDB::read_tunables(CTcpTuneables *tune, Json::Value tune_json) {
             if (read_tunable_uint16(tune,json,"reass_maxqlen",CTcpTuneables::tcp_reass_maxqlen,tune->m_tcp_reass_maxqlen)){
                 tunable_min_max_u32("reass_maxqlen",tune->m_tcp_reass_maxqlen,0,1000);
             }
+
+            if (read_tunable_uint16(tune,json,"abc_l_var",CTcpTuneables::tcp_abc_l_var,tune->m_tcp_abc_l_var)){
+                tunable_min_max_u32("abc_l_var",tune->m_tcp_abc_l_var,2,65533);
+            }
         }
 
         if (tune_json["ipv6"] != Json::nullValue) {
