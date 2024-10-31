@@ -517,6 +517,7 @@ struct tcp_tune {
     int tcp_keepintvl;      /* (TCPTV_KEEPINTVL) time between keepalive probes */
     int tcp_keepcnt;        /* (TCPTV_KEEPCNT) Number of keepalive probes to send */
     int tcp_delacktime;     /* (TCPTV_DELACK) Time before a delayed ACK is sent */
+    int tcp_abc_l_var;      /* Multiplier to calculate the step size for congestion window (abc_l_var * mssdflt) */
 };
 
 #define TCP_TUNE(name)              tp->t_tune->name
