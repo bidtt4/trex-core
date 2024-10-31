@@ -67,7 +67,6 @@ extern int tcp_compute_pipe(struct tcpcb *);
 /* tcp_subr.c */
 extern u_int tcp_maxseg(const struct tcpcb *);
 
-#define V_tcp_abc_l_var     2
 #define V_tcp_do_rfc3465    1
 
 #define V_cc_do_abe             0
@@ -152,7 +151,7 @@ newreno_ack_received(struct cc_var *ccv, uint16_t type)
              */
             if (CCV(ccv, snd_nxt) == CCV(ccv, snd_max))
                 incr = min(ccv->bytes_this_ack,
-                    ccv->nsegs * V_tcp_abc_l_var *
+                    ccv->nsegs * ccv->ccvc.tcp->t_tune->tcp_abc_l_var *
                     CCV(ccv, t_maxseg));
             else
                 incr = min(ccv->bytes_this_ack, CCV(ccv, t_maxseg));
