@@ -555,6 +555,7 @@ struct tcp_tune {
 #define V_tcprexmtthresh            TCP_TUNE(tcprexmtthresh)           // 3
 #define V_tcp_delacktime            TCP_TUNE(tcp_delacktime)
 
+
 /* inline functions from tcp_timer.c */
 
 #define tcp_getticks(tp)        *((tp)->m_timer.now_tick)

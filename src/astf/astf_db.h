@@ -124,8 +124,8 @@ class CTcpTuneables {
         m_tcp_cc_algo=0;
         m_tcp_do_ecn=0;
 
-        m_tcp_reass_maxqlen = 0;
-        m_tcp_abc_l_var = 0;
+        m_tcp_reass_maxqlen=0;
+        m_tcp_abc_l_var=0;
 
         memset(m_ipv6_src,0,16);
         memset(m_ipv6_dst,0,16);

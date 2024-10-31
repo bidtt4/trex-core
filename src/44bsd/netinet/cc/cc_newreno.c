@@ -58,7 +58,6 @@
 
 #include "sys_inet.h"
 #include "tcp_var.h"
-#include <stdio.h>
 
 #include "cc/cc_newreno.h"
 
