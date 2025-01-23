@@ -203,7 +203,6 @@ class ASTFCmdConnect(ASTFCmd):
     def __init__(self):
         super(ASTFCmdConnect, self).__init__()
         self.fields['name'] = 'connect'
-        self.stream=True
 
 class ASTFCmdDelayRnd(ASTFCmd):
     def __init__(self,min_usec,max_usec):

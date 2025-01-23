@@ -453,18 +453,36 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         m_flags|=taDO_WAIT_FOR_CLOSE;
         /* nothing, no explict close , no next , set defer close  */
         break;
-    case tcCONNECT_WAIT :
-        {
-            m_state=te_NONE;
-            /* if already connected defer next */
-            if (m_flags&taCONNECTED) {
-                if (get_interrupt()==false) {
+    case tcCONNECT_WAIT: {
+            if (!m_program->is_stream()) {
+                if (get_emul_addon()) {
+                    m_state=te_NONE;
+                    /* if already connected defer next */
+                    if (m_flags&taCONNECTED) {
+                        if (get_interrupt()==false) {
+                            return next_cmd();
+                        }else{
+                            m_flags|=taDO_DPC_NEXT;
+                        }
+                    } else {
+                        get_emul_addon()->establish_connection(this);
+                        m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+                    }
+                } else {
                     return next_cmd();
-                }else{
-                    m_flags|=taDO_DPC_NEXT;
                 }
-            }else{
-                m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+            } else {
+                m_state=te_NONE;
+                /* if already connected defer next */
+                if (m_flags&taCONNECTED) {
+                    if (get_interrupt()==false) {
+                       return next_cmd();
+                    }else{
+                       m_flags|=taDO_DPC_NEXT;
+                    }
+                }else{
+                  m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+             }
             }
         }
         break;
@@ -866,7 +884,8 @@ bool CEmulAppProgram::is_common_commands(tcp_app_cmd_t cmd_id){
          (cmd_id==tcADD_STATS) ||
          (cmd_id==tcADD_TICK_STATS) ||
          (cmd_id==tcSET_TEMPLATE) ||
-         (cmd_id==tcEXEC_TEMPLATE)
+         (cmd_id==tcEXEC_TEMPLATE) ||
+         (cmd_id==tcCONNECT_WAIT)
         ){
         return (true);
     }
@@ -1364,4 +1383,8 @@ void CAppStats::AddStatsVal(uint16_t tg_id, const uint8_t id, const uint64_t val
 
 
 std::vector<CEmulAddon*> CEmulAddonList::m_addon_list;
+
+void CEmulAddon::establish_connection(CEmulApp* app) {
+    app->on_bh_event(te_SOISCONNECTED);
+}
 
