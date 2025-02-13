@@ -1291,16 +1291,18 @@ HOT_FUNC bool CFlowTable::rx_handle_packet(CTcpPerThreadCtx * ctx,
 
     flow_key_t key=tuple.get_flow_key();
     uint32_t  hash=tuple.get_hash();
-   #ifdef FLOW_TABLE_DEBUG
+   //#ifdef FLOW_TABLE_DEBUG
+   printf ("-- CFlowTable::rx_handle_packet: flow tuple\n");
     tuple.dump(stdout);
     printf ("-- \n");
-   #endif
+   //#endif
 
 
     flow_hash_ent_t * lpflow;
     lpflow = m_ft.find(key,hash);
 
     if (lpflow) {
+        printf ("-- CFlowTable::rx_handle_packet: flow exists\n");
         if ( tuple.get_proto() == IPHeader::Protocol::UDP ){
             CUdpFlow *flow;
             flow = CUdpFlow::cast_from_hash_obj(lpflow);
@@ -1322,6 +1324,7 @@ HOT_FUNC bool CFlowTable::rx_handle_packet(CTcpPerThreadCtx * ctx,
     }
 
     if ( tuple.get_proto() == IPHeader::Protocol::UDP ){
+        printf ("-- CFlowTable::rx_handle_packet: no flow\n");
         return (rx_handle_packet_udp_no_flow(ctx,mbuf,lpflow,parser,tuple,ftuple,hash,port_id));
     }else{
         /* TCP */

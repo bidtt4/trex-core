@@ -359,6 +359,7 @@ void CEmulApp::check_rx_pkt_condition(){
             set_rx_clear(false);
         }
         EMUL_LOG(0, "ON_RX_PKT [%d]- NEXT \n",m_debug_id);
+        printf("check_rx_pkt_condition - next\n");
         next();
     }
 }
@@ -396,6 +397,7 @@ void CEmulApp::process_cmd(CEmulAppCmd * cmd){
 CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     EMUL_LOG(cmd, "CMD [%d] state : %d ,cmd_index [%d] -",m_debug_id,m_state,m_cmd_index);
+    printf("%s CEmulApp::process_cmd_one - command %u: \n", get_emul_addon()->get_name().c_str(), m_cmd_index);
 
     switch (cmd->m_cmd) {
     case  tcTX_BUFFER   :
@@ -454,36 +456,57 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         /* nothing, no explict close , no next , set defer close  */
         break;
     case tcCONNECT_WAIT: {
-            if (!m_program->is_stream()) {
-                if (get_emul_addon()) {
-                    m_state=te_NONE;
-                    /* if already connected defer next */
-                    if (m_flags&taCONNECTED) {
-                        if (get_interrupt()==false) {
-                            return next_cmd();
-                        }else{
-                            m_flags|=taDO_DPC_NEXT;
-                        }
-                    } else {
-                        get_emul_addon()->establish_connection(this);
-                        m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
-                    }
-                } else {
-                    return next_cmd();
-                }
-            } else {
-                m_state=te_NONE;
-                /* if already connected defer next */
-                if (m_flags&taCONNECTED) {
-                    if (get_interrupt()==false) {
-                       return next_cmd();
-                    }else{
-                       m_flags|=taDO_DPC_NEXT;
-                    }
-                }else{
-                  m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
-             }
+        printf("CEmulApp::process_cmd_one: case tcCONNECT_WAIT\n");
+        if (!m_program->is_stream() && !get_emul_addon()) {
+            return next_cmd();
+        }
+
+        m_state=te_NONE;
+        /* if already connected defer next */
+        if (m_flags&taCONNECTED) {
+            if (get_interrupt()==false) {
+                return next_cmd();
+            }else{
+                m_flags|=taDO_DPC_NEXT;
             }
+        }else{
+            m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+
+            if (!m_program->is_stream() && get_emul_addon()) {
+                get_emul_addon()->establish_connection(this);
+            }
+        }        
+
+        //    if (!m_program->is_stream()) {
+        //        if (get_emul_addon()) {
+        //            m_state=te_NONE;
+        //            /* if already connected defer next */
+        //            if (m_flags&taCONNECTED) {
+        //                if (get_interrupt()==false) {
+        //                    return next_cmd();
+        //                }else{
+        //                    m_flags|=taDO_DPC_NEXT;
+        //                }
+        //            } else {
+        //                m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+        //                get_emul_addon()->establish_connection(this);
+        //            }
+        //        } else {
+        //            return next_cmd();
+        //        }
+        //    } else {
+        //        m_state=te_NONE;
+        //        /* if already connected defer next */
+        //        if (m_flags&taCONNECTED) {
+        //            if (get_interrupt()==false) {
+        //               return next_cmd();
+        //            }else{
+        //               m_flags|=taDO_DPC_NEXT;
+        //            }
+        //        }else{
+        //          m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+        //     }
+        //    }
         }
         break;
     case tcDELAY_RAND : 
@@ -573,6 +596,7 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcTX_PKT : 
         {
+            printf("CEmulApp::process_cmd_one: case tcTX_PKT\n");
             m_state=te_NONE;
             if (get_emul_addon()) {
                 get_emul_addon()->send_data(this, cmd->u.m_tx_pkt.m_buf);
@@ -585,6 +609,7 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcRX_PKT : 
         {
+            printf("CEmulApp::process_cmd_one: case tcRX_PKT\n");
             uint32_t  flags = cmd->u.m_rx_pkt.m_flags;
             /* clear rx counter */
             if (flags & CEmulAppCmdRxPkt::rxcmd_CLEAR) {
@@ -596,8 +621,10 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
             if (flags & CEmulAppCmdRxPkt::rxcmd_WAIT) {
                 m_state=te_WAIT_RX;
                 m_cmd_rx_bytes_wm = cmd->u.m_rx_pkt.m_rx_pkts;
+                printf("CEmulApp::process_cmd_one: case tcRX_PKT - wating for packets %lu: \n", m_cmd_rx_bytes_wm);
                 check_rx_pkt_condition();
             }else{
+                printf("case tcRX_PKT - next_cmd\n");
                 return next_cmd();
             }
         }
@@ -605,6 +632,7 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcKEEPALIVE : 
         {
+            printf("CEmulApp::process_cmd_one: case tcKEEPALIVE\n");
             m_state=te_NONE;
             m_api->set_keepalive((CUdpFlow *)m_flow,cmd->u.m_keepalive.m_keepalive_msec,
                                  cmd->u.m_keepalive.m_rx_mode);
@@ -686,8 +714,10 @@ CEmulAppCmd* CEmulApp::next_cmd(){
 }
 
 void CEmulApp::next(){
+    printf("CEmulApp::next\n");
     CEmulAppCmd * lpcmd=next_cmd();
     if (lpcmd) {
+        printf("CEmulApp::next: process next command\n");
         process_cmd(lpcmd);
     }
 }
@@ -816,6 +846,7 @@ int CEmulApp::on_bh_rx_pkts(uint32_t rx_bytes,
     if ( get_rx_enabled() ) {
         m_cmd_rx_bytes+= 1;
         if (m_state==te_WAIT_RX) {
+            printf("on_bh_rx_pkts - check_rx_pkt_condition\n");
             check_rx_pkt_condition();
         }
     }
