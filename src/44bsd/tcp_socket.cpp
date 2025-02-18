@@ -476,37 +476,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
                 get_emul_addon()->establish_connection(this);
             }
         }        
-
-        //    if (!m_program->is_stream()) {
-        //        if (get_emul_addon()) {
-        //            m_state=te_NONE;
-        //            /* if already connected defer next */
-        //            if (m_flags&taCONNECTED) {
-        //                if (get_interrupt()==false) {
-        //                    return next_cmd();
-        //                }else{
-        //                    m_flags|=taDO_DPC_NEXT;
-        //                }
-        //            } else {
-        //                m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
-        //                get_emul_addon()->establish_connection(this);
-        //            }
-        //        } else {
-        //            return next_cmd();
-        //        }
-        //    } else {
-        //        m_state=te_NONE;
-        //        /* if already connected defer next */
-        //        if (m_flags&taCONNECTED) {
-        //            if (get_interrupt()==false) {
-        //               return next_cmd();
-        //            }else{
-        //               m_flags|=taDO_DPC_NEXT;
-        //            }
-        //        }else{
-        //          m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
-        //     }
-        //    }
         }
         break;
     case tcDELAY_RAND : 
@@ -641,7 +610,11 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         break;
     case tcCLOSE_PKT:
         {
+            printf("CEmulApp::process_cmd_one: case tcCLOSE_PKT\n");
             m_state=te_NONE;
+            if (get_emul_addon()) {
+                get_emul_addon()->disconnect(this);
+            }
             m_api->disconnect(m_pctx,m_flow);
             return next_cmd();
         }

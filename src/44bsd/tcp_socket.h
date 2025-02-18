@@ -416,6 +416,8 @@ public:
 
     virtual void establish_connection(CEmulApp* app);
 
+    virtual void disconnect(CEmulApp* app) {}
+
     virtual void close_connection(CEmulApp* app) {}
 
     virtual void send_data(CEmulApp* app, CMbufBuffer* buf) = 0;
