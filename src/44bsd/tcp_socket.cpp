@@ -359,7 +359,7 @@ void CEmulApp::check_rx_pkt_condition(){
             set_rx_clear(false);
         }
         EMUL_LOG(0, "ON_RX_PKT [%d]- NEXT \n",m_debug_id);
-        printf("check_rx_pkt_condition - next\n");
+        printf("CEmulApp::check_rx_pkt_condition - next\n");
         next();
     }
 }

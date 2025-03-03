@@ -55,6 +55,7 @@
 #include <astf/astf_db.h>
 #include <astf/trex_astf_dp_core.h>
 #include <cmath>
+#include "timer_types.h"
 #include "utl_counter.h"
 #include "tunnels/tunnel_factory.h"
 #include <common/Network/Packet/MPLSHeader.h>
@@ -634,6 +635,14 @@ static void ctx_timer(void *userdata,
             CAstfTimerFunctorObj * tobj=(CAstfTimerFunctorObj *)tmr;
             tobj->m_cb(tobj);
         }
+        break;
+    case ttADDON:
+        UNSAFE_CONTAINER_OF_PUSH;
+        app=my_unsafe_container_app(tmr,CEmulApp,addon_timer_offset);
+        UNSAFE_CONTAINER_OF_POP;
+
+        if (app->get_emul_addon())
+            app->get_emul_addon()->on_tick(app);
         break;
 
     default:
