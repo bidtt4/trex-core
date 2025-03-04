@@ -197,7 +197,6 @@ class ASTFCmdNoClose(ASTFCmd):
     def __init__(self):
         super(ASTFCmdNoClose, self).__init__()
         self.fields['name'] = 'nc'
-        self.stream=True
 
 class ASTFCmdConnect(ASTFCmd):
     def __init__(self):

@@ -451,8 +451,10 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         }
         break;
     case tcDONT_CLOSE :
-        m_state=te_NONE;
-        m_flags|=taDO_WAIT_FOR_CLOSE;
+        if (m_program->is_stream() || get_emul_addon()) {
+            m_state=te_NONE;
+            m_flags|=taDO_WAIT_FOR_CLOSE;
+        }
         /* nothing, no explict close , no next , set defer close  */
         break;
     case tcCONNECT_WAIT: {
@@ -889,7 +891,8 @@ bool CEmulAppProgram::is_common_commands(tcp_app_cmd_t cmd_id){
          (cmd_id==tcADD_TICK_STATS) ||
          (cmd_id==tcSET_TEMPLATE) ||
          (cmd_id==tcEXEC_TEMPLATE) ||
-         (cmd_id==tcCONNECT_WAIT)
+         (cmd_id==tcCONNECT_WAIT) ||
+         (cmd_id==tcDONT_CLOSE)
         ){
         return (true);
     }
