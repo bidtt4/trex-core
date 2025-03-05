@@ -397,7 +397,6 @@ void CEmulApp::process_cmd(CEmulAppCmd * cmd){
 CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     EMUL_LOG(cmd, "CMD [%d] state : %d ,cmd_index [%d] -",m_debug_id,m_state,m_cmd_index);
-    printf("%s CEmulApp::process_cmd_one - command %u: \n", get_emul_addon()->get_name().c_str(), m_cmd_index);
 
     switch (cmd->m_cmd) {
     case  tcTX_BUFFER   :
