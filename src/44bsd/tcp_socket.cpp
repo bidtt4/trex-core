@@ -835,7 +835,9 @@ int CEmulApp::on_bh_rx_bytes(uint32_t rx_bytes,
                             struct rte_mbuf * m){
     set_interrupt(true);
     if (m) {
-        check_l7_data(m);
+        if (m_program->is_stream()) {
+            check_l7_data(m);
+        }
         /* for now do nothing with the mbuf */
         rte_pktmbuf_free(m);
     }
@@ -843,7 +845,12 @@ int CEmulApp::on_bh_rx_bytes(uint32_t rx_bytes,
     if ( get_rx_enabled() ) {
 
         /* drain the bytes from the queue */
-        m_cmd_rx_bytes+= m_api->rx_drain(m_flow); 
+        if (m_program->is_stream()) {
+            m_cmd_rx_bytes+= m_api->rx_drain(m_flow);
+        } else {
+            m_cmd_rx_bytes+= rx_bytes;
+        }
+        
         if (m_state==te_WAIT_RX) {
             check_rx_condition();
         }
