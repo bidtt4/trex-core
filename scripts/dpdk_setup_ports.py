@@ -738,7 +738,10 @@ Other network devices
             huge_mnt_dir = '/mnt/huge'
             if not os.path.isdir(huge_mnt_dir):
                 print("Creating huge node")
-                os.makedirs(huge_mnt_dir)
+                try:
+                    os.makedirs(huge_mnt_dir)
+                except PermissionError as e:
+                    print(f"WARNING: could not create folder {huge_mnt_dir}")
             os.system('mount -t hugetlbfs -o pagesize=1G nodev %s' % huge_mnt_dir)
 
         if map_driver.args.ignore_numa:
