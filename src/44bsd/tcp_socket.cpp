@@ -570,10 +570,14 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
             m_state=te_NONE;
             if (get_emul_addon()) {
                 get_emul_addon()->send_data(this, cmd->u.m_tx_pkt.m_buf);
+
+                if (get_emul_addon()->do_next(this)) {
+                    return next_cmd();
+                }
             } else {
                 m_api->send_pkt((CUdpFlow *)m_flow, cmd->u.m_tx_pkt.m_buf);
+                return next_cmd();
             }
-            return next_cmd();
         }
         break;
 

@@ -427,6 +427,8 @@ public:
     virtual sts_desc_t* get_stats_desc() const { return nullptr; }
 
     virtual void on_tick(CEmulApp *app) {};
+
+    virtual bool do_next(CEmulApp *app) { return true; };
 };
 
 class CEmulAddonList {
@@ -951,6 +953,8 @@ public:
             m_emul_addon->close_connection(this);
         }
     }
+
+    tcp_app_state_t get_state() { return m_state; }
 
     void set_peer_id(uint64_t id) { m_peer_id = id; }
 
