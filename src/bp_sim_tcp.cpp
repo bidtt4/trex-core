@@ -547,10 +547,6 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
     }
     c_tuple.set_ipv4(is_ipv6?false:true);
 
-    printf ("-- CFlowGenListPerThread::generate_flow: flow tuple\n");
-    c_tuple.dump(stdout);
-    printf ("-- \n");
-
     m_stats.m_total_open_flows += 1;
 
     if (!m_c_tcp->m_ft.insert_new_flow(c_flow,c_tuple)){

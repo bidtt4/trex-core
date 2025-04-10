@@ -954,8 +954,6 @@ public:
         }
     }
 
-    tcp_app_state_t get_state() { return m_state; }
-
     void set_peer_id(uint64_t id) { m_peer_id = id; }
 
     uint64_t get_peer_id() const { return m_peer_id; }

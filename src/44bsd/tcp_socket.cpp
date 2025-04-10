@@ -457,7 +457,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         /* nothing, no explict close , no next , set defer close  */
         break;
     case tcCONNECT_WAIT: {
-        printf("CEmulApp::process_cmd_one: case tcCONNECT_WAIT\n");
         if (!m_program->is_stream() && !get_emul_addon()) {
             return next_cmd();
         }
@@ -566,7 +565,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcTX_PKT : 
         {
-            printf("CEmulApp::process_cmd_one: case tcTX_PKT\n");
             m_state=te_NONE;
             if (get_emul_addon()) {
                 get_emul_addon()->send_data(this, cmd->u.m_tx_pkt.m_buf);
@@ -583,7 +581,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcRX_PKT : 
         {
-            printf("CEmulApp::process_cmd_one: case tcRX_PKT\n");
             uint32_t  flags = cmd->u.m_rx_pkt.m_flags;
             /* clear rx counter */
             if (flags & CEmulAppCmdRxPkt::rxcmd_CLEAR) {
@@ -595,10 +592,8 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
             if (flags & CEmulAppCmdRxPkt::rxcmd_WAIT) {
                 m_state=te_WAIT_RX;
                 m_cmd_rx_bytes_wm = cmd->u.m_rx_pkt.m_rx_pkts;
-                printf("CEmulApp::process_cmd_one: case tcRX_PKT - wating for packets %lu: \n", m_cmd_rx_bytes_wm);
                 check_rx_pkt_condition();
             }else{
-                printf("case tcRX_PKT - next_cmd\n");
                 return next_cmd();
             }
         }
@@ -606,7 +601,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcKEEPALIVE : 
         {
-            printf("CEmulApp::process_cmd_one: case tcKEEPALIVE\n");
             m_state=te_NONE;
             m_api->set_keepalive((CUdpFlow *)m_flow,cmd->u.m_keepalive.m_keepalive_msec,
                                  cmd->u.m_keepalive.m_rx_mode);
@@ -615,7 +609,6 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         break;
     case tcCLOSE_PKT:
         {
-            printf("CEmulApp::process_cmd_one: case tcCLOSE_PKT\n");
             m_state=te_NONE;
             if (get_emul_addon()) {
                 get_emul_addon()->disconnect(this);
@@ -692,10 +685,8 @@ CEmulAppCmd* CEmulApp::next_cmd(){
 }
 
 void CEmulApp::next(){
-    printf("CEmulApp::next\n");
     CEmulAppCmd * lpcmd=next_cmd();
     if (lpcmd) {
-        printf("CEmulApp::next: process next command\n");
         process_cmd(lpcmd);
     }
 }
@@ -824,7 +815,6 @@ int CEmulApp::on_bh_rx_pkts(uint32_t rx_bytes,
     if ( get_rx_enabled() ) {
         m_cmd_rx_bytes+= 1;
         if (m_state==te_WAIT_RX) {
-            printf("on_bh_rx_pkts - check_rx_pkt_condition\n");
             check_rx_pkt_condition();
         }
     }
