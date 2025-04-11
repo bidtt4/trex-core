@@ -55,7 +55,6 @@
 #include <astf/astf_db.h>
 #include <astf/trex_astf_dp_core.h>
 #include <cmath>
-#include "timer_types.h"
 #include "utl_counter.h"
 #include "tunnels/tunnel_factory.h"
 #include <common/Network/Packet/MPLSHeader.h>
