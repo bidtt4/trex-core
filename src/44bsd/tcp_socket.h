@@ -414,6 +414,10 @@ public:
 
     virtual void setup_connection(CEmulApp* app) {}
 
+    virtual void establish_connection(CEmulApp* app);
+
+    virtual void disconnect(CEmulApp* app) {}
+
     virtual void close_connection(CEmulApp* app) {}
 
     virtual void send_data(CEmulApp* app, CMbufBuffer* buf) = 0;
@@ -421,6 +425,10 @@ public:
     virtual void recv_data(CEmulApp* app, struct rte_mbuf* m) = 0;
 
     virtual sts_desc_t* get_stats_desc() const { return nullptr; }
+
+    virtual void on_tick(CEmulApp *app) {};
+
+    virtual bool do_next(CEmulApp *app) { return true; };
 };
 
 class CEmulAddonList {
@@ -750,6 +758,11 @@ public:
         return ((uintptr_t)&lp->m_timer);
     }
 
+    static uint32_t addon_timer_offset(void){
+        CEmulApp *lp=0;
+        return ((uintptr_t)&lp->m_addon_timer);
+    }
+
 public:
 
     void set_udp_flow(){
@@ -919,6 +932,8 @@ public:
         return((CUdpFlow *)m_flow);
     }
 
+    CPerProfileCtx* get_ctx() { return m_pctx; }
+
     void set_l7_check(bool enable) { m_l7check_enable = enable; }
     bool get_l7_check() const { return m_l7check_enable; }
 
@@ -948,6 +963,8 @@ public:
     void* get_priv_data() { return m_priv_data; }
 
     uint64_t* get_addon_sts() const { return m_addon_sts; }
+
+    CHTimerObj* get_addon_timer() { return &m_addon_timer; }
 
 public:
 
@@ -1083,6 +1100,7 @@ private:
     uint64_t                m_peer_id;
     void                   *m_priv_data;
     uint64_t               *m_addon_sts;
+    CHTimerObj              m_addon_timer;
 };
 
 

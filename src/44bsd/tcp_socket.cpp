@@ -449,23 +449,32 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
         }
         break;
     case tcDONT_CLOSE :
-        m_state=te_NONE;
-        m_flags|=taDO_WAIT_FOR_CLOSE;
+        if (m_program->is_stream() || get_emul_addon()) {
+            m_state=te_NONE;
+            m_flags|=taDO_WAIT_FOR_CLOSE;
+        }
         /* nothing, no explict close , no next , set defer close  */
         break;
-    case tcCONNECT_WAIT :
-        {
-            m_state=te_NONE;
-            /* if already connected defer next */
-            if (m_flags&taCONNECTED) {
-                if (get_interrupt()==false) {
-                    return next_cmd();
-                }else{
-                    m_flags|=taDO_DPC_NEXT;
-                }
+    case tcCONNECT_WAIT: {
+        if (!m_program->is_stream() && !get_emul_addon()) {
+            return next_cmd();
+        }
+
+        m_state=te_NONE;
+        /* if already connected defer next */
+        if (m_flags&taCONNECTED) {
+            if (get_interrupt()==false) {
+                return next_cmd();
             }else{
-                m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+                m_flags|=taDO_DPC_NEXT;
             }
+        }else{
+            m_flags|=taDO_WAIT_CONNECTED; /* wait to be connected */
+
+            if (!m_program->is_stream() && get_emul_addon()) {
+                get_emul_addon()->establish_connection(this);
+            }
+        }        
         }
         break;
     case tcDELAY_RAND : 
@@ -558,10 +567,14 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
             m_state=te_NONE;
             if (get_emul_addon()) {
                 get_emul_addon()->send_data(this, cmd->u.m_tx_pkt.m_buf);
+
+                if (get_emul_addon()->do_next(this)) {
+                    return next_cmd();
+                }
             } else {
                 m_api->send_pkt((CUdpFlow *)m_flow, cmd->u.m_tx_pkt.m_buf);
+                return next_cmd();
             }
-            return next_cmd();
         }
         break;
 
@@ -596,6 +609,9 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
     case tcCLOSE_PKT:
         {
             m_state=te_NONE;
+            if (get_emul_addon()) {
+                get_emul_addon()->disconnect(this);
+            }
             m_api->disconnect(m_pctx,m_flow);
             return next_cmd();
         }
@@ -812,7 +828,9 @@ int CEmulApp::on_bh_rx_bytes(uint32_t rx_bytes,
                             struct rte_mbuf * m){
     set_interrupt(true);
     if (m) {
-        check_l7_data(m);
+        if (m_program->is_stream()) {
+            check_l7_data(m);
+        }
         /* for now do nothing with the mbuf */
         rte_pktmbuf_free(m);
     }
@@ -820,7 +838,12 @@ int CEmulApp::on_bh_rx_bytes(uint32_t rx_bytes,
     if ( get_rx_enabled() ) {
 
         /* drain the bytes from the queue */
-        m_cmd_rx_bytes+= m_api->rx_drain(m_flow); 
+        if (m_program->is_stream()) {
+            m_cmd_rx_bytes+= m_api->rx_drain(m_flow);
+        } else {
+            m_cmd_rx_bytes+= rx_bytes;
+        }
+        
         if (m_state==te_WAIT_RX) {
             check_rx_condition();
         }
@@ -866,7 +889,9 @@ bool CEmulAppProgram::is_common_commands(tcp_app_cmd_t cmd_id){
          (cmd_id==tcADD_STATS) ||
          (cmd_id==tcADD_TICK_STATS) ||
          (cmd_id==tcSET_TEMPLATE) ||
-         (cmd_id==tcEXEC_TEMPLATE)
+         (cmd_id==tcEXEC_TEMPLATE) ||
+         (cmd_id==tcCONNECT_WAIT) ||
+         (cmd_id==tcDONT_CLOSE)
         ){
         return (true);
     }
@@ -1364,4 +1389,8 @@ void CAppStats::AddStatsVal(uint16_t tg_id, const uint8_t id, const uint64_t val
 
 
 std::vector<CEmulAddon*> CEmulAddonList::m_addon_list;
+
+void CEmulAddon::establish_connection(CEmulApp* app) {
+    app->on_bh_event(te_SOISCONNECTED);
+}
 

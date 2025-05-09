@@ -635,6 +635,14 @@ static void ctx_timer(void *userdata,
             tobj->m_cb(tobj);
         }
         break;
+    case ttADDON:
+        UNSAFE_CONTAINER_OF_PUSH;
+        app=my_unsafe_container_app(tmr,CEmulApp,addon_timer_offset);
+        UNSAFE_CONTAINER_OF_POP;
+
+        if (app->get_emul_addon())
+            app->get_emul_addon()->on_tick(app);
+        break;
 
     default:
         assert(0);
