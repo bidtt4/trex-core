@@ -229,6 +229,7 @@ enum {
        OPT_LATENCY_DIAG,
        OPT_DEFER_START_QUEUES,
        OPT_GARP_IGNORE,
+       OPT_RSS_GTP,
 
        /* no more pass this */
        OPT_MAX
@@ -331,6 +332,7 @@ static CSimpleOpt::SOption parser_options[] =
         { OPT_LATENCY_DIAG,           "--latency-diag", SO_NONE},
         { OPT_DEFER_START_QUEUES,     "--defer-start-queues", SO_NONE},
         { OPT_GARP_IGNORE,            "--ignore-garp", SO_NONE},
+        { OPT_RSS_GTP,                "--rss-gtp",		   SO_NONE    },
 
         SO_END_OF_OPTIONS
     };
@@ -439,6 +441,7 @@ static int COLD_FUNC  usage() {
     printf(" --latency-diag             : STL flow latency counts all duplicated packets with more CPU load consumption.\n");
     printf("                              To see the duplicated packets, please use -v 7.\n");
     printf(" --defer-start-queues       : Start queues separately after device started when it is supported.\n");
+    printf(" --rss-gtp                  : Creates a RSS flow for the GTP inner tunnel headers (IP | UDP | TCP).\n");
 
     printf("\n");
     printf(" Examples: ");
@@ -986,6 +989,8 @@ COLD_FUNC static int parse_options(int argc, char *argv[], bool first_time ) {
                 break;
             case OPT_GARP_IGNORE:
                 po->m_garp_ignore = true;
+            case OPT_RSS_GTP:
+                po->m_rss_gtp = true;
                 break;
 
             default:
@@ -3872,6 +3877,7 @@ COLD_FUNC int  CGlobalTRex::device_start(void){
         _if->get_port_attr()->add_mac((char *)CGlobalInfo::m_options.get_src_mac_addr(i));
 
         fflush(stdout);
+
     }
 
     if ( !is_all_links_are_up()  ){
@@ -5808,18 +5814,67 @@ COLD_FUNC void CPhyEthIF::configure_rss_astf(bool is_client,
 COLD_FUNC void CPhyEthIF::configure_rss(){
     trex_dpdk_rx_distro_mode_t rss_mode = 
          get_dpdk_mode()->get_rx_distro_mode();
-
+    CTrexDpdkParams dpdk_p;
+    get_dpdk_drv_params(dpdk_p);
+    uint16_t rx_qs_no = dpdk_p.get_total_rx_queues();
     if ( rss_mode == ddRX_DIST_ASTF_HARDWARE_RSS ){
-        CTrexDpdkParams dpdk_p;
-        get_dpdk_drv_params(dpdk_p);
 
         configure_rss_astf(false,
-                           dpdk_p.get_total_rx_queues(),
+                           rx_qs_no,
                            MAIN_DPDK_RX_Q);
 
         /* disable HW flow statistics on ASTF mode due to conflicts with STL flow stats. */
         if (get_is_interactive() && !get_is_stateless()) {
             CGlobalInfo::m_options.preview.set_disable_hw_flow_stat(true);
+        }
+    }
+
+    if (CGlobalInfo::m_options.m_rss_gtp == true) {
+	struct rte_flow *flow;
+	struct rte_flow_error flow_error = { };
+
+	uint16_t *queues = (uint16_t *)malloc(rx_qs_no * sizeof(uint16_t));
+	if (queues == NULL) {
+		printf("Cannot allocate memory for rss queues, skipping gtpu config\n");
+		return;
+	}
+	/*
+	* Indices here are set to {1,2,3...rx_qs_no}, regardless how reta
+	* table was initialized.
+	*/
+	for (uint16_t i = 0; i < rx_qs_no; i++) {
+		queues[i] = i;
+	}
+        struct rte_flow_attr attr = { .ingress = 1 };
+        struct rte_flow_item pattern[] = {
+            { .type = RTE_FLOW_ITEM_TYPE_ETH },
+            { .type = RTE_FLOW_ITEM_TYPE_IPV4 },
+            { .type = RTE_FLOW_ITEM_TYPE_UDP },
+            { .type = RTE_FLOW_ITEM_TYPE_GTP },
+            { .type = RTE_FLOW_ITEM_TYPE_END },
+        };
+        struct rte_flow_action_rss rss = {
+            .level = 2,
+            .types = RTE_ETH_RSS_IP | RTE_ETH_RSS_TCP | RTE_ETH_RSS_UDP,
+            .queue_num = (uint32_t)rx_qs_no,
+            .queue = queues,
+        };
+        struct rte_flow_action action[] {
+            { .type = RTE_FLOW_ACTION_TYPE_RSS, .conf = &rss },
+            { .type = RTE_FLOW_ACTION_TYPE_END }
+        };
+
+        flow = rte_flow_create(this->m_repid, &attr, pattern, action, &flow_error);
+        if (flow == NULL) {
+            fprintf(stderr, "rte flow create error: %s\n", flow_error.message);
+        } else {
+            printf("GTPU rule created on port = %d\n", this->m_repid);
+        }
+
+        int ret = rte_flow_validate(this->m_repid, &attr, pattern, action, &flow_error);
+        if (ret) {
+            fprintf(stderr, "Error on flow validation: %s \n errmsg: %s\n",
+                rte_strerror(-ret), flow_error.message);
         }
     }
 }
