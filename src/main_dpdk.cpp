@@ -989,6 +989,7 @@ COLD_FUNC static int parse_options(int argc, char *argv[], bool first_time ) {
                 break;
             case OPT_GARP_IGNORE:
                 po->m_garp_ignore = true;
+                break;
             case OPT_RSS_GTP:
                 po->m_rss_gtp = true;
                 break;
@@ -5830,21 +5831,21 @@ COLD_FUNC void CPhyEthIF::configure_rss(){
     }
 
     if (CGlobalInfo::m_options.m_rss_gtp == true) {
-	struct rte_flow *flow;
-	struct rte_flow_error flow_error = { };
+        struct rte_flow *flow;
+        struct rte_flow_error flow_error = { };
 
-	uint16_t *queues = (uint16_t *)malloc(rx_qs_no * sizeof(uint16_t));
-	if (queues == NULL) {
-		printf("Cannot allocate memory for rss queues, skipping gtpu config\n");
-		return;
-	}
-	/*
-	* Indices here are set to {1,2,3...rx_qs_no}, regardless how reta
-	* table was initialized.
-	*/
-	for (uint16_t i = 0; i < rx_qs_no; i++) {
-		queues[i] = i;
-	}
+        uint16_t *queues = (uint16_t *)malloc(rx_qs_no * sizeof(uint16_t));
+        if (queues == NULL) {
+            printf("Cannot allocate memory for rss queues, skipping gtpu config\n");
+            return;
+        }
+        /*
+        * Indices here are set to {1,2,3...rx_qs_no}, regardless how reta
+        * table was initialized.
+        */
+        for (uint16_t i = 0; i < rx_qs_no; i++) {
+            queues[i] = i;
+        }
         struct rte_flow_attr attr = { .ingress = 1 };
         struct rte_flow_item pattern[] = {
             { .type = RTE_FLOW_ITEM_TYPE_ETH },
@@ -5874,7 +5875,7 @@ COLD_FUNC void CPhyEthIF::configure_rss(){
         int ret = rte_flow_validate(this->m_repid, &attr, pattern, action, &flow_error);
         if (ret) {
             fprintf(stderr, "Error on flow validation: %s \n errmsg: %s\n",
-                rte_strerror(-ret), flow_error.message);
+            rte_strerror(-ret), flow_error.message);
         }
     }
 }
