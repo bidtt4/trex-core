@@ -748,6 +748,7 @@ public:
         m_rss_thread_max=0;
         m_reta_mask=0;
         m_rss_astf_mode=false;
+        m_rand_client_port=false;
         m_active_clients.Create();
         set_active_list_ptr_to_start();
     }
@@ -830,7 +831,8 @@ public:
                 double          active_flows,
                 ClientCfgDB     &client_info,
                 uint16_t        tcp_aging,
-                uint16_t        udp_aging); 
+                uint16_t        udp_aging,
+                bool            rand_client_port = false); 
 
 
     void set_thread_id(uint16_t thread_id){
@@ -857,6 +859,7 @@ public:
     uint16_t m_rss_thread_max;
     uint8_t  m_reta_mask;
     bool     m_rss_astf_mode;
+    bool     m_rand_client_port;
 
     CFlowGenListPerThread* m_thread_ptr;
 
@@ -1057,7 +1060,8 @@ public:
                          double        active_flows,
                          ClientCfgDB   &client_info,
                          uint16_t      tcp_aging,
-                         uint16_t      udp_aging);
+                         uint16_t      udp_aging,
+                         bool          rand_client_port = false);
 
     bool add_server_pool(IP_DIST_t  server_dist,
                          uint32_t   min_server,

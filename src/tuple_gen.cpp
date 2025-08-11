@@ -24,6 +24,7 @@ limitations under the License.
 #include <string.h>
 #include "utl_yaml.h"
 #include "bp_sim.h"
+#include "rand_gen.h"
 #include "tuple_gen.h"
 #include "trex_exception.h"
 #include "tunnels/tunnel_db.h"
@@ -75,11 +76,13 @@ void CClientPool::Create(IP_DIST_t       dist_value,
                          double          active_flows,
                          ClientCfgDB     &client_info,
                          uint16_t        tcp_aging,
-                         uint16_t        udp_aging) {
+                         uint16_t        udp_aging,
+                         bool            rand_client_port) {
 
     assert(max_ip >= min_ip);
 
     set_dist(dist_value);
+    m_rand_client_port = rand_client_port;
 
     uint32_t total_ip  = max_ip - min_ip +1;
     bool is_long_range = _enough_ips(total_ip,active_flows,m_rss_astf_mode);
@@ -91,6 +94,7 @@ void CClientPool::Create(IP_DIST_t       dist_value,
 
     m_tcp_aging = tcp_aging;
     m_udp_aging = udp_aging;
+    
     CreateBase(); 
 }
 
@@ -177,23 +181,37 @@ void CIpInfoBase:: detach_pool_and_client_node(void *ip_pool){
         }
     }
 }
-/* base on thread_id and client_index 
-  client index would be the same for all thread 
-*/
+
+XorShift32Star rng;
+std::uniform_int_distribution<uint16_t> uniform_port_dist(MIN_PORT, MAX_PORT);
+
+/**
+ * Based on thread_id and client_index, or uniform distribution. 
+ * Client index would be the same for all threads. 
+ *
+ * @param rand_client_port If true, use random port with uniform distribution instead of thread_id and client_id.
+ */
 static uint16_t generate_rand_sport(uint32_t client_index,
                                     uint16_t threadid,
                                     uint16_t rss_thread_id,
                                     uint16_t rss_thread_max,
                                     uint8_t  reta_mask,
-                                    bool     rss_astf_mode){
+                                    bool     rss_astf_mode,
+                                    bool     rand_client_port){
+    uint16_t port;
 
-    uint32_t rand  = ((214013*(client_index + 11213*threadid) + 2531011));
-    uint16_t rand16 = ((rand)&0xffff);
-    uint16_t port = MIN_PORT+(rand16%(MAX_PORT-MIN_PORT))+1;
+    if (rand_client_port) {
+        port = uniform_port_dist(rng);
+    } else {
+        uint32_t const hash32 = 214013 * (client_index + 11213 * threadid) + 2531011;
+        uint16_t const hash16 = hash32 & 0xffff;
+        port = MIN_PORT + (hash16 % (MAX_PORT - MIN_PORT)) + 1;
+    }
 
     if (rss_astf_mode) {
         port = rss_align_lsb(port,rss_thread_id,rss_thread_max,reta_mask);
     }
+
     return (port);
 }
 
@@ -281,7 +299,8 @@ void CClientPool::configure_client(uint32_t indx){
                                              m_rss_thread_id,
                                              m_rss_thread_max,
                                              m_reta_mask,
-                                             m_rss_astf_mode);
+                                             m_rss_astf_mode,
+                                             m_rand_client_port);
 
     CIpInfoBase* lp=m_ip_info[indx];
     lp->set_start_port(port);
@@ -303,7 +322,8 @@ bool CTupleGeneratorSmart::add_client_pool(IP_DIST_t      client_dist,
                                           double          active_flows,
                                           ClientCfgDB     &client_info,
                                           uint16_t        tcp_aging,
-                                          uint16_t        udp_aging) {
+                                          uint16_t        udp_aging,
+                                          bool            rand_client_port) {
     assert(max_client>=min_client);
     CClientPool* pool = new CClientPool();
     pool->set_thread_id((uint16_t)m_thread_id);
@@ -317,7 +337,8 @@ bool CTupleGeneratorSmart::add_client_pool(IP_DIST_t      client_dist,
                  active_flows,
                  client_info,
                  tcp_aging,
-                 udp_aging);
+                 udp_aging,
+                 rand_client_port);
     m_client_pool.push_back(pool);
     m_ip_start_cpool_link[min_client] = pool;
 
