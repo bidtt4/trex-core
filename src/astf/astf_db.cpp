@@ -1345,7 +1345,8 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
             gen_idx_trans.push_back(last_c_idx);
             last_c_idx++;
             ClientCfgDB  * cdb=get_client_cfg_db();
-            g_gen->add_client_pool(dist, portion.m_ip_start, portion.m_ip_end, active_flows_per_core, *cdb, 0, 0);
+            bool rand_client_port = m_val["rand_client_port"].asBool();
+            g_gen->add_client_pool(dist, portion.m_ip_start, portion.m_ip_end, active_flows_per_core, *cdb, 0, 0, rand_client_port);
         } else {
             gen_idx_trans.push_back(last_s_idx);
             last_s_idx++;

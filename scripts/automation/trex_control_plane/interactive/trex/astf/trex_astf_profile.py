@@ -1977,7 +1977,7 @@ class ASTFProfile(object):
     """
 
     def __init__(self, default_ip_gen, default_c_glob_info=None, default_s_glob_info=None,
-                 templates=None, cap_list=None, s_delay=None, udp_mtu=None):
+                 templates=None, cap_list=None, s_delay=None, udp_mtu=None, rand_client_port=False):
         """
         Define a ASTF profile
 
@@ -2007,6 +2007,10 @@ class ASTFProfile(object):
                   udp_mtu: int or None
                       MTU for udp packets, if packets exceeding the specified value they will be cut down from L7 in order to fit.
                       This will be applied on all cap in cap list, unless cap specified his own udp_mtu. defaults to None.
+
+                  rand_client_port : bool
+                      Use a random start port every time a client is created.
+                      Default is false, which means that start port is based on thread id.
         """
 
         ver_args = {"types":
@@ -2025,6 +2029,10 @@ class ASTFProfile(object):
         self.templates = []
         self.tg_name_to_id = collections.OrderedDict()
         self.cache = ASTFProfileCache(profile = self)
+
+        self.fields = {
+            'rand_client_port': rand_client_port,
+        }
 
         if (templates is None) and (cap_list is None):
              raise ASTFErrorBadParamCombination(self.__class__.__name__, "templates", "cap_list")
@@ -2150,6 +2158,7 @@ class ASTFProfile(object):
         # Remember! If tg_name = None then tg_id = 0 and tg_name is not passed to the server. As such
         # when parsing the JSON in the server be careful to pay attention that the first tg_name belongs to
         # tg_id = 1.
+        ret['rand_client_port'] = self.fields['rand_client_port']
         return ret;
 
     @pretty_exceptions
