@@ -1259,7 +1259,8 @@ void CAstfDB::get_thread_ip_range(uint16_t thread_id, uint16_t max_threads, uint
         fill_rss_vals(thread_id, rss_thread_id, rss_thread_max);
         split_ips(rss_thread_id, rss_thread_max, dual_port_id, poolinfo, portion);
     }else{
-        split_ips(thread_id, max_threads, dual_port_id, poolinfo, portion);
+        uint16_t split_id = (thread_id+m_core_base)%max_threads;
+        split_ips(split_id, max_threads, dual_port_id, poolinfo, portion);
     }
 }
 
@@ -1338,7 +1339,8 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
         } else if (poolinfo.m_per_core_distro) {
             split_ips(rss_thread_id, rss_thread_max, dual_port_id, poolinfo, portion);
         }else{
-            split_ips(thread_id, max_threads, dual_port_id, poolinfo, portion);
+            uint16_t split_id = (thread_id+m_core_base)%max_threads;
+            split_ips(split_id, max_threads, dual_port_id, poolinfo, portion);
         }
         active_flows_per_core = (portion.m_ip_end - portion.m_ip_start) * 32000;
         if (ip_gen_list[i]["dir"] == "c") {
