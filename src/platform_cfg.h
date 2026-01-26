@@ -21,7 +21,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
+#include <array>
 #include <yaml-cpp/yaml.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -106,6 +106,8 @@ struct CMacYamlInfo {
     uint32_t m_ip;
     uint32_t m_mask;
     uint16_t m_vlan;
+    std::array<u_char, 16> m_def_gwv6;
+    std::array<u_char, 16> m_ipv6;
     mpls_tag_t m_mpls={0};
     bool m_is_eompls=0;
     void Dump(FILE *fd);
@@ -114,6 +116,8 @@ struct CMacYamlInfo {
     void copy_src(char *p);
     uint32_t get_def_gw();
     uint32_t get_ip();
+    const std::array<u_char, 16>& get_def_gwv6() const;
+    const std::array<u_char, 16>& get_ipv6() const;
     uint32_t get_vlan();
     mpls_tag_t get_mpls();
     bool get_is_eompls();

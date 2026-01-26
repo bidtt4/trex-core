@@ -19,10 +19,14 @@
   limitations under the License.
 */
 
+#include <cstring>
 #include <rte_config.h>
 #include <rte_ethdev.h>
 #include <rte_bus_pci.h>
 #include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <netinet/icmp6.h>
+#include <netinet/ip6.h>
 #include <common/Network/Packet/EthernetHeader.h>
 #include <common/Network/Packet/Arp.h>
 #include "common/Network/Packet/VLANHeader.h"
@@ -145,6 +149,17 @@ COneIPv6Info *CPretestOnePortInfo::find_ipv6(uint16_t ip[8], uint16_t vlan) {
     return NULL;
 }
 
+COneIPv6Info *CPretestOnePortInfo::find_next_hop_v6(uint16_t ip[8], uint16_t vlan) {
+
+    for (std::vector<COneIPInfo *>::iterator it = m_dst_info.begin(); it != m_dst_info.end(); ++it) {
+        if (((*it)->ip_ver() == COneIPInfo::IP6_VER) && ((*it)->get_vlan() == vlan)
+            && (! memcmp((uint8_t *) ((COneIPv6Info *) (*it))->get_ipv6(), (uint8_t *)ip, 2*8 ) ) )
+            return (COneIPv6Info *) *it;
+    }
+
+    return NULL;
+}
+
 bool CPretestOnePortInfo::get_mac(COneIPInfo *ip, uint8_t *mac) {
     MacAddress defaultmac;
 
@@ -211,13 +226,18 @@ void CPretestOnePortInfo::send_arp_req_all() {
         if (!(*it)->resolve_needed())
             continue;
 
-        m[0] = CGlobalInfo::pktmbuf_alloc_small_by_port(m_port_id);
+        uint32_t pkt_size = (*it)->get_arp_req_len();
+        m[0] = CGlobalInfo::pktmbuf_alloc_by_port(m_port_id, pkt_size);
         if ( unlikely(m[0] == 0) )  {
-            fprintf(stderr, "ERROR: Could not allocate mbuf for sending ARP to port:%d\n", m_port_id);
+            fprintf(stderr, "ERROR: Could not allocate %u bytes mbuf for sending ARP to port:%d\n", pkt_size, m_port_id);
             exit(1);
         }
 
-        uint8_t *p = (uint8_t *)rte_pktmbuf_append(m[0], (*it)->get_arp_req_len());
+        uint8_t *p = (uint8_t *)rte_pktmbuf_append(m[0], pkt_size);
+        if (unlikely(p == nullptr)) {
+            fprintf(stderr, "ERROR: Could not append %u bytes to mbuf for sending ARP to port:%d\n", pkt_size, m_port_id);
+            exit(1);
+        }
         // We need source on the same VLAN of the dest in order to send
         COneIPInfo *sip = get_src((*it)->get_vlan(), (*it)->ip_ver());
         if (sip == NULL) {
@@ -255,19 +275,27 @@ void CPretestOnePortInfo::send_grat_arp_all() {
         int num_sent;
         int verbose = CGlobalInfo::m_options.preview.getVMode();
 
-        m[0] = CGlobalInfo::pktmbuf_alloc_small_by_port(m_port_id);
+        uint32_t pkt_size = (*it)->get_grat_arp_len();
+        m[0] = CGlobalInfo::pktmbuf_alloc_by_port(m_port_id, pkt_size);
         if ( unlikely(m[0] == 0) )  {
-            fprintf(stderr, "ERROR: Could not allocate mbuf for sending grat ARP on port:%d\n", m_port_id);
+            fprintf(stderr, "ERROR: Could not allocate %u bytes mbuf for sending grat ARP on port:%d\n", pkt_size, m_port_id);
             exit(1);
         }
 
-        uint8_t *p = (uint8_t *)rte_pktmbuf_append(m[0], (*it)->get_grat_arp_len());
+        uint8_t *p = (uint8_t *)rte_pktmbuf_append(m[0], pkt_size);
+        if (unlikely(p == nullptr)) {
+            fprintf(stderr, "ERROR: Could not append %u bytes to mbuf for sending grat ARP on port:%d\n", pkt_size, m_port_id);
+            exit(1);
+        }
         (*it)->fill_grat_arp_buf(p);
 
 
         if (verbose >= 3) {
             fprintf(stdout, "TX grat ARP on port %d - " , m_port_id);
             (*it)->dump(stdout, "");
+            if (verbose >= 7) {
+                utl_rte_pktmbuf_dump_k12(stdout,m[0]);
+            }
         }
 
         num_sent = m_port->tx_burst(0, m, 1);
@@ -437,6 +465,189 @@ bool CPretest::is_arp(const uint8_t *p, uint16_t pkt_size, ArpHdr *&arp, uint16_
         return true;
 }
 
+void CPretest::try_handling_icmpv6(CPretestOnePortInfo* port, const uint8_t *p, uint16_t pkt_size) {
+    if (pkt_size < ETH_HDR_LEN + IPV6_HDR_LEN) {
+        return;
+    }
+
+    int verbose = CGlobalInfo::m_options.preview.getVMode();
+
+    ether_header eth_header;
+    memcpy(&eth_header, p, sizeof(eth_header));
+
+    uint32_t l3_offset = sizeof(eth_header);
+    uint32_t vlan_id = 0;
+    for (uint16_t eth_type = ntohs(eth_header.ether_type); eth_type != ETH_P_IPV6;) {
+        switch (eth_type) {
+            case ETH_P_8021Q:
+                vlan_id = ntohs(*(uint16_t*)(p + l3_offset));
+                l3_offset += 4;
+                break;
+            case ETH_P_8021AD:
+                l3_offset += 4;
+                break;
+            default: {
+                if (verbose >= 7) {
+                    printf("RX packet with unsupported L3 proto %hu\n", eth_type);
+                }
+                return;
+            }
+        }
+        eth_type = ntohs(*(uint16_t*)(p + l3_offset - 2));
+    }
+
+    const uint8_t* ipv6_hdr_pos = p + l3_offset;
+    ip6_hdr ipv6_header;
+    memcpy(&ipv6_header, ipv6_hdr_pos, sizeof(ipv6_header));
+
+    if (ipv6_header.ip6_nxt != IPPROTO_ICMPV6) {
+        if (verbose >= 7) {
+            printf("RX IPv6 packet with unsupported L4 proto %d\n", (int)ipv6_header.ip6_nxt);
+        }
+        return;
+    }
+
+    const uint8_t* icmp_hdr_pos = ipv6_hdr_pos + 40;
+    icmp6_hdr icmp_header;
+    memcpy(&icmp_header, icmp_hdr_pos, sizeof(icmp_header));
+
+    if (icmp_header.icmp6_type == ND_NEIGHBOR_SOLICIT) {
+        port->m_stats.m_rx_arp++;
+
+        nd_neighbor_solicit ns_header;
+        memcpy(&ns_header, icmp_hdr_pos, sizeof(ns_header));
+
+        std::array<uint16_t, 8> target_ip_le;
+        for (int i = 0; i < 8; i++) {
+            target_ip_le[i] = ntohs(ns_header.nd_ns_target.s6_addr16[i]);
+        }
+        auto local_address = port->find_ipv6(target_ip_le.data(), vlan_id);
+        if (!local_address) {
+            if (verbose >= 7) {
+                printf("RX NS for different address: %s\n"
+                    , ip_to_str((uint8_t*)target_ip_le.data()).c_str());
+            }
+            return;
+        }
+        if (verbose >= 3) {
+            printf("RX NS for address: %s\n"
+                , ip_to_str((uint8_t*)target_ip_le.data()).c_str());
+        }
+
+        rte_mbuf* m[1] = {};
+        auto port_id = port->get_port()->get_repid();
+        auto response_size = 92; // Solicited NA
+        m[0] = CGlobalInfo::pktmbuf_alloc_by_port(port_id, response_size);
+        if (unlikely(m[0] == nullptr))  {
+            fprintf(stderr
+                , "ERROR: Could not allocate %u bytes mbuf for sending NA to port:%d\n"
+                , response_size, (int)port_id);
+            exit(1);
+        }
+        uint8_t* response = (uint8_t *)rte_pktmbuf_append(m[0], response_size);
+        if (unlikely(response == nullptr)) {
+            fprintf(stderr
+                , "ERROR: Could not append %u bytes to mbuf for sending NA to port:%d\n"
+                , response_size, (int)port_id);
+            exit(1);
+        }
+
+        std::array<uint16_t, 8> sender_ip_le;
+        for (int i = 0; i < 8; i++) {
+            sender_ip_le[i] = ntohs(ipv6_header.ip6_src.s6_addr16[i]);
+        }
+
+        std::array<uint8_t, 6> src_mac;
+        local_address->get_mac(src_mac.data());
+
+        uint8_t* dst_mac = eth_header.ether_shost;
+
+        CTestPktGen::create_solicited_neighbor_advertisement(response
+            , local_address->get_ipv6()
+            , (uint8_t*)sender_ip_le.data()
+            , src_mac.data(), dst_mac, vlan_id);
+
+        int num_sent = port->get_port()->tx_burst(0, m, 1);
+        if (num_sent < 1) {
+            fprintf(stderr, "Failed sending NS reply on port:%d\n", (int)port_id);
+            rte_pktmbuf_free(m[0]);
+        } else {
+            if (verbose >= 3) {
+                printf("TX solicited NA on port:%d sip:%s, tip:%s\n"
+                        , (int)port_id
+                        , ip_to_str((uint8_t*)local_address->get_ipv6()).c_str()
+                        , ip_to_str((uint8_t*)sender_ip_le.data()).c_str());
+            }
+            port->m_stats.m_tx_arp++;
+        }
+    } else if (icmp_header.icmp6_type == ND_NEIGHBOR_ADVERT) {
+        port->m_stats.m_rx_arp++;
+        uint16_t ipv6_payload_length = ntohs(ipv6_header.ip6_plen);
+        if (ipv6_payload_length < 24) {
+            if (verbose >= 3) {
+                printf("RX NA with invalid payload length %u\n", ipv6_payload_length);
+            }
+            return;
+        }
+
+        nd_neighbor_advert na_header;
+        memcpy(&na_header, icmp_hdr_pos, sizeof(na_header));
+
+        std::array<uint16_t, 8> advertised_ip_le;
+        for (int i = 0; i < 8; i++) {
+            advertised_ip_le[i] = ntohs(na_header.nd_na_target.s6_addr16[i]);
+        }
+
+        const char* na_type = (na_header.nd_na_hdr.icmp6_data8[0] & 0x40) ? "solicited" : "unsolicited";
+        auto gateway_address = port->find_next_hop_v6(advertised_ip_le.data(), vlan_id);
+        if (!gateway_address) {
+            if (verbose >= 3) {
+                printf("RX %s NA for different address: %s\n", na_type
+                    , ip_to_str((uint8_t*)advertised_ip_le.data()).c_str());
+            }
+            return;
+        }
+
+        if (verbose >= 3) {
+            printf("RX %s NA for local address: %s\n"
+                , na_type, ip_to_str((uint8_t*)advertised_ip_le.data()).c_str());
+        }
+
+        if (ipv6_payload_length == 24) {
+            // No ICMPv6 options. Fall back to address from Ethernet header
+            uint8_t* advertised_mac = eth_header.ether_shost;
+            gateway_address->set_mac(advertised_mac);
+            if (verbose >= 3) {
+                printf("%s is at %s (NA with no target-link-layer-address option)\n"
+                    , ip_to_str((uint8_t*)advertised_ip_le.data()).c_str()
+                    , utl_macaddr_to_str(advertised_mac).c_str());
+            }
+            return;
+        }
+
+        auto icmp_hdr_option = icmp_hdr_pos + 24;
+        nd_opt_hdr option_header;
+        memcpy(&option_header, icmp_hdr_option, sizeof(option_header));
+        if (option_header.nd_opt_type != ND_OPT_TARGET_LINKADDR) {
+            if (verbose >= 3) {
+                printf("%s NA has invalid option type %d\n", na_type, (int)option_header.nd_opt_type);
+            }
+            return;
+        }
+        uint8_t* advertised_mac = (uint8_t*)(icmp_hdr_option + 2);
+        gateway_address->set_mac(advertised_mac);
+        if (verbose >= 3) {
+            printf("%s is at %s\n"
+                , ip_to_str((uint8_t*)advertised_ip_le.data()).c_str()
+                , utl_macaddr_to_str(advertised_mac).c_str());
+        }
+    } else {
+        if (verbose >= 7) {
+            printf("RX ICMPv6 packet with unsupported type %d\n", (int)icmp_header.icmp6_type);
+        }
+    }
+}
+
 int CPretest::handle_rx(int port_id, int queue_id) {
     rte_mbuf_t * rx_pkts[32];
     uint16_t cnt;
@@ -554,6 +765,8 @@ int CPretest::handle_rx(int port_id, int queue_id) {
                         }
                     }
                 }
+            } else {
+                try_handling_icmpv6(port, p, pkt_size);
             }
             if (free_pkt)
                 rte_pktmbuf_free(m);

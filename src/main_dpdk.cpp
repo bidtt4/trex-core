@@ -3486,6 +3486,18 @@ COLD_FUNC void CGlobalTRex::pre_test() {
             if (resolve_needed) {
                 pretest.add_next_hop(port_id, CGlobalInfo::m_options.m_ip_cfg[port_id].get_def_gw()
                                      , CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan());
+                auto ipv6_addr = CGlobalInfo::m_options.m_ip_cfg[port_id].get_ipv6();
+                auto ipv6_addr_u16 = reinterpret_cast<uint16_t*>(ipv6_addr.data());
+                COneIPv6Info ipv6_info(ipv6_addr_u16, CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan());
+                if (!ipv6_info.is_zero_ip()) {
+                    pretest.add_ip(port_id, ipv6_addr_u16
+                        , CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan()
+                        , CGlobalInfo::m_options.m_mac_addr[port_id].u.m_mac.src);
+                    auto gwv6 = CGlobalInfo::m_options.m_ip_cfg[port_id].get_def_gwv6();
+                    pretest.add_next_hop(port_id
+                        , reinterpret_cast<uint16_t*>(gwv6.data())
+                        , CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan());
+                }
             }
         }
     }
@@ -3861,6 +3873,10 @@ COLD_FUNC int  CGlobalTRex::device_start(void){
         _if->configure_rss();
         if (CGlobalInfo::m_options.preview.getPromMode()) {
             _if->get_port_attr()->set_promiscuous(true);
+            _if->get_port_attr()->set_multicast(true);
+        }
+
+        if (CGlobalInfo::m_options.preview.get_ipv6_mode_enable()) {
             _if->get_port_attr()->set_multicast(true);
         }
 
@@ -6467,6 +6483,8 @@ COLD_FUNC int update_global_info_from_platform_file(){
             g_opts->m_ip_cfg[i].set_mask(cg->m_mac_info[i].get_mask());
             g_opts->m_ip_cfg[i].set_vlan(cg->m_mac_info[i].get_vlan());
             g_opts->m_ip_cfg[i].set_mpls(cg->m_mac_info[i].get_mpls());
+            g_opts->m_ip_cfg[i].set_ipv6(cg->m_mac_info[i].get_ipv6());
+            g_opts->m_ip_cfg[i].set_def_gwv6(cg->m_mac_info[i].get_def_gwv6());
             // If one of the ports has vlan, work in vlan mode
             if (cg->m_mac_info[i].get_vlan() != 0) {
                 // Check if MPLS configuration also specified, tunnel in tunnel EoMPLS[vlan]

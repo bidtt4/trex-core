@@ -212,6 +212,14 @@ uint32_t CMacYamlInfo::get_ip() {
     return m_ip;
 }
 
+const std::array<u_char, 16>& CMacYamlInfo::get_def_gwv6() const {
+    return m_def_gwv6;
+}
+
+const std::array<u_char, 16>& CMacYamlInfo::get_ipv6() const {
+    return m_ipv6;
+}
+
 uint32_t CMacYamlInfo::get_mask() {
     return m_mask;
 }
@@ -303,6 +311,13 @@ void operator >> (const YAML::Node& node, CMacYamlInfo & mac_info) {
     }
     if (! utl_yaml_read_uint16(node, "vlan", mac_info.m_vlan, 0, 0xfff)) {
         mac_info.m_vlan = 0;
+    }
+
+    if (! utl_yaml_read_ipv6_addr(node, "default_gwv6", mac_info.m_def_gwv6.data())) {
+        mac_info.m_def_gwv6 = {};
+    }
+    if (! utl_yaml_read_ipv6_addr(node, "ipv6", mac_info.m_ipv6.data())) {
+        mac_info.m_ipv6 = {};
     }
 
     if ( node.FindValue("mpls")) {
