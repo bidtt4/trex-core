@@ -20,7 +20,12 @@
 */
 
 #include <assert.h>
+#include <cstdint>
+#include <cstring>
+#include <endian.h>
+#include <netinet/icmp6.h>
 #include <netinet/in.h>
+#include <netinet/ip6.h>
 #include <common/Network/Packet/TcpHeader.h>
 #include <common/Network/Packet/UdpHeader.h>
 #include <common/Network/Packet/IcmpHeader.h>
@@ -31,6 +36,66 @@
 #include "rx_check_header.h"
 #include "pkt_gen.h"
 #include "bp_sim.h"
+#include "utl_ipv6_hextets.h"
+
+
+static uint16_t calculate_icmpv6_checksum(uint8_t* ipv6_header_pos, uint8_t* icmpv6_header_pos, uint16_t icmpv6_header_length) {
+    ip6_hdr* ipv6_header = (ip6_hdr*)ipv6_header_pos;
+    IPv6PseudoHeader ipv6_pseudo_hdr;
+    memcpy(ipv6_pseudo_hdr.m_mySource, ipv6_header->ip6_src.s6_addr, IPV6_ADDR_LEN);
+    memcpy(ipv6_pseudo_hdr.m_myDestination, ipv6_header->ip6_dst.s6_addr, IPV6_ADDR_LEN);
+    ipv6_pseudo_hdr.m_length = ipv6_header->ip6_plen;
+    memset(&ipv6_pseudo_hdr.m_zero, 0, sizeof(ipv6_pseudo_hdr.m_zero));
+    ipv6_pseudo_hdr.m_protocol = ipv6_header->ip6_nxt;
+
+    return pkt_InetChecksum(
+        ipv6_pseudo_hdr.getPointer(),
+        ipv6_pseudo_hdr.getSize(),
+        icmpv6_header_pos,
+        icmpv6_header_length
+    );
+}
+
+static uint8_t* fill_ethernet_header(uint8_t* pkt, const uint8_t* dst_mac, const uint8_t* src_mac, uint16_t l3_type, uint16_t inner_vlan = 0, uint16_t outer_vlan = 0) {
+    memcpy(pkt, dst_mac, ETHER_ADDR_LEN);
+    pkt += ETHER_ADDR_LEN;
+
+    memcpy(pkt, src_mac, ETHER_ADDR_LEN);
+    pkt += ETHER_ADDR_LEN;
+
+    auto write_be_u16 = [](uint8_t *dst, uint16_t value) {
+        auto be_value = htobe16(value);
+        memcpy(dst, &be_value, sizeof(value));
+        return sizeof(value);
+    };
+
+    if (outer_vlan != 0) {
+        pkt += write_be_u16(pkt, EthernetHeader::Protocol::QINQ);
+        pkt += write_be_u16(pkt, outer_vlan);
+    }
+
+    if (inner_vlan != 0) {
+        pkt += write_be_u16(pkt, EthernetHeader::Protocol::VLAN);
+        pkt += write_be_u16(pkt, inner_vlan);
+    }
+
+    pkt += write_be_u16(pkt, l3_type);
+    return pkt;
+}
+
+static uint8_t* fill_ipv6_header(uint8_t* pkt, const uint8_t* dst_ip, const uint8_t* src_ip, uint8_t next_protocol, uint16_t payload_length) {
+    ip6_hdr header = {};
+    header.ip6_flow = htobe32(0x60000000); // version 6, traffic class 0, flow id 0
+    header.ip6_plen = htobe16(payload_length);
+    header.ip6_hlim = 255; // RFC4861 - required for NDP
+    header.ip6_nxt = next_protocol;
+    memcpy(header.ip6_src.s6_addr, src_ip, IPV6_ADDR_LEN);
+    memcpy(header.ip6_dst.s6_addr, dst_ip, IPV6_ADDR_LEN);
+
+    memcpy(pkt, &header, sizeof(header));
+    return pkt + sizeof(header);
+}
+
 // For use in tests
 char *CTestPktGen::create_test_pkt(uint16_t l3_type, uint16_t l4_proto, uint8_t ttl, uint32_t ip_id, uint16_t flags
                                    , uint16_t max_payload, int &pkt_size) {
@@ -328,4 +393,173 @@ void CTestPktGen::create_arp_req(uint8_t *pkt,
     memcpy(&arp->m_arp_tha.data, magic, 5); // Target MAC address
     arp->m_arp_tha.data[5] = port;
     arp->m_arp_tip = htonl(tip);
+}
+
+/*
+ * Create ICMPv6 Neighbor Solicitation packet
+ * Parameters:
+ *  pkt - Buffer to fill the packet in. Size should be big enough to contain the packet (60 is a good value).
+ *  sip - Our source IP
+ *  tip - Target IP for which we need resolution
+ *  src_mac - Our source MAC
+ *
+ *  inner_vlan - VLAN tag to send the packet on. If set to 0, no vlan tag will be added.
+ *  outer_vlan - QinQ VLAN tag. If set to 0, no QinQ tag will be added
+ */
+void CTestPktGen::create_neighbor_solicitation(uint8_t *pkt, const uint16_t* sip, const uint16_t* tip, const uint8_t *src_mac, uint16_t inner_vlan, uint16_t outer_vlan) {
+    auto sip_n = ipv6_to_be_bytes(sip);
+    auto tip_n = ipv6_to_be_bytes(tip);
+
+    // RFC4291 - solicited-node address is ff02::1:ffXX:XXXX
+    std::array<uint8_t, IPV6_ADDR_LEN> multicast_dst_ip = {
+        0xff, 0x02, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x01,
+        0xff, tip_n[13], tip_n[14], tip_n[15],
+    };
+
+    // RFC2464 - multicast mapped MAC - 33:33:XX:XX:XX:XX
+    std::array<uint8_t, ETHER_ADDR_LEN> dst_multicast_mac = {
+        0x33, 0x33,
+        multicast_dst_ip[12], multicast_dst_ip[13], multicast_dst_ip[14], multicast_dst_ip[15]
+    };
+
+    pkt = fill_ethernet_header(pkt, dst_multicast_mac.data(), src_mac, EthernetHeader::Protocol::IPv6);
+    uint8_t* ipv6_header_pos = pkt;
+
+    const uint16_t icmp_header_length = sizeof(nd_neighbor_solicit);
+    pkt = fill_ipv6_header(
+        pkt,
+        multicast_dst_ip.data(),
+        sip_n.data(),
+        IPv6Header::IPPROTO_ICMPV6,
+        icmp_header_length
+    );
+    uint8_t* icmpv6_hdr_pos = pkt;
+
+    nd_neighbor_solicit ns_header = {};
+    ns_header.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
+    ns_header.nd_ns_hdr.icmp6_code = 0;
+    ns_header.nd_ns_hdr.icmp6_cksum = 0;
+    memcpy(ns_header.nd_ns_target.s6_addr, tip_n.data(), IPV6_ADDR_LEN);
+
+    memcpy(icmpv6_hdr_pos, &ns_header, sizeof(ns_header));
+    ns_header.nd_ns_hdr.icmp6_cksum = calculate_icmpv6_checksum(
+        ipv6_header_pos, icmpv6_hdr_pos, icmp_header_length);
+
+    // Update header after checksum calculation
+    memcpy(icmpv6_hdr_pos, &ns_header, sizeof(ns_header));
+}
+
+/*
+ * Create ICMPv6 Unsolicited Neighbor Advertisement packet
+ * Parameters:
+ *  pkt - Buffer to fill the packet in. Size should be big enough to contain the packet (60 is a good value).
+ *  sip - Our source IP
+ *  src_mac - Our source MAC
+ *
+ *  inner_vlan - VLAN tag to send the packet on. If set to 0, no vlan tag will be added.
+ *  outer_vlan - QinQ VLAN tag. If set to 0, no QinQ tag will be added
+ */
+void CTestPktGen::create_unsolicited_neighbor_advertisement(uint8_t *pkt, const uint16_t* sip, const uint8_t *src_mac, uint16_t inner_vlan, uint16_t outer_vlan) {
+    auto sip_n = ipv6_to_be_bytes(sip);
+
+    // RFC4291 - all-node address is ff02::1
+    std::array<uint8_t, IPV6_ADDR_LEN> multicast_dst_ip = {
+        0xff, 0x02, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x01,
+    };
+
+    // RFC2464 - multicast mapped MAC - 33:33:XX:XX:XX:XX
+    std::array<uint8_t, ETHER_ADDR_LEN> dst_multicast_mac = {
+        0x33, 0x33,
+        multicast_dst_ip[12], multicast_dst_ip[13], multicast_dst_ip[14], multicast_dst_ip[15]
+    };
+
+    pkt = fill_ethernet_header(pkt, dst_multicast_mac.data(), src_mac, EthernetHeader::Protocol::IPv6);
+    uint8_t* ipv6_header_pos = pkt;
+
+    const uint16_t icmp_header_length = sizeof(nd_neighbor_advert) + sizeof(nd_opt_hdr) + ETHER_ADDR_LEN;
+    pkt = fill_ipv6_header(
+        pkt,
+        multicast_dst_ip.data(),
+        sip_n.data(),
+        IPv6Header::IPPROTO_ICMPV6,
+        icmp_header_length
+    );
+    uint8_t* icmpv6_hdr_pos = pkt;
+
+    nd_neighbor_advert na_header = {};
+    na_header.nd_na_hdr.icmp6_type = ND_NEIGHBOR_ADVERT;
+    na_header.nd_na_hdr.icmp6_code = 0;
+    na_header.nd_na_hdr.icmp6_cksum = 0;
+    na_header.nd_na_hdr.icmp6_data8[0] = 0x20; // R = 0, S = 0, O = 1
+    memcpy(na_header.nd_na_target.s6_addr, sip_n.data(), IPV6_ADDR_LEN);
+
+    memcpy(icmpv6_hdr_pos, &na_header, sizeof(na_header));
+    pkt += sizeof(na_header);
+
+    nd_opt_hdr option = {
+        .nd_opt_type = ND_OPT_TARGET_LINKADDR,
+        .nd_opt_len = 1, // 1 means 8 bytes
+    };
+
+    memcpy(pkt, &option, sizeof(option));
+    pkt += sizeof(option);
+
+    memcpy(pkt, src_mac, ETHER_ADDR_LEN);
+    pkt += ETHER_ADDR_LEN;
+
+    na_header.nd_na_hdr.icmp6_cksum = calculate_icmpv6_checksum(
+        ipv6_header_pos, icmpv6_hdr_pos, icmp_header_length);
+
+    // Update header after checksum calculation
+    memcpy(icmpv6_hdr_pos, &na_header, sizeof(na_header));
+}
+
+void CTestPktGen::create_solicited_neighbor_advertisement(uint8_t *pkt, const uint16_t* sip, const uint16_t* tip, const uint8_t *src_mac, const uint8_t *dst_mac, uint16_t inner_vlan, uint16_t outer_vlan) {
+    auto sip_n = ipv6_to_be_bytes(sip);
+    auto tip_n = ipv6_to_be_bytes(tip);
+
+    pkt = fill_ethernet_header(pkt, dst_mac, src_mac, EthernetHeader::Protocol::IPv6);
+    uint8_t* ipv6_header_pos = pkt;
+
+    const uint16_t icmp_header_length = sizeof(nd_neighbor_advert) + sizeof(nd_opt_hdr) + ETHER_ADDR_LEN;
+    pkt = fill_ipv6_header(
+        pkt,
+        tip_n.data(),
+        sip_n.data(),
+        IPv6Header::IPPROTO_ICMPV6,
+        icmp_header_length
+    );
+    uint8_t* icmpv6_hdr_pos = pkt;
+
+    nd_neighbor_advert na_header = {};
+    na_header.nd_na_hdr.icmp6_type = ND_NEIGHBOR_ADVERT;
+    na_header.nd_na_hdr.icmp6_code = 0;
+    na_header.nd_na_hdr.icmp6_cksum = 0;
+    na_header.nd_na_hdr.icmp6_data8[0] = 0x60; // R = 0, S = 1, O = 1
+    memcpy(na_header.nd_na_target.s6_addr, sip_n.data(), IPV6_ADDR_LEN);
+
+    memcpy(icmpv6_hdr_pos, &na_header, sizeof(na_header));
+    pkt += sizeof(na_header);
+
+    nd_opt_hdr option = {
+        .nd_opt_type = ND_OPT_TARGET_LINKADDR,
+        .nd_opt_len = 1, // 1 means 8 bytes
+    };
+
+    memcpy(pkt, &option, sizeof(option));
+    pkt += sizeof(option);
+
+    memcpy(pkt, src_mac, ETHER_ADDR_LEN);
+    pkt += ETHER_ADDR_LEN;
+
+    na_header.nd_na_hdr.icmp6_cksum = calculate_icmpv6_checksum(
+        ipv6_header_pos, icmpv6_hdr_pos, icmp_header_length);
+
+    // Update header after checksum calculation
+    memcpy(icmpv6_hdr_pos, &na_header, sizeof(na_header));
 }

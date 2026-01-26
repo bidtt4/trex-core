@@ -46,6 +46,32 @@ bool utl_yaml_read_ip_addr(const YAML::Node& node,
     return (res);
 }
 
+bool utl_yaml_read_ipv6_addr(const YAML::Node& node,
+                           const std::string &name,
+                           std::array<uint16_t, 8>& val){
+    std::string ip_str;
+    try {
+        node[name] >> ip_str;
+    } catch (const YAML::InvalidScalar &ex) {
+        printf(" Error: Expecting valid IPv6 address for field '%s', but got '%s'\n", name.c_str(), ip_str.c_str());
+        return false;
+    } catch (const YAML::KeyNotFound &ex) {
+        return false;
+    }
+
+    int rc = my_inet_pton6((char *)ip_str.c_str(), (uint8_t*)val.data());
+    if (!rc) {
+        printf("Invalid IPv6 address: %s\n", ip_str.c_str());
+        return false;
+    }
+
+    // we want host order
+    for (int i = 0; i < val.size(); i++) {
+        val[i] = PKT_NTOHS(val[i]);
+    }
+    return true;
+}
+
 bool utl_yaml_read_uint32(const YAML::Node& node,
                           const std::string &name,
                           uint32_t & val, uint32_t min, uint32_t max) {

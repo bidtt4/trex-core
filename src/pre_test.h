@@ -28,6 +28,7 @@
 #include "bp_sim.h"
 #include "trex_defs.h"
 #include "dpdk_port_map.h"
+#include "utl_ipv6_hextets.h"
 
 
 class CPreTestStats {
@@ -75,6 +76,7 @@ class CPretestOnePortInfo {
     COneIPv4Info *find_ip(uint32_t ip, uint16_t vlan);
     COneIPv4Info *find_next_hop(uint32_t ip, uint16_t vlan);
     COneIPv6Info *find_ipv6(uint16_t *ip, uint16_t vlan);
+    COneIPv6Info *find_next_hop_v6(const ipv6_hextets& ip, uint16_t vlan);
     bool get_mac(COneIPInfo *ip, uint16_t vlan, uint8_t *mac, uint8_t ip_ver);
 
     CPhyEthIF *  get_port(){
@@ -125,6 +127,7 @@ class CPretest {
     void send_arp_req_all();
     void send_grat_arp_all();
     bool is_arp(const uint8_t *p, uint16_t pkt_size, ArpHdr *&arp, uint16_t &vlan_tag);
+    void try_handling_icmpv6(CPretestOnePortInfo* port, const uint8_t *p, uint16_t pkt_size);
     void get_results(CManyIPInfo &resolved_ips);
     void dump(FILE *fd);
     void test();

@@ -23,6 +23,7 @@ limitations under the License.
 #include <iostream>
 #include <stdlib.h>
 #include "common/basic_utils.h"
+#include "utils/utl_ipv6_hextets.h"
 #include "utl_yaml.h"
 #include "platform_cfg.h"
 #include "trex_global.h"
@@ -212,6 +213,14 @@ uint32_t CMacYamlInfo::get_ip() {
     return m_ip;
 }
 
+const ipv6_hextets& CMacYamlInfo::get_def_gwv6() const {
+    return m_def_gwv6;
+}
+
+const ipv6_hextets& CMacYamlInfo::get_ipv6() const {
+    return m_ipv6;
+}
+
 uint32_t CMacYamlInfo::get_mask() {
     return m_mask;
 }
@@ -303,6 +312,13 @@ void operator >> (const YAML::Node& node, CMacYamlInfo & mac_info) {
     }
     if (! utl_yaml_read_uint16(node, "vlan", mac_info.m_vlan, 0, 0xfff)) {
         mac_info.m_vlan = 0;
+    }
+
+    if (! utl_yaml_read_ipv6_addr(node, "default_gwv6", mac_info.m_def_gwv6)) {
+        mac_info.m_def_gwv6 = IPV6_UNSPECIFIED;
+    }
+    if (! utl_yaml_read_ipv6_addr(node, "ipv6", mac_info.m_ipv6)) {
+        mac_info.m_ipv6 = IPV6_UNSPECIFIED;
     }
 
     if ( node.FindValue("mpls")) {

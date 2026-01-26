@@ -67,11 +67,17 @@ bool COneIPv4Info::is_zero_ip() {
 }
 
 void COneIPv6Info::fill_arp_req_buf(uint8_t *p, uint16_t port_id, COneIPInfo *sip) {
-    //??? implement ipv6
+    uint8_t src_mac[ETHER_ADDR_LEN];
+    sip->get_mac(src_mac);
+
+    CTestPktGen::create_neighbor_solicitation(p, ((COneIPv6Info *)sip)->get_ipv6(), m_ip, src_mac, m_vlan);
 }
 
 void COneIPv6Info::fill_grat_arp_buf(uint8_t *p) {
-    //??? implement ipv6
+    uint8_t src_mac[ETHER_ADDR_LEN];
+    get_mac(src_mac);
+
+    CTestPktGen::create_unsolicited_neighbor_advertisement(p, m_ip, src_mac, m_vlan);
 }
 
 bool COneIPv6Info::is_zero_ip() {

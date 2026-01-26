@@ -32,6 +32,7 @@ limitations under the License.
 #include "trex_platform.h"
 #include "trex_modes.h"
 #include "hot_section.h"
+#include "utl_ipv6_hextets.h"
 #include <algorithm>
 
 
@@ -528,6 +529,8 @@ class CPerPortIPCfg {
     uint32_t get_ip() {return m_ip;}
     uint32_t get_mask() {return m_mask;}
     uint32_t get_def_gw() {return m_def_gw;}
+    const ipv6_hextets& get_ipv6() const {return m_ipv6;}
+    const ipv6_hextets& get_def_gwv6() const {return m_def_gwv6;}
     uint32_t get_vlan() {return m_tunnel_cfg_data.m_vlan;}
     mpls_tag_t get_mpls() {return m_tunnel_cfg_data.m_mpls;}
     tunnel_cfg_data_t get_tunnel_cfg_data() {return m_tunnel_cfg_data;}
@@ -535,6 +538,8 @@ class CPerPortIPCfg {
     void set_ip(uint32_t val) {m_ip = val;}
     void set_mask(uint32_t val) {m_mask = val;}
     void set_def_gw(uint32_t val) {m_def_gw = val;}
+    void set_ipv6(const ipv6_hextets& val) {m_ipv6 = val;}
+    void set_def_gwv6(const ipv6_hextets& val) {m_def_gwv6 = val;}
     void set_vlan(uint16_t val) {m_tunnel_cfg_data.m_vlan = val;}
     void set_mpls(mpls_tag_t val) {m_tunnel_cfg_data.m_mpls = val;}
     void set_tunnel_cfg_data(tunnel_cfg_data_t val) {m_tunnel_cfg_data = val;}
@@ -543,6 +548,8 @@ class CPerPortIPCfg {
     uint32_t m_def_gw;
     uint32_t m_ip;
     uint32_t m_mask;
+    ipv6_hextets m_def_gwv6;
+    ipv6_hextets m_ipv6;
     tunnel_cfg_data_t m_tunnel_cfg_data;
     bool m_vxlan_fs = false;
 };

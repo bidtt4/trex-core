@@ -66,6 +66,22 @@ inline int ipv6_to_str(ipaddr_t *ip, char * str) {
     return(idx);
 }
 
+// Convert IPv6 address with LE hextets to string
+// This method do not reorders last bytes like ipv6_to_str
+inline int ipv6_le_to_str(const uint16_t *ip_le, char * str) {
+    int idx=0;
+    uint16_t ipv6_be[8];
+    for (uint8_t i=0; i<8; i++) {
+        ipv6_be[i] = PKT_HTONS(ip_le[i]);
+    }
+    str[idx++] = '[';
+    inet_ntop(AF_INET6, (const char *)&ipv6_be, &str[idx], INET6_ADDRSTRLEN);
+    idx = strlen(str);
+    str[idx++] = ']';
+    str[idx] = 0;
+    return(idx);
+}
+
 inline std::string ip_to_str(uint8_t *ip) {
     char tmp[INET6_ADDRSTRLEN];
     ipv6_to_str((ipaddr_t *)ip, tmp);
@@ -207,17 +223,17 @@ class COneIPv6Info : public COneIPInfo {
     }
     ~COneIPv6Info() {}
 
-    const uint8_t *get_ipv6() {return (uint8_t *)m_ip;}
+    const uint16_t *get_ipv6() {return m_ip;}
     virtual uint8_t ip_ver() const {return IP6_VER;}
-    virtual uint32_t get_arp_req_len() const {return 100; /* ??? put correct number for ipv6*/}
-    virtual uint32_t get_grat_arp_len() const {return 100; /* ??? put correct number for ipv6*/}
+    virtual uint32_t get_arp_req_len() const {return 84;}
+    virtual uint32_t get_grat_arp_len() const {return 92;}
     virtual void fill_arp_req_buf(uint8_t *p, uint16_t port_id, COneIPInfo *sip);
     virtual void fill_grat_arp_buf(uint8_t *p);
     virtual bool is_zero_ip();
 
  private:
     virtual const void get_ip_str(char str[100]) const {
-        ipv6_to_str((ipaddr_t *)m_ip, str);
+        ipv6_le_to_str(m_ip, str);
     }
     uint16_t m_ip[8];
 };

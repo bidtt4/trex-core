@@ -49,6 +49,9 @@ class CTestPktGen {
     static char *create_test_pkt(uint16_t l3_type, uint16_t l4_proto, uint8_t ttl, uint32_t ip_id, uint16_t flags
                                  , uint16_t max_payload, int &pkt_size);
     static void create_arp_req(uint8_t *pkt, uint32_t sip, uint32_t tip, uint8_t *src_mac, uint16_t port, uint16_t inner_vlan = 0, uint16_t outer_vlan = 0);
+    static void create_neighbor_solicitation(uint8_t *pkt, const uint16_t* sip, const uint16_t* tip, const uint8_t *src_mac, uint16_t inner_vlan = 0, uint16_t outer_vlan = 0);
+    static void create_unsolicited_neighbor_advertisement(uint8_t *pkt, const uint16_t* sip, const uint8_t *src_mac, uint16_t inner_vlan = 0, uint16_t outer_vlan = 0);
+    static void create_solicited_neighbor_advertisement(uint8_t *pkt, const uint16_t* sip, const uint16_t* tip, const uint8_t *src_mac, const uint8_t *dst_mac, uint16_t inner_vlan = 0, uint16_t outer_vlan = 0);
 };
 
 #endif

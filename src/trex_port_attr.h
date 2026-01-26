@@ -17,6 +17,7 @@ limitations under the License.
 #ifndef __TREX_PORT_ATTR_H__
 #define __TREX_PORT_ATTR_H__
 
+#include <cerrno>
 #include <string>
 #include <vector>
 #include <string.h>
@@ -28,6 +29,7 @@ limitations under the License.
 
 #include "trex_rx_defs.h"
 #include "trex_vlan.h"
+#include "utl_ipv6_hextets.h"
 
 
 
@@ -81,6 +83,7 @@ public:
     virtual int set_promiscuous(bool enabled) = 0;
     virtual int set_multicast(bool enabled) = 0;
     virtual int add_mac(char * mac) = 0;
+    virtual int enable_multicast_mac(const ipv6_hextets& local_ipv6) = 0;
     virtual int set_link_up(bool up) = 0;
     virtual int set_flow_ctrl(int mode) = 0;
     virtual int set_led(bool on) = 0;
@@ -158,6 +161,7 @@ public:
     virtual int set_promiscuous(bool enabled);
     virtual int set_multicast(bool enabled);
     virtual int add_mac(char * mac);
+    virtual int enable_multicast_mac(const ipv6_hextets& local_ipv6);
     virtual int set_link_up(bool up);
     virtual int set_flow_ctrl(int mode);
     virtual int set_led(bool on);
@@ -226,6 +230,7 @@ public:
     int set_promiscuous(bool enabled) { return -ENOTSUP; }
     int set_multicast(bool enabled) { return -ENOTSUP; }
     int add_mac(char * mac) { return -ENOTSUP; }
+    int enable_multicast_mac(const ipv6_hextets& local_ipv6) { return -ENOTSUP; }
     int set_link_up(bool up) { return -ENOTSUP; }
     int set_flow_ctrl(int mode) { return -ENOTSUP; }
     int set_led(bool on) { return -ENOTSUP; }

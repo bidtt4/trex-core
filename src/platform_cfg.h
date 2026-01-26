@@ -21,7 +21,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 #include <yaml-cpp/yaml.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -29,6 +28,7 @@ limitations under the License.
 #include <string>
 #include "tw_cfg.h"
 #include "trex_defs.h"
+#include "utl_ipv6_hextets.h"
 
 
 #define CONST_NB_MBUF_2_10G  (16380/2)
@@ -106,6 +106,8 @@ struct CMacYamlInfo {
     uint32_t m_ip;
     uint32_t m_mask;
     uint16_t m_vlan;
+    ipv6_hextets m_def_gwv6;
+    ipv6_hextets m_ipv6;
     mpls_tag_t m_mpls={0};
     bool m_is_eompls=0;
     void Dump(FILE *fd);
@@ -114,6 +116,8 @@ struct CMacYamlInfo {
     void copy_src(char *p);
     uint32_t get_def_gw();
     uint32_t get_ip();
+    const ipv6_hextets& get_def_gwv6() const;
+    const ipv6_hextets& get_ipv6() const;
     uint32_t get_vlan();
     mpls_tag_t get_mpls();
     bool get_is_eompls();
