@@ -3,6 +3,7 @@ from .arg_verify import ArgVerify
 import os
 import sys
 import inspect
+import ipaddress
 from .trex_astf_exceptions import ASTFError, ASTFErrorBadParamCombination, ASTFErrorMissingParam, ASTFErrorOverlapIP
 from .trex_astf_global_info import ASTFGlobalInfo, ASTFGlobalInfoPerTemplate
 import json
@@ -1183,8 +1184,8 @@ class ASTFIPGenDist(object):
             return self.fields == other.fields
 
         def is_overlaps(self, other_inner):
-            my_start, my_end = ip2int(self.ip_start), ip2int(self.ip_end)
-            other_start, other_end = ip2int(other_inner.ip_start), ip2int(other_inner.ip_end)
+            my_start, my_end = ipaddress.ip_address(self.ip_start), ipaddress.ip_address(self.ip_end)
+            other_start, other_end = ipaddress.ip_address(other_inner.ip_start), ipaddress.ip_address(other_inner.ip_end)
 
             return my_start <= other_end and my_end >= other_start 
 
@@ -1232,13 +1233,13 @@ class ASTFIPGenDist(object):
                       "seq" or "rand"
 
                   per_core_distribution : "seq" or "default"
-                     in case of "seq" each core will get continuous range of Ip. 
+                     in case of "seq" each core will get continuous range of Ip.
                      in case of "default" it is not necessarily the case.
 
         """
 
         ver_args = {"types":
-                    [{"name": "ip_range", 'arg': ip_range, "t": "ip range", "must": True},
+                    [{"name": "ip_range", 'arg': ip_range, "t": "ipv4v6 range", "must": True},
                      ]}
         ArgVerify.verify(self.__class__.__name__, ver_args)
         distribution_vals = ["seq", "rand"]
@@ -1479,8 +1480,8 @@ class ASTFAssociationRule(object):
         """
 
         ver_args = {"types":
-                    [{"name": "ip_start", 'arg': ip_start, "t": "ip address", "must": False},
-                     {"name": "ip_end", 'arg': ip_end, "t": "ip address", "must": False},
+                    [{"name": "ip_start", 'arg': ip_start, "t": "ipv4v6 address", "must": False},
+                     {"name": "ip_end", 'arg': ip_end, "t": "ipv4v6 address", "must": False},
                      ]}
         ArgVerify.verify(self.__class__.__name__, ver_args)
 

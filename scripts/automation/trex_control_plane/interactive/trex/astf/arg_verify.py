@@ -1,6 +1,5 @@
+import ipaddress
 from .trex_astf_exceptions import ASTFErrorWrongType, ASTFErrorMissingParam, ASTFErrorBadIp, ASTFErrorBadIpRange,ASTFErrorBadMac
-from ..utils.common import ip2int
-import socket
 
 
 class ArgVerify(object):
@@ -24,31 +23,53 @@ class ArgVerify(object):
     @staticmethod
     def verify_ipv6(ip):
         try:
-            socket.inet_pton(socket.AF_INET6,ip)
-        except Exception:
-            return False
-        return True
+            return ipaddress.IPv6Address(ip)
+        except ipaddress.AddressValueError:
+            return None
+
+    @staticmethod
+    def verify_ipv4(ip):
+        try:
+            return ipaddress.IPv4Address(ip)
+        except ipaddress.AddressValueError:
+            return None
 
     @staticmethod
     def verify_ip(ip):
         try:
-            socket.inet_aton(ip)
-        except Exception:
-            return False
-        return True
+            return ipaddress.ip_address(ip)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def verify_ipv4_range(ip_range):
+        if len(ip_range) != 2:
+            return False, "Range should contain two IPs"
+        first_ip = ArgVerify.verify_ipv4(ip_range[0])
+        if not first_ip:
+            return False, "Bad first IP"
+        second_ip = ArgVerify.verify_ipv4(ip_range[1])
+        if not second_ip:
+            return False, "Bad second IP"
+        if first_ip > second_ip:
+            return False, "Min IP is bigger than Max IP"
+        return True, ""
 
     @staticmethod
     def verify_ip_range(ip_range):
         if len(ip_range) != 2:
-            return "Range should contain two IPs"
-        if not ArgVerify.verify_ip(ip_range[0]):
-            return "Bad first IP"
-        if not ArgVerify.verify_ip(ip_range[1]):
-            return "Bad second IP"
-        if ip2int(ip_range[0]) > ip2int(ip_range[1]):
-            return "Min IP is bigger than Max IP"
-
-        return "ok"
+            return False, "Range should contain two IPs"
+        first_ip = ArgVerify.verify_ip(ip_range[0])
+        if not first_ip:
+            return False, "Bad first IP"
+        second_ip = ArgVerify.verify_ip(ip_range[1])
+        if not second_ip:
+            return False, "Bad second IP"
+        if first_ip.version != second_ip.version:
+            return False, "IPs have different version"
+        if first_ip > second_ip:
+            return False, "Min IP is bigger than Max IP"
+        return True, ""
 
     @staticmethod
     def verify(f_name, d):
@@ -78,7 +99,7 @@ class ArgVerify(object):
             type_ok = False
             for one_type in needed_type:
                 if one_type == "ip address":
-                    if ArgVerify.verify_ip(given_arg):
+                    if ArgVerify.verify_ipv4(given_arg):
                         type_ok = True
                     else:
                         raise ASTFErrorBadIp(f_name, name, given_arg)
@@ -87,12 +108,23 @@ class ArgVerify(object):
                      type_ok = True
                   else:
                       raise ASTFErrorBadIp(f_name, name, given_arg)
+                elif one_type == "ipv4v6 address":
+                  if ArgVerify.verify_ip(given_arg):
+                     type_ok = True
+                  else:
+                      raise ASTFErrorBadIp(f_name, name, given_arg)
                 elif one_type == "ip range":
-                    ret = ArgVerify.verify_ip_range(given_arg)
-                    if ret == "ok":
+                    ret, msg = ArgVerify.verify_ipv4_range(given_arg)
+                    if ret:
                         type_ok = True
                     else:
-                        raise ASTFErrorBadIpRange(f_name, name, given_arg, ret)
+                        raise ASTFErrorBadIpRange(f_name, name, given_arg, msg)
+                elif one_type == "ipv4v6 range":
+                    ret, msg = ArgVerify.verify_ip_range(given_arg)
+                    if ret:
+                        type_ok = True
+                    else:
+                        raise ASTFErrorBadIpRange(f_name, name, given_arg, msg)
                 elif one_type == "mac":
                     if ArgVerify.verify_mac(given_arg):
                         type_ok = True
