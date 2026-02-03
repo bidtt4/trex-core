@@ -1,5 +1,6 @@
 from .trex_astf_exceptions import ASTFErrorWrongType, ASTFErrorMissingParam, ASTFErrorBadIp, ASTFErrorBadIpRange,ASTFErrorBadMac
 from ..utils.common import ip2int
+import ipaddress
 import socket
 
 
@@ -38,6 +39,13 @@ class ArgVerify(object):
         return True
 
     @staticmethod
+    def verify_ipv4v6(ip):
+        try:
+            return ipaddress.ip_address(ip)
+        except Exception:
+            return None
+
+    @staticmethod
     def verify_ip_range(ip_range):
         if len(ip_range) != 2:
             return "Range should contain two IPs"
@@ -48,6 +56,22 @@ class ArgVerify(object):
         if ip2int(ip_range[0]) > ip2int(ip_range[1]):
             return "Min IP is bigger than Max IP"
 
+        return "ok"
+
+    @staticmethod
+    def verify_ipv4v6_range(ip_range):
+        if len(ip_range) != 2:
+            return "Range should contain two IPs"
+        first_ip = ArgVerify.verify_ipv4v6(ip_range[0])
+        if not first_ip:
+            return "Bad first IP"
+        second_ip = ArgVerify.verify_ipv4v6(ip_range[1])
+        if not second_ip:
+            return "Bad second IP"
+        if first_ip.version != second_ip.version:
+            return "IPs have different version"
+        if first_ip > second_ip:
+            return "Min IP is bigger than Max IP"
         return "ok"
 
     @staticmethod
@@ -87,8 +111,19 @@ class ArgVerify(object):
                      type_ok = True
                   else:
                       raise ASTFErrorBadIp(f_name, name, given_arg)
+                elif one_type == "ipv4v6 address":
+                  if ArgVerify.verify_ipv4v6(given_arg):
+                     type_ok = True
+                  else:
+                      raise ASTFErrorBadIp(f_name, name, given_arg)
                 elif one_type == "ip range":
                     ret = ArgVerify.verify_ip_range(given_arg)
+                    if ret == "ok":
+                        type_ok = True
+                    else:
+                        raise ASTFErrorBadIpRange(f_name, name, given_arg, ret)
+                elif one_type == "ipv4v6 range":
+                    ret = ArgVerify.verify_ipv4v6_range(given_arg)
                     if ret == "ok":
                         type_ok = True
                     else:
