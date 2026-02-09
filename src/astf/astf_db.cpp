@@ -21,6 +21,7 @@
 #include "inet_pton.h"
 #include "astf/astf_json_validator.h"
 #include "stx/astf/trex_astf_topo.h"
+#include "utl_ipv4v6_addr.h"
 
 #define MAX_TG_NAME_LENGTH 20
 
@@ -736,17 +737,14 @@ void CAstfDB::get_rx_cmd(uint32_t program_index, uint32_t cmd_index, uint64_t& t
 
 // verify correctness of json data
 CJsonData_err CAstfDB::verify_data(uint16_t max_threads) {
-    uint32_t ip_start;
-    uint32_t ip_end;
-    uint32_t num_ips;
     std::string err_str;
 
     Json::Value ip_gen_list = m_val["ip_gen_dist_list"];
     for (int i = 0; i < ip_gen_list.size(); i++) {
         std::string ip_start_str = ip_gen_list[i]["ip_start"].asString();
         std::string ip_end_str = ip_gen_list[i]["ip_end"].asString();
-        ip_start = ip_from_str(ip_start_str.c_str());
-        ip_end = ip_from_str(ip_end_str.c_str());
+        ipv4v6_addr ip_start = ipv4v6_addr::from_str(ip_start_str.c_str());
+        ipv4v6_addr ip_end = ipv4v6_addr::from_str(ip_end_str.c_str());
         if (ip_end < ip_start) {
             err_str = std::string("IP start: ") + ip_start_str + " is bigger than IP end: " + ip_end_str;
             return CJsonData_err(CJsonData_err_pool_err, err_str);
@@ -755,7 +753,7 @@ CJsonData_err CAstfDB::verify_data(uint16_t max_threads) {
             /* in software_mode, split IPs is not required by source port distribution */
             continue;
         }
-        num_ips = ip_end - ip_start + 1;
+        uint32_t num_ips = ipv4v6_addr::num_ips(ip_end, ip_start);
         if (num_ips < max_threads) {
             err_str = "Pool:(" + ip_gen_list[i]["ip_start"].asString() + "-"
                 + ip_gen_list[i]["ip_end"].asString() + ") has only "
@@ -1207,9 +1205,9 @@ void CAstfDB::get_tuple_info(CTupleGenYamlInfo & tuple_info){
     for (int i = 0; i < ip_gen_list.size(); i++) {
         Json::Value g=ip_gen_list[i];
         s = g["ip_start"].asString();
-        uint32_t ip_start = ip_from_str(s.c_str());
+        ipv4v6_addr ip_start = ipv4v6_addr::from_str(s.c_str());
         s = g["ip_end"].asString();
-        uint32_t ip_end = ip_from_str(s.c_str());
+        ipv4v6_addr ip_end = ipv4v6_addr::from_str(s.c_str());
         s = g["ip_offset"].asString();
         uint32_t mask = ip_from_str(s.c_str());
 
@@ -1250,8 +1248,8 @@ void CAstfDB::get_thread_ip_range(uint16_t thread_id, uint16_t max_threads, uint
     CTupleGenPoolYaml poolinfo;
 
     poolinfo.m_per_core_distro = per_core_dist;
-    poolinfo.m_ip_start = ip_from_str(ip_start.c_str());
-    poolinfo.m_ip_end = ip_from_str(ip_end.c_str());
+    poolinfo.m_ip_start = ipv4v6_addr::from_str(ip_start.c_str());
+    poolinfo.m_ip_end = ipv4v6_addr::from_str(ip_end.c_str());
     poolinfo.m_dual_interface_mask = ip_from_str(ip_offset.c_str());
 
     if (poolinfo.m_per_core_distro) {
@@ -1305,9 +1303,9 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
         IP_DIST_t dist;
         poolinfo.m_per_core_distro =false;
         s = ip_gen_list[i]["ip_start"].asString();
-        poolinfo.m_ip_start = ip_from_str(s.c_str());
+        poolinfo.m_ip_start = ipv4v6_addr::from_str(s.c_str());
         s = ip_gen_list[i]["ip_end"].asString();
-        poolinfo.m_ip_end = ip_from_str(s.c_str());
+        poolinfo.m_ip_end = ipv4v6_addr::from_str(s.c_str());
         s = ip_gen_list[i]["distribution"].asString();
         if (! strncmp(s.c_str(), "seq", 3)) {
             dist = cdSEQ_DIST;
@@ -1342,7 +1340,7 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
             uint16_t split_id = (thread_id+m_core_base)%max_threads;
             split_ips(split_id, max_threads, dual_port_id, poolinfo, portion);
         }
-        active_flows_per_core = (portion.m_ip_end - portion.m_ip_start) * 32000;
+        active_flows_per_core = ipv4v6_addr::distance(portion.m_ip_end, portion.m_ip_start) * 32000;
         if (ip_gen_list[i]["dir"] == "c") {
             gen_idx_trans.push_back(last_c_idx);
             last_c_idx++;
@@ -1391,7 +1389,7 @@ CAstfTemplatesRW *CAstfDB::get_db_template_rw(uint8_t socket_id, CTupleGenerator
         template_ro.m_client_pool_idx = gen_idx_trans[c_temp["ip_gen"]["dist_client"]["index"].asInt()];
         template_ro.m_server_pool_idx = gen_idx_trans[c_temp["ip_gen"]["dist_server"]["index"].asInt()];
         template_ro.m_one_app_server = false;
-        template_ro.m_server_addr = 0;
+        template_ro.m_server_addr = {};
         template_ro.m_w = 1;
         double cps = cps_factor (c_temp["cps"].asDouble() / max_threads);
         template_ro.m_k_cps = cps;
@@ -1572,8 +1570,8 @@ void CAstfDB::update_server_info(CTcpServerInfo* server_info) {
 
     /* update server ip range */
     Json::Value assoc = temp["server_template"]["assoc"][0];
-    uint32_t ip_start = assoc["ip_start"] ? ip_from_str(assoc["ip_start"].asString().c_str()): 0;
-    uint32_t ip_end = assoc["ip_end"] ? ip_from_str(assoc["ip_end"].asString().c_str()): UINT32_MAX;
+    ipv4v6_addr ip_start = assoc["ip_start"] ? ipv4v6_addr::from_str(assoc["ip_start"].asString().c_str()): ipv4v6_addr::ipv4(0);
+    ipv4v6_addr ip_end = assoc["ip_end"] ? ipv4v6_addr::from_str(assoc["ip_end"].asString().c_str()): ipv4v6_addr::ipv4(UINT32_MAX);
 
     server_info->set_ip_start(ip_start);
     server_info->set_ip_end(ip_end);

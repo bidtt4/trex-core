@@ -20,6 +20,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include "bp_sim.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_json.h"
 #include "trex_watchdog.h"
 #include "pkt_gen.h"
@@ -209,7 +210,7 @@ void CLatencyPktInfo::set_ip(uint32_t        src,
     for (int i = 0; i < dual_port_cnt; i++) {
         uint32_t ip = src + (c_ip_offset * i);
         
-        ClientCfgEntry *entry = client_cfg_db.lookup(ip);
+        ClientCfgEntry *entry = client_cfg_db.lookup(ipv4v6_addr::ipv4(ip));
         if (!entry) {
             std::stringstream ss;
             ss << "client configuration error: could not map IP '" << ip_to_str(ip) << "' to a group\n";
@@ -217,7 +218,7 @@ void CLatencyPktInfo::set_ip(uint32_t        src,
             exit(-1);
         }
         
-        entry->assign(m_client_cfg[i], ip);
+        entry->assign(m_client_cfg[i], ipv4v6_addr::ipv4(ip));
     }
 }
 

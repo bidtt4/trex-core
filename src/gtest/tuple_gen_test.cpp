@@ -22,6 +22,7 @@ limitations under the License.
 #include <cstdlib>
 #include <ctime>
 #include "../bp_sim.h"
+#include "utl_ipv4v6_addr.h"
 #include <common/gtest.h>
 #include <common/basic_utils.h>
 
@@ -29,14 +30,14 @@ limitations under the License.
 
 class CClientInfo : public CSimpleClientInfo<CIpInfo> {
 public:
-    CClientInfo() :  CSimpleClientInfo<CIpInfo>(0) {
+    CClientInfo() :  CSimpleClientInfo<CIpInfo>(ipv4v6_addr::ipv4(0)) {
 
     }
 };
 
 class CClientInfoL : public CSimpleClientInfo<CIpInfoL> {
 public:
-    CClientInfoL() :  CSimpleClientInfo<CIpInfoL>(0) {
+    CClientInfoL() :  CSimpleClientInfo<CIpInfoL>(ipv4v6_addr::ipv4(0)) {
 
     }
 };
@@ -175,7 +176,7 @@ TEST(CClientInfoLTest, get_new_free_port) {
 TEST(tuple_gen,clientPoolL) {
     CClientPool gen;
     gen.Create(cdSEQ_DIST, 
-               0x10000001,  0x10000f01, 64000, g_dummy, 
+               ipv4v6_addr::ipv4(0x10000001),  ipv4v6_addr::ipv4(0x10000f01), 64000, g_dummy, 
                0,0);
     CTupleBase result;
     uint32_t result_src;
@@ -184,9 +185,9 @@ TEST(tuple_gen,clientPoolL) {
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
 
-        result_src = result.getClient();
+        result_src = result.getClient().addr.v4;
         result_port = result.getClientPort();
-        printf(" C:%x P:%d %d\n",result.getClient(),result.getClientPort(),result_port);
+        printf(" C:%x P:%d %d\n",result.getClient().addr.v4,result.getClientPort(),result_port);
 
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i));
     }
@@ -199,7 +200,7 @@ TEST(tuple_gen,clientPoolL) {
 TEST(tuple_gen,clientPool) {
     CClientPool gen;
     gen.Create(cdSEQ_DIST, 
-               0x10000001,  0x10000021, 64000000, g_dummy,
+               ipv4v6_addr::ipv4(0x10000001),  ipv4v6_addr::ipv4(0x10000021), 64000000, g_dummy,
                0,0);
     CTupleBase result;
     uint32_t result_src;
@@ -207,9 +208,9 @@ TEST(tuple_gen,clientPool) {
 
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
-        result_src = result.getClient();
+        result_src = result.getClient().addr.v4;
         result_port = result.getClientPort();
-        printf(" C:%x P:%d (%d) \n",result.getClient(),result.getClientPort(),result_port);
+        printf(" C:%x P:%d (%d) \n",result.getClient().addr.v4,result.getClientPort(),result_port);
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i));
     }
 
@@ -221,28 +222,28 @@ TEST(tuple_gen,clientPool) {
 TEST(tuple_gen,serverPool) {
     CServerPool gen;
     gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x30000ff1, 6400000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x30000ff1), 6400000);
     CTupleBase result;
     uint32_t result_dest;
 
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
-        printf(" S:%x \n",result.getServer());
+        printf(" S:%x \n",result.getServer().addr.v4);
 
-        result_dest = result.getServer();
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i)) ) );
     }
 
     gen.Delete();
 
     gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x30000003, 64000000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x30000003), 64000000);
 
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
-        printf(" S:%x \n",result.getServer());
+        printf(" S:%x \n",result.getServer().addr.v4);
 
-        result_dest = result.getServer();
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i%3)) ) );
     }
 
@@ -253,28 +254,28 @@ TEST(tuple_gen,serverPool) {
 TEST(tuple_gen,servePoolSim) {
     CServerPoolSimple gen;
     gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x40000001, 640000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x40000001), 640000);
     CTupleBase result;
     uint32_t result_dest;
 
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
-        printf(" S:%x \n",result.getServer());
+        printf(" S:%x \n",result.getServer().addr.v4);
 
-        result_dest = result.getServer();
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i)) ) );
     }
 
     gen.Delete();
 
     gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x30000003, 64000000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x30000003), 64000000);
 
     for(int i=0;i<10;i++) {
         gen.GenerateTuple(result);
-        printf(" S:%x \n",result.getServer());
+        printf(" S:%x \n",result.getServer().addr.v4);
 
-        result_dest = result.getServer();
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i%3)) ) );
     }
 
@@ -289,12 +290,12 @@ TEST(tuple_gen,GenerateTuple2) {
     CClientPool c_gen;
     CClientPool c_gen_2;
     c_gen.Create(cdSEQ_DIST, 
-               0x10000001,  0x1000000f, 64000*4, g_dummy,
+               ipv4v6_addr::ipv4(0x10000001),  ipv4v6_addr::ipv4(0x1000000f), 64000*4, g_dummy,
                0,0);
     CServerPool s_gen;
     CServerPool s_gen_2;
     s_gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x30000ff1, 640000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x30000ff1), 640000);
     CTupleBase result;
 
     uint32_t result_src;
@@ -306,8 +307,8 @@ TEST(tuple_gen,GenerateTuple2) {
         s_gen.GenerateTuple(result);
       //  gen.Dump(stdout);
       //  fprintf(stdout, "i:%d\n",i);
-        result_src = result.getClient();
-        result_dest = result.getServer();
+        result_src = result.getClient().addr.v4;
+        result_dest = result.getServer().addr.v4;
         //result_port = result.getClientPort();
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i%15));
         EXPECT_EQ(result_dest, (uint32_t)((0x30000001+i) ) );
@@ -318,17 +319,17 @@ TEST(tuple_gen,GenerateTuple2) {
     c_gen.Delete();
 //    EXPECT_EQ((size_t)0, gen.m_clients.size());
     c_gen.Create(cdSEQ_DIST, 
-               0x10000001,  0x1000000f, 64000*400, g_dummy, 
+               ipv4v6_addr::ipv4(0x10000001),  ipv4v6_addr::ipv4(0x1000000f), 64000*400, g_dummy, 
                0,0);
     s_gen.Create(cdSEQ_DIST, 
-               0x30000001,  0x30000001, 640000);
+               ipv4v6_addr::ipv4(0x30000001),  ipv4v6_addr::ipv4(0x30000001), 640000);
     for(int i=0;i<200;i++) {
         s_gen.GenerateTuple(result);
         c_gen.GenerateTuple(result);
     //    gen.Dump(stdout);
        // fprintf(stdout, "i:%d\n",i);
-        result_src = result.getClient();
-        result_dest = result.getServer();
+        result_src = result.getClient().addr.v4;
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i%15));
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001)) ) );
     }
@@ -344,8 +345,8 @@ TEST(tuple_gen,split1) {
     CIpPortion  portion;
 
     CTupleGenPoolYaml fi;
-    fi.m_ip_start =0x10000000;
-    fi.m_ip_end   =0x100000ff;
+    fi.m_ip_start = ipv4v6_addr::ipv4(0x10000000);
+    fi.m_ip_end   = ipv4v6_addr::ipv4(0x100000ff);
 
     fi.m_dual_interface_mask =0x01000000;
 
@@ -354,9 +355,9 @@ TEST(tuple_gen,split1) {
                   0,
                   fi,
                   portion);
-    EXPECT_EQ(portion.m_ip_start, (uint32_t)(0x10000000));
-    EXPECT_EQ(portion.m_ip_end,   (uint32_t)(0x100000ff ));
-    printf(" %x %x \n",portion.m_ip_start,portion.m_ip_end);
+    EXPECT_EQ(portion.m_ip_start.addr.v4, (uint32_t)(0x10000000));
+    EXPECT_EQ(portion.m_ip_end.addr.v4,   (uint32_t)(0x100000ff ));
+    printf(" %x %x \n",portion.m_ip_start.addr.v4,portion.m_ip_end.addr.v4);
 
     split_ips(2,
                   4, 
@@ -364,9 +365,9 @@ TEST(tuple_gen,split1) {
                   fi,
                   portion);
 
-     EXPECT_EQ(portion.m_ip_start, (uint32_t)(0x11000080));
-     EXPECT_EQ(portion.m_ip_end, (uint32_t)(0x110000bf ));
-     printf(" %x %x \n",portion.m_ip_start,portion.m_ip_end);
+     EXPECT_EQ(portion.m_ip_start.addr.v4, (uint32_t)(0x11000080));
+     EXPECT_EQ(portion.m_ip_end.addr.v4, (uint32_t)(0x110000bf ));
+     printf(" %x %x \n",portion.m_ip_start.addr.v4,portion.m_ip_end.addr.v4);
 }
 
 TEST(tuple_gen,split2) {
@@ -374,8 +375,8 @@ TEST(tuple_gen,split2) {
 
     CTupleGenPoolYaml fi;
 
-    fi.m_ip_start =0x20000000;
-    fi.m_ip_end   =0x200001ff;
+    fi.m_ip_start =ipv4v6_addr::ipv4(0x20000000);
+    fi.m_ip_end   =ipv4v6_addr::ipv4(0x200001ff);
 
     fi.m_dual_interface_mask =0x01000000;
 
@@ -389,32 +390,32 @@ TEST(tuple_gen,split2) {
 
 
         if ( (i&1) ) {
-            EXPECT_EQ(portion.m_ip_start  , (uint32_t)(0x21000000)+ (0x40*i) );
-            EXPECT_EQ(portion.m_ip_end    , (uint32_t)(0x21000000)+(0x40*i+0x40-1) );
+            EXPECT_EQ(portion.m_ip_start.addr.v4  , (uint32_t)(0x21000000)+ (0x40*i) );
+            EXPECT_EQ(portion.m_ip_end.addr.v4    , (uint32_t)(0x21000000)+(0x40*i+0x40-1) );
         }else{
-            EXPECT_EQ(portion.m_ip_start  , (uint32_t)(0x20000000) + (0x40*i) );
-            EXPECT_EQ(portion.m_ip_end    , (uint32_t)(0x20000000) + (0x40*i+0x40-1) );
+            EXPECT_EQ(portion.m_ip_start.addr.v4  , (uint32_t)(0x20000000) + (0x40*i) );
+            EXPECT_EQ(portion.m_ip_end.addr.v4    , (uint32_t)(0x20000000) + (0x40*i+0x40-1) );
         }
-        printf(" %x %x \n",portion.m_ip_start,portion.m_ip_end);
+        printf(" %x %x \n",portion.m_ip_start.addr.v4,portion.m_ip_end.addr.v4);
     }
 }
 
 TEST(tuple_gen,template1) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1); 
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000, g_dummy, 0, 0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000, g_dummy, 0, 0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
-    template_1.SetSingleServer(true,0x12121212,0,0);
+    template_1.SetSingleServer(true,ipv4v6_addr::ipv4(0x12121212),0,0);
     CTupleBase result;
 
 
     int i;
     for (i=0; i<10; i++) {
         template_1.GenerateTuple(result);
-        uint32_t result_src = result.getClient();
-        uint32_t result_dest = result.getServer();
+        uint32_t result_src = result.getClient().addr.v4;
+        uint32_t result_dest = result.getServer().addr.v4;
         //printf(" %x %x %x \n",result_src,result_dest,result_port);
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i));
         EXPECT_EQ(result_dest, (uint32_t)(((0x12121212)) ));
@@ -427,8 +428,8 @@ TEST(tuple_gen,template1) {
 TEST(tuple_gen,template2) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1);
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
     template_1.SetW(10);
@@ -439,8 +440,8 @@ TEST(tuple_gen,template2) {
     int i;
     for (i=0; i<20; i++) {
         template_1.GenerateTuple(result);
-        uint32_t result_src = result.getClient();
-        uint32_t result_dest = result.getServer();
+        uint32_t result_src = result.getClient().addr.v4;
+        uint32_t result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+(i/10)));
         EXPECT_EQ(result_dest, (uint32_t)(((0x30000001+ (i/10) )) ));
     }
@@ -453,8 +454,8 @@ TEST(tuple_gen,template2) {
 TEST(tuple_gen,no_free) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1);
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x10000001,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x400000ff,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x10000001),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x400000ff),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
 
@@ -475,8 +476,8 @@ TEST(tuple_gen,no_free) {
 TEST(tuple_gen,try_to_free) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1); 
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x10000001,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x400000ff,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x10000001),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x400000ff),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
 
@@ -502,8 +503,8 @@ TEST(tuple_gen,try_to_free) {
 TEST(tuple_gen_2,GenerateTuple) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1); 
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x10000f01,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x10000f01),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
     CTupleBase result;
@@ -512,10 +513,10 @@ TEST(tuple_gen_2,GenerateTuple) {
 
     for(int i=0;i<10;i++) {
         template_1.GenerateTuple(result);
-        printf(" C:%x S:%x P:%d \n",result.getClient(),result.getServer(),result.getClientPort());
+        printf(" C:%x S:%x P:%d \n",result.getClient().addr.v4,result.getServer().addr.v4,result.getClientPort());
 
-        result_src = result.getClient();
-        result_dest = result.getServer();
+        result_src = result.getClient().addr.v4;
+        result_dest = result.getServer().addr.v4;
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i));
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i)) ) );
     }
@@ -527,8 +528,8 @@ TEST(tuple_gen_2,GenerateTuple) {
 TEST(tuple_gen_2,GenerateTuple2) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1);
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
     CTupleBase result;
@@ -539,8 +540,8 @@ TEST(tuple_gen_2,GenerateTuple2) {
         template_1.GenerateTuple(result);
       //  gen.Dump(stdout);
       //  fprintf(stdout, "i:%d\n",i);
-        result_src = result.getClient();
-        result_dest = result.getServer();
+        result_src = result.getClient().addr.v4;
+        result_dest = result.getServer().addr.v4;
         //result_port = result.getClientPort();
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i%15));
         EXPECT_EQ(result_dest, (uint32_t)((0x30000001+i) ) );
@@ -549,15 +550,15 @@ TEST(tuple_gen_2,GenerateTuple2) {
     gen.Delete();
 //    EXPECT_EQ((size_t)0, gen.m_clients.size());
     gen.Create(1, 1); 
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     template_1.Create(&gen,0,0);
     for(int i=0;i<200;i++) {
         template_1.GenerateTuple(result);
     //    gen.Dump(stdout);
      //   fprintf(stdout, "i:%d\n",i);
-        result_src = result.getClient();
-        result_dest = result.getServer();
+        result_src = result.getClient().addr.v4;
+        result_dest = result.getServer().addr.v4;
         //result_port = result.getClientPort();
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i%15));
         EXPECT_EQ(result_dest, (uint32_t) (((0x30000001+i)) ) );
@@ -568,19 +569,19 @@ TEST(tuple_gen_2,GenerateTuple2) {
 TEST(tuple_gen_2,template1) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1); 
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
-    template_1.SetSingleServer(true,0x12121212,0,0);
+    template_1.SetSingleServer(true,ipv4v6_addr::ipv4(0x12121212),0,0);
     CTupleBase result;
 
 
     int i;
     for (i=0; i<10; i++) {
         template_1.GenerateTuple(result);
-        uint32_t result_src = result.getClient();
-        uint32_t result_dest = result.getServer();
+        uint32_t result_src = result.getClient().addr.v4;
+        uint32_t result_dest = result.getServer().addr.v4;
         //uint16_t result_port = result.getClientPort();
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+i));
         EXPECT_EQ(result_dest, (uint32_t)(((0x12121212)) ));
@@ -593,8 +594,8 @@ TEST(tuple_gen_2,template1) {
 TEST(tuple_gen_2,template2) {
     CTupleGeneratorSmart gen;
     gen.Create(1, 1);
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
     template_1.SetW(10);
@@ -605,8 +606,8 @@ TEST(tuple_gen_2,template2) {
     int i;
     for (i=0; i<20; i++) {
         template_1.GenerateTuple(result);
-        uint32_t result_src = result.getClient();
-        uint32_t result_dest = result.getServer();
+        uint32_t result_src = result.getClient().addr.v4;
+        uint32_t result_dest = result.getServer().addr.v4;
         //uint16_t result_port = result.getClientPort();
         //printf(" %x %x %x \n",result_src,result_dest,result_port);
         EXPECT_EQ(result_src, (uint32_t)(0x10000001+(i/10)));
@@ -646,28 +647,28 @@ TEST(tuple_gen_yaml,yam_is_valid) {
     fi.m_client_pool.push_back(c_pool); 
     fi.m_server_pool.push_back(s_pool); 
     
-    fi.m_client_pool[0].m_ip_start = 0x10000001;
-    fi.m_client_pool[0].m_ip_end   = 0x100000ff;
+    fi.m_client_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_client_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x100000ff);
 
-    fi.m_server_pool[0].m_ip_start = 0x10000001;
-    fi.m_server_pool[0].m_ip_end   = 0x100001ff;
+    fi.m_server_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_server_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x100001ff);
 
     EXPECT_EQ(fi.is_valid(8,true)?1:0, 1);
 
 
-    fi.m_client_pool[0].m_ip_start = 0x10000001;
-    fi.m_client_pool[0].m_ip_end   = 0x100000ff;
+    fi.m_client_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_client_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x100000ff);
 
-    fi.m_server_pool[0].m_ip_start = 0x10000001;
-    fi.m_server_pool[0].m_ip_end   = 0x10000007;
+    fi.m_server_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_server_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x10000007);
 
     EXPECT_EQ(fi.is_valid(8,true)?1:0, 0);
 
-    fi.m_client_pool[0].m_ip_start = 0x10000001;
-    fi.m_client_pool[0].m_ip_end   = 0x100000ff;
+    fi.m_client_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_client_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x100000ff);
 
-    fi.m_server_pool[0].m_ip_start = 0x10000001;
-    fi.m_server_pool[0].m_ip_end   = 0x100003ff;
+    fi.m_server_pool[0].m_ip_start = ipv4v6_addr::ipv4(0x10000001);
+    fi.m_server_pool[0].m_ip_end   = ipv4v6_addr::ipv4(0x100003ff);
 
     EXPECT_EQ(fi.is_valid(8,true)?1:0, 1);
 
@@ -704,8 +705,8 @@ int test_gen_astf_rss(uint16_t rss_thread_id,
     gen.set_astf_rss_mode(rss_thread_id,
                           rss_thread_max,
                           reta_mask);      
-    gen.add_client_pool(cdSEQ_DIST,0x10000001,0x10000001,64000,g_dummy,0,0);
-    gen.add_server_pool(cdSEQ_DIST,0x30000001,0x400000ff,64000,false);
+    gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x10000001),64000,g_dummy,0,0);
+    gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x400000ff),64000,false);
     CTupleTemplateGeneratorSmart template_1;
     template_1.Create(&gen,0,0);
 
@@ -714,7 +715,7 @@ int test_gen_astf_rss(uint16_t rss_thread_id,
     int i;
     for (i=0; i<cnt; i++) {
         template_1.GenerateTuple(result);
-        EXPECT_EQ(result.getClient(),0x10000001);
+        EXPECT_EQ(result.getClient().addr.v4,0x10000001);
         //EXPECT_EQ(result.getClientPort(),golden[i]);
         if (result.getClientPort()!=0){
             uint16_t calc_thread_id=((rss_reverse_bits_port(result.getClientPort())&reta_mask)%rss_thread_max);

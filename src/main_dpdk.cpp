@@ -64,6 +64,7 @@
 #include "common/arg/SimpleGlob.h"
 #include "common/arg/SimpleOpt.h"
 #include "common/basic_utils.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_sync_barrier.h"
 #include "trex_build_info.h"
 #include "tunnels/tunnel_handler.h"
@@ -5700,18 +5701,22 @@ COLD_FUNC int CGlobalTRex::start_master_statefull() {
 
     CTupleGenYamlInfo * tg=&m_fl.m_yaml_info.m_tuple_gen;
 
+    auto client_addr = tg->m_client_pool[0].get_ip_start();
+    auto server_addr = tg->m_server_pool[0].get_ip_start();
+    assert(client_addr.version == ipv4v6_addr::Version::V4);
+    assert(server_addr.version == ipv4v6_addr::Version::V4);
 
     /* for client cluster configuration - pass the IP start entry */
     if (CGlobalInfo::m_options.preview.get_is_client_cfg_enable()) {
 
-        m_mg.set_ip( tg->m_client_pool[0].get_ip_start(),
-                     tg->m_server_pool[0].get_ip_start(),
+        m_mg.set_ip( client_addr.addr.v4,
+                     server_addr.addr.v4,
                      tg->m_client_pool[0].getDualMask(),
                      m_fl.m_client_config_info);
     } else {
 
-        m_mg.set_ip( tg->m_client_pool[0].get_ip_start(),
-                     tg->m_server_pool[0].get_ip_start(),
+        m_mg.set_ip( client_addr.addr.v4,
+                     server_addr.addr.v4,
                      tg->m_client_pool[0].getDualMask());
     }
 

@@ -25,6 +25,7 @@ limitations under the License.
 #include "astf/astf_db.h"
 #include "bp_sim.h"
 #include "stt_cp.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_sync_barrier.h"
 #include "trex_messaging.h"
 #include "trex_astf_messaging.h"    /* TrexAstfDpStop */
@@ -673,7 +674,7 @@ bool TrexAstfDpCore::rx_for_idle() {
 }
 
 void inline TrexAstfDpCore::client_lookup_and_activate(uint32_t client, bool activate) {
-     CIpInfoBase *ip_info = m_flow_gen->client_lookup(client);
+     CIpInfoBase *ip_info = m_flow_gen->client_lookup(ipv4v6_addr::ipv4(client));
      if (ip_info){
          if (m_tunnel_handler && !activate){
              m_tunnel_handler->delete_tunnel_ctx(ip_info->get_tunnel_ctx());
@@ -725,13 +726,13 @@ void TrexAstfDpCore::get_client_stats(std::vector<uint32_t> &msg_data, bool is_r
     Json::Value res = Json::objectValue;
     if (is_range){
         for (uint32_t client = msg_data[0]; client <= msg_data[1]; client++) {
-            CIpInfoBase *ip_info = m_flow_gen->client_lookup(client);
+            CIpInfoBase *ip_info = m_flow_gen->client_lookup(ipv4v6_addr::ipv4(client));
             res[to_string(client)] = client_data_to_json(ip_info);
         }
     }
     else {
         for ( auto client : msg_data) {
-            CIpInfoBase *ip_info = m_flow_gen->client_lookup(client);
+            CIpInfoBase *ip_info = m_flow_gen->client_lookup(ipv4v6_addr::ipv4(client));
             res[to_string(client)] = client_data_to_json(ip_info);
         }
     }
@@ -772,7 +773,7 @@ void TrexAstfDpCore::insert_ignored_ip_addresses(std::vector<uint32_t>& ip_addre
 void TrexAstfDpCore::update_tunnel_for_client(CAstfDB* astf_db, std::vector<client_tunnel_data_t> msg_data) {
     assert(m_tunnel_handler);
     for (auto elem : msg_data) {
-        CIpInfoBase *ip_info = m_flow_gen->client_lookup(elem.client_ip);
+        CIpInfoBase *ip_info = m_flow_gen->client_lookup(ipv4v6_addr::ipv4(elem.client_ip));
         if (ip_info) {
            void *tunnel_ctx = ip_info->get_tunnel_ctx();
            if (tunnel_ctx){

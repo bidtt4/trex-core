@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "bp_sim.h"
 #include "stateful_rx_core.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_json.h"
 #include "utl_yaml.h"
 #include "msg_manager.h"
@@ -1251,8 +1252,10 @@ void CCapFileFlowInfo::generate_flow(CTupleTemplateGeneratorSmart   * tuple_gen,
     node->m_flags=0;
     node->m_template_info =template_info;
     node->m_tuple_gen = tuple_gen->get_gen();
-    node->m_src_ip= tuple.getClient();
-    node->m_dest_ip = tuple.getServer();
+    assert(tuple.getClient().version == ipv4v6_addr::Version::V4);
+    assert(tuple.getServer().version == ipv4v6_addr::Version::V4);
+    node->m_src_ip= tuple.getClient().addr.v4;
+    node->m_dest_ip = tuple.getServer().addr.v4;
     node->m_src_idx = tuple.getClientId();
     node->m_dest_idx = tuple.getServerId();
     node->m_src_port = tuple.getClientPort();
@@ -2599,7 +2602,7 @@ bool CFlowGeneratorRecPerThread::Create(CTupleGeneratorSmart  * global_gen,
     lpt = &yaml_flow_info->m_tuple_gen;
 
     tuple_gen.SetSingleServer(info->m_one_app_server,
-                              info->m_server_addr,
+                              ipv4v6_addr::ipv4(info->m_server_addr),
                               getDualPortId(thread_id),
                               lpt->m_client_pool[info->m_client_pool_idx].getDualMask()
                               );
@@ -3109,7 +3112,7 @@ void CFlowGenListPerThread::defer_client_port_free(CGenNode *p){
 }
 
 
-CIpInfoBase* CFlowGenListPerThread::get_ip_info(uint32_t ip){
+CIpInfoBase* CFlowGenListPerThread::get_ip_info(ipv4v6_addr ip){
     CIpInfoBase *c_info = client_lookup(ip);
     if (c_info)
         c_info->inc_ref();
@@ -3117,7 +3120,7 @@ CIpInfoBase* CFlowGenListPerThread::get_ip_info(uint32_t ip){
     return c_info;
 }
 
-CIpInfoBase* CFlowGenListPerThread::client_lookup(uint32_t ip){
+CIpInfoBase* CFlowGenListPerThread::client_lookup(ipv4v6_addr ip){
     auto it = m_ip_info.find(ip);
     if (it == m_ip_info.end()) {
         return nullptr;
@@ -3135,7 +3138,7 @@ void CFlowGenListPerThread::set_tunnel_handler(void* tunnel_handler, void* tunne
 
 
 void CFlowGenListPerThread::allocate_ip_info(CIpInfoBase* ip_info) {
-    uint32_t ip = ip_info->get_ip();
+    ipv4v6_addr ip = ip_info->get_ip();
     auto it = m_ip_info.find(ip);
     assert(it == m_ip_info.end());
 
@@ -3144,7 +3147,7 @@ void CFlowGenListPerThread::allocate_ip_info(CIpInfoBase* ip_info) {
 }
 
 void CFlowGenListPerThread::release_ip_info(CIpInfoBase* ip_info) {
-    uint32_t ip = ip_info->get_ip();
+    ipv4v6_addr ip = ip_info->get_ip();
     ip_info->dec_ref();
 
     if (ip_info->ref_cnt() == 0) {

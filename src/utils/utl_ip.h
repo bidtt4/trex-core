@@ -27,6 +27,7 @@ limitations under the License.
 #include "common/basic_utils.h"
 #include "common/Network/Packet/CPktCmn.h"
 #include "common/Network/Packet/MacAddress.h"
+#include "utl_ipv4v6_addr.h"
 
 /* IP address, last 32-bits of IPv6 remaps IPv4 */
 typedef struct {
@@ -45,6 +46,10 @@ inline std::string ip_to_str(uint32_t ip) {
     char tmp[INET_ADDRSTRLEN];
     ip_to_str(ip, tmp);
     return tmp;
+}
+
+inline std::string ip_to_str(const ipv4v6_addr& ip) {
+    return ip.to_str();
 }
 
 // Routine to create IPv6 address string

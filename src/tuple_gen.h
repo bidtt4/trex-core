@@ -41,6 +41,7 @@ limitations under the License.
 #include "trex_global.h"
 #include <random>
 #include "common/dlist.h"
+#include "utl_ipv4v6_addr.h"
 
 
 struct ActiveClientListNode {
@@ -100,10 +101,10 @@ public:
            m_tunnel_ctx = NULL;
        }
 
-       uint32_t getClient() {
+       ipv4v6_addr getClient() {
            return m_client_ip;
        }
-       void setClient(uint32_t ip) {
+       void setClient(ipv4v6_addr ip) {
            m_client_ip = ip;
        }
        uint32_t getClientId() {
@@ -113,10 +114,10 @@ public:
            m_client_idx = id;
        }
        
-       uint32_t getServer(){
+       ipv4v6_addr getServer(){
            return m_server_ip;
        }
-       void setServer(uint32_t ip) {
+       void setServer(ipv4v6_addr ip) {
            m_server_ip = ip;
        }
        uint32_t getServerId(){
@@ -145,28 +146,28 @@ public:
        }
 
 
-       void setClientTuple(uint32_t ip, ClientCfgBase *cfg, uint16_t port) {
+       void setClientTuple(ipv4v6_addr ip, ClientCfgBase *cfg, uint16_t port) {
            setClient(ip);
            setClientPort(port);
            setClientCfg(cfg);
        }
 
-       void setClientAll2(uint32_t id, uint32_t ip,uint16_t port) {
+       void setClientAll2(uint32_t id, ipv4v6_addr ip,uint16_t port) {
            setClientId(id);
            setClient(ip);
            setClientPort(port);
        }
  
-       void setServerAll(uint32_t id, uint32_t ip) {
+       void setServerAll(uint32_t id, ipv4v6_addr ip) {
            setServerId(id);
            setServer(ip);
        }
-       void getClientAll(uint32_t & id, uint32_t & ip, uint32_t & port) {
+       void getClientAll(uint32_t & id, ipv4v6_addr & ip, uint32_t & port) {
            id = getClientId();
            ip = getClient();
            port = getClientPort();
        }
-       void getServerAll(uint32_t & id, uint32_t & ip) {
+       void getServerAll(uint32_t & id, ipv4v6_addr & ip) {
            id = getServerId();
            ip = getServer();
        }
@@ -177,10 +178,10 @@ public:
            return m_tunnel_ctx;
        }
 private:
-       uint32_t m_client_ip;
+       ipv4v6_addr m_client_ip;
        uint32_t m_client_idx;
 
-       uint32_t m_server_ip;
+       ipv4v6_addr m_server_ip;
        uint32_t m_server_idx;
 
        ClientCfgBase *m_client_cfg;
@@ -246,10 +247,10 @@ class CIpInfoBase {
         virtual ClientCfgBase * get_client_cfg(){
             return (NULL);
         }
-        uint32_t get_ip() {
+        ipv4v6_addr get_ip() {
             return m_ip;
         }
-        void set_ip(uint32_t ip) {
+        void set_ip(ipv4v6_addr ip) {
             m_ip = ip;
         }
         bool is_active() {
@@ -315,7 +316,7 @@ class CIpInfoBase {
 
         virtual ~CIpInfoBase();
     protected:
-        uint32_t            m_ip;
+        ipv4v6_addr         m_ip;
         bool                m_is_active;
         void               *m_tunnel_ctx;
         void               *m_tunnel_handler;
@@ -549,7 +550,7 @@ template <typename T>
 class CSimpleClientInfo : public T {
 
 public:
-     CSimpleClientInfo(uint32_t ip) {
+     CSimpleClientInfo(ipv4v6_addr ip) {
         T::set_ip(ip);
      }
 
@@ -571,7 +572,7 @@ template <typename T>
 class CConfiguredClientInfo : public T {
 
 public:
-    CConfiguredClientInfo(uint32_t ip, const ClientCfgBase &cfg) : m_cfg(cfg) {
+    CConfiguredClientInfo(ipv4v6_addr ip, const ClientCfgBase &cfg) : m_cfg(cfg) {
         T::set_ip(ip);
     }
 
@@ -629,7 +630,7 @@ class CIpPool {
             return (port);
         }
 
-       bool is_valid_ip(uint32_t ip){
+       bool is_valid_ip(ipv4v6_addr ip){
             CIpInfoBase* ip_front = m_ip_info.front();
             CIpInfoBase* ip_back  = m_ip_info.back();
             if ((ip>=ip_front->get_ip()) && 
@@ -644,10 +645,10 @@ class CIpPool {
             return(false);
         }
 
-        uint32_t get_curr_ip() {
+        ipv4v6_addr get_curr_ip() {
             return m_ip_info[m_cur_idx]->get_ip();
         }
-        uint32_t get_ip(uint32_t idx) {
+        ipv4v6_addr get_ip(uint32_t idx) {
             return m_ip_info[idx]->get_ip();
         }
         CIpInfoBase* get_ip_info_by_idx(uint32_t idx) {
@@ -755,7 +756,7 @@ public:
 
     uint32_t GenerateTuple(CTupleBase & tuple, CIpInfoBase* ip_info) {
 
-        uint32_t idx = ip_info->get_ip() - m_ip_info[0]->get_ip();
+        uint32_t idx = ipv4v6_addr::distance(ip_info->get_ip(), m_ip_info[0]->get_ip());
         ip_info->generate_tuple(tuple, ip_info->get_tunnel_ctx());
 
         tuple.setClientId(idx);
@@ -826,8 +827,8 @@ public:
     }
 
     void Create(IP_DIST_t       dist_value,
-                uint32_t        min_ip,
-                uint32_t        max_ip,
+                ipv4v6_addr     min_ip,
+                ipv4v6_addr     max_ip,
                 double          active_flows,
                 ClientCfgDB     &client_info,
                 uint16_t        tcp_aging,
@@ -869,7 +870,7 @@ public:
     TCGenDListIterator m_cur_act_itr = TCGenDListIterator(m_active_clients);
 
 private:
-    void allocate_simple_or_configured_clients(uint32_t  min_ip,
+    void allocate_simple_or_configured_clients(ipv4v6_addr min_ip,
                                                uint32_t  total_ip,
                                                bool      is_long_range,
                                                ClientCfgDB &client_info,
@@ -890,8 +891,8 @@ class CServerPoolBase {
     virtual void Delete() = 0;
     virtual uint32_t get_total_ips()=0;
     virtual void Create(IP_DIST_t  dist_value,
-               uint32_t min_ip,
-               uint32_t max_ip,
+               ipv4v6_addr min_ip,
+               ipv4v6_addr max_ip,
                double active_flows) = 0; 
     void set_thread_id(uint16_t thread_id){
         m_thread_id =thread_id;
@@ -904,8 +905,8 @@ private:
 class CServerPoolSimple : public CServerPoolBase {
 public:
     void Create(IP_DIST_t  dist_value,
-               uint32_t min_ip,
-               uint32_t max_ip,
+               ipv4v6_addr min_ip,
+               ipv4v6_addr max_ip,
                 double active_flows
                ) {
         m_max_server_ip = max_ip;
@@ -917,7 +918,7 @@ public:
     }
     void GenerateTuple(CTupleBase& tuple) {
         tuple.setServer(m_cur_server_ip);
-        m_cur_server_ip ++;
+        m_cur_server_ip += 1;
         if (m_cur_server_ip > m_max_server_ip) {
             m_cur_server_ip = m_min_server_ip;
         }
@@ -927,12 +928,12 @@ public:
         return 0;
     }
     uint32_t get_total_ips() {
-        return (m_max_server_ip-m_min_server_ip+1);
+        return ipv4v6_addr::num_ips(m_max_server_ip, m_min_server_ip);
     }
 private:
-    uint32_t m_max_server_ip;
-    uint32_t m_min_server_ip;
-    uint32_t m_cur_server_ip;
+    ipv4v6_addr m_max_server_ip;
+    ipv4v6_addr m_min_server_ip;
+    ipv4v6_addr m_cur_server_ip;
 };
 
 class CServerPool : public CServerPoolBase {
@@ -945,8 +946,8 @@ public:
         return gen->GenerateOnePort(idx);
     }
     void Create(IP_DIST_t  dist_value,
-                uint32_t min_ip,
-                uint32_t max_ip,
+                ipv4v6_addr min_ip,
+                ipv4v6_addr max_ip,
                 double active_flows); 
  
     void Delete() {
@@ -1055,8 +1056,8 @@ public:
     }
 
     bool add_client_pool(IP_DIST_t     client_dist,
-                         uint32_t      min_client,
-                         uint32_t      max_client,
+                         ipv4v6_addr   min_client,
+                         ipv4v6_addr   max_client,
                          double        active_flows,
                          ClientCfgDB   &client_info,
                          uint16_t      tcp_aging,
@@ -1064,8 +1065,8 @@ public:
                          bool          rand_client_port = false);
 
     bool add_server_pool(IP_DIST_t  server_dist,
-                         uint32_t   min_server,
-                         uint32_t   max_server,
+                         ipv4v6_addr min_server,
+                         ipv4v6_addr max_server,
                          double     active_flows,
                          bool       is_bundling);
 
@@ -1084,9 +1085,9 @@ public:
     CFlowGenListPerThread *get_client_flow_gen_list(){
         return m_thread_ptr;
     }
-    CClientPool* lookup(uint32_t ip);
+    CClientPool* lookup(ipv4v6_addr ip);
   
-    std::map<uint32_t, CClientPool*>  m_ip_start_cpool_link;
+    std::map<ipv4v6_addr, CClientPool*>  m_ip_start_cpool_link;
 
   
 private:
@@ -1163,7 +1164,7 @@ public:
                  pool_index_t s_pool){
         m_gen=gen;
         m_is_single_server=false;
-        m_server_ip=0;
+        m_server_ip={};
         SetW(1);
         m_client_gen = gen->get_client_pool(c_pool);
         m_server_gen = gen->get_server_pool(s_pool);
@@ -1184,7 +1185,7 @@ public:
 
 
     void SetSingleServer(bool is_single, 
-                         uint32_t server_ip,
+                         ipv4v6_addr server_ip,
                          uint32_t dual_port_index,
                          uint32_t dual_mask){
         m_is_single_server = is_single;
@@ -1207,10 +1208,10 @@ private:
     CServerPoolBase      * m_server_gen;
     uint16_t               m_w;
     uint16_t               m_cnt;
-    uint32_t               m_server_ip;
-    uint32_t               m_cache_client_ip;
+    ipv4v6_addr            m_server_ip;
+    ipv4v6_addr            m_cache_client_ip;
     uint32_t               m_cache_client_idx;
-    uint32_t               m_cache_server_ip;
+    ipv4v6_addr            m_cache_server_ip;
     uint32_t               m_cache_server_idx;
     bool                   m_is_single_server;
 };
@@ -1230,8 +1231,8 @@ private:
 
 struct CTupleGenPoolYaml {
     IP_DIST_t       m_dist;
-    uint32_t        m_ip_start;
-    uint32_t        m_ip_end;
+    ipv4v6_addr     m_ip_start;
+    ipv4v6_addr     m_ip_end;
     uint32_t        m_number_of_clients_per_gb;
     uint32_t        m_min_clients;
     uint32_t        m_dual_interface_mask;
@@ -1245,15 +1246,15 @@ struct CTupleGenPoolYaml {
     CTupleGenPoolYaml();
 
     uint32_t getTotalIps(void){
-        return ( m_ip_end-m_ip_start+1);
+        return ipv4v6_addr::num_ips(m_ip_start, m_ip_end);
     }
     uint32_t getDualMask() {
         return m_dual_interface_mask;
     }
-    uint32_t get_ip_start() {
+    ipv4v6_addr get_ip_start() {
         return m_ip_start;
     }
-    uint32_t get_ip_end() {
+    ipv4v6_addr get_ip_end() {
         return m_ip_end;
     }
     bool is_valid(uint32_t num_threads,bool is_plugins);
@@ -1293,7 +1294,7 @@ public:
         return 0;
     }
 
-    bool find_port(uint32_t ip_start, uint32_t ip_end, uint8_t &port);
+    bool find_port(ipv4v6_addr ip_start, ipv4v6_addr ip_end, uint8_t &port);
     void dump(FILE *fd);
 };
 
@@ -1304,8 +1305,8 @@ void operator >> (const YAML::Node& node, CTupleGenYamlInfo & fi) ;
 
 
 struct CIpPortion {
-    uint32_t m_ip_start;
-    uint32_t m_ip_end;
+    ipv4v6_addr m_ip_start;
+    ipv4v6_addr m_ip_end;
 };
 void split_ips(uint32_t thread_id,
                    uint32_t total_threads,

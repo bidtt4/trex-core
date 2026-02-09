@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "tuple_gen.h"
 #include "utl_policer.h"
+#include "utl_ipv4v6_addr.h"
 #include <common/n_uniform_prob.h>
 
 class CTcpTuneables;
@@ -40,7 +41,7 @@ struct CAstfPerTemplateRO {
     uint16_t            m_destination_port; /* template dest port */
     bool                m_stream;
     bool                m_one_app_server;   /* single server */
-    uint32_t            m_server_addr;      /* IPv4 single server addr */  
+    ipv4v6_addr         m_server_addr;      /* single server addr */  
     uint32_t            m_dual_mask;        /* dual mask */
     uint32_t            m_w;                /* tuple generator w */
     double              m_k_cps;            /* kCPS for this template */

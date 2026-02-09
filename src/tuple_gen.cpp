@@ -22,6 +22,7 @@ limitations under the License.
 */
 
 #include <string.h>
+#include "utl_ipv4v6_addr.h"
 #include "utl_yaml.h"
 #include "bp_sim.h"
 #include "rand_gen.h"
@@ -44,14 +45,14 @@ static bool _enough_ips(uint32_t total_ip,
 }
 
 void CServerPool::Create(IP_DIST_t  dist_value,
-            uint32_t min_ip,
-            uint32_t max_ip,
+            ipv4v6_addr min_ip,
+            ipv4v6_addr max_ip,
             double active_flows
             ) {
     CServerPoolBase::set_thread_id(0);
     gen = new CIpPool();
     gen->set_dist(dist_value);
-    uint32_t total_ip = max_ip - min_ip +1;
+    uint32_t total_ip = ipv4v6_addr::num_ips(max_ip, min_ip);
     gen->m_ip_info.resize(total_ip);
 
     if ( _enough_ips(total_ip,active_flows,false) ) {
@@ -71,8 +72,8 @@ void CServerPool::Create(IP_DIST_t  dist_value,
 
 
 void CClientPool::Create(IP_DIST_t       dist_value,
-                         uint32_t        min_ip,
-                         uint32_t        max_ip,
+                         ipv4v6_addr     min_ip,
+                         ipv4v6_addr     max_ip,
                          double          active_flows,
                          ClientCfgDB     &client_info,
                          uint16_t        tcp_aging,
@@ -84,7 +85,7 @@ void CClientPool::Create(IP_DIST_t       dist_value,
     set_dist(dist_value);
     m_rand_client_port = rand_client_port;
 
-    uint32_t total_ip  = max_ip - min_ip +1;
+    uint32_t total_ip  = ipv4v6_addr::num_ips(max_ip, min_ip);
     bool is_long_range = _enough_ips(total_ip,active_flows,m_rss_astf_mode);
 
     m_ip_info.resize(total_ip);
@@ -225,7 +226,7 @@ static uint16_t generate_rand_sport(uint32_t client_index,
  * @param client_info
  * @param is_simple_alloc (flag to indication if its simple or configured allocation) 
  */
-void CClientPool::allocate_simple_or_configured_clients(uint32_t  min_ip,
+void CClientPool::allocate_simple_or_configured_clients(ipv4v6_addr min_ip,
                                                         uint32_t  total_ip,
                                                         bool      is_long_range,
                                                         ClientCfgDB &client_info,
@@ -235,15 +236,16 @@ void CClientPool::allocate_simple_or_configured_clients(uint32_t  min_ip,
     /* simple creation of clients - no extended info */
     for (uint32_t i = 0; i < total_ip; i++) {
         bool activate = true;
-        uint32_t ip = min_ip + i;
+        ipv4v6_addr ip = min_ip + i;
         ClientCfgBase info;
         // gets the tunnel context from the tunnel db
         if (has_tunnel_topo) {
-            CClientCfgEntryTunnel *tunnel_entry = tunnel_db->lookup(ip);
+            assert(ip.version == ipv4v6_addr::Version::V4);
+            CClientCfgEntryTunnel *tunnel_entry = tunnel_db->lookup(ip.addr.v4);
             if (!tunnel_entry) {
                 throw TrexException("Client configuration error - no tunnel group containing IP: " + ip_to_str(ip));
             }
-            tunnel_entry->assign(info, ip);
+            tunnel_entry->assign(info, ip.addr.v4);
             activate = tunnel_entry->is_activate();
         }
         if (!is_simple_alloc){
@@ -317,8 +319,8 @@ void CClientPool::configure_client(uint32_t indx){
 }
 
 bool CTupleGeneratorSmart::add_client_pool(IP_DIST_t      client_dist,
-                                          uint32_t        min_client,
-                                          uint32_t        max_client,
+                                          ipv4v6_addr     min_client,
+                                          ipv4v6_addr     max_client,
                                           double          active_flows,
                                           ClientCfgDB     &client_info,
                                           uint16_t        tcp_aging,
@@ -346,9 +348,9 @@ bool CTupleGeneratorSmart::add_client_pool(IP_DIST_t      client_dist,
 }
 
 CClientPool *
-CTupleGeneratorSmart::lookup(uint32_t ip) {
+CTupleGeneratorSmart::lookup(ipv4v6_addr ip) {
 
-    std::map<uint32_t , CClientPool*>::iterator it;
+    std::map<ipv4v6_addr , CClientPool*>::iterator it;
 
     /* upper bound fetchs the first greater element */
     it = m_ip_start_cpool_link.upper_bound(ip);
@@ -373,8 +375,8 @@ CTupleGeneratorSmart::lookup(uint32_t ip) {
 }
 
 bool CTupleGeneratorSmart::add_server_pool(IP_DIST_t  server_dist,
-                                          uint32_t min_server,
-                                          uint32_t max_server,
+                                          ipv4v6_addr min_server,
+                                          ipv4v6_addr max_server,
                                           double   active_flows,
                                           bool is_bundling){
     assert(max_server>=min_server);
@@ -441,8 +443,8 @@ void CTupleGenYamlInfo::dump(FILE *fd) {
 
 CTupleGenPoolYaml::CTupleGenPoolYaml() {
     m_dist = IP_DIST_t(0);
-    m_ip_start = 0;
-    m_ip_end = 0;
+    m_ip_start = {};
+    m_ip_end = {};
     m_number_of_clients_per_gb = 0;
     m_min_clients = 0;
     m_dual_interface_mask = 0;
@@ -457,17 +459,17 @@ CTupleGenPoolYaml::CTupleGenPoolYaml() {
 // Find out matching port for given ip range.
 // If found, port is returned in port, otherwise port is set to UINT8_MAX
 // Return false in case of error. True otherwise. Port not found is not considered error.
-bool CTupleGenYamlInfo::find_port(uint32_t ip_start, uint32_t ip_end, uint8_t &port) {
+bool CTupleGenYamlInfo::find_port(ipv4v6_addr ip_start, ipv4v6_addr ip_end, uint8_t &port) {
     uint8_t num_ports = CGlobalInfo::m_options.get_expected_ports();
 
     for (int i=0; i < m_client_pool.size(); i++) {
             CTupleGenPoolYaml &pool = m_client_pool[i];
-            uint32_t pool_start = pool.get_ip_start();
-            uint32_t pool_end = pool.get_ip_end();
+            ipv4v6_addr pool_start = pool.get_ip_start();
+            ipv4v6_addr pool_end = pool.get_ip_end();
             uint32_t pool_offset = pool.getDualMask();
             for (uint8_t port_id = 0; port_id < num_ports; port_id += 2) {
-                uint32_t pool_port_start = pool_start + pool_offset * port_id / 2;
-                uint32_t pool_port_end = pool_end + pool_offset * port_id / 2;
+                ipv4v6_addr pool_port_start = pool_start + pool_offset * port_id / 2;
+                ipv4v6_addr pool_port_end = pool_end + pool_offset * port_id / 2;
                 if ((ip_start >= pool_port_start) &&  (ip_start <= pool_port_end)) {
                     if ((ip_end >= pool_port_start) &&  (ip_end <= pool_port_end)) {
                         port = port_id;
@@ -486,12 +488,12 @@ bool CTupleGenYamlInfo::find_port(uint32_t ip_start, uint32_t ip_end, uint8_t &p
 
         for (int i=0; i < m_server_pool.size(); i++) {
             CTupleGenPoolYaml &pool = m_server_pool[i];
-            uint32_t pool_start = pool.get_ip_start();
-            uint32_t pool_end = pool.get_ip_end();
+            ipv4v6_addr pool_start = pool.get_ip_start();
+            ipv4v6_addr pool_end = pool.get_ip_end();
             uint32_t pool_offset = pool.getDualMask();
             for (uint8_t port_id = 1; port_id < num_ports; port_id += 2) {
-                uint32_t pool_port_start = pool_start + pool_offset * (port_id - 1) / 2;
-                uint32_t pool_port_end = pool_end + pool_offset * (port_id - 1)/ 2;
+                ipv4v6_addr pool_port_start = pool_start + pool_offset * (port_id - 1) / 2;
+                ipv4v6_addr pool_port_end = pool_end + pool_offset * (port_id - 1)/ 2;
                 if ((ip_start >= pool_port_start) &&  (ip_start <= pool_port_end)) {
                     if ((ip_end >= pool_port_start) &&  (ip_end <= pool_port_end)) {
                         port = port_id;
@@ -597,8 +599,11 @@ void operator >> (const YAML::Node& node, CTupleGenPoolYaml & fi) {
     if (node.FindValue("distribution")) {
         fi.m_dist = convert_distribution(node); 
     } 
-    UTL_YAML_READ(ip_addr, ip_start, fi.m_ip_start);
-    UTL_YAML_READ(ip_addr, ip_end, fi.m_ip_end);
+    uint32_t ipv4_tmp = 0;
+    UTL_YAML_READ(ip_addr, ip_start, ipv4_tmp);
+    fi.m_ip_start = ipv4v6_addr::ipv4(ipv4_tmp);
+    UTL_YAML_READ(ip_addr, ip_end, ipv4_tmp);
+    fi.m_ip_end = ipv4v6_addr::ipv4(ipv4_tmp);
 
     fi.m_number_of_clients_per_gb = 0;
     fi.m_min_clients = 0;
@@ -636,10 +641,16 @@ void operator >> (const YAML::Node& node, CTupleGenYamlInfo & fi) {
     if (node.FindValue("distribution")) {
         c_pool.m_dist = convert_distribution(node); 
         s_pool.m_dist = c_pool.m_dist;
-        UTL_YAML_READ(ip_addr, clients_start, c_pool.m_ip_start);
-        UTL_YAML_READ(ip_addr, clients_end, c_pool.m_ip_end);
-        UTL_YAML_READ(ip_addr, servers_start, s_pool.m_ip_start);
-        UTL_YAML_READ(ip_addr, servers_end, s_pool.m_ip_end);
+        uint32_t ipv4_tmp = 0;
+        UTL_YAML_READ(ip_addr, clients_start, ipv4_tmp);
+        c_pool.m_ip_start = ipv4v6_addr::ipv4(ipv4_tmp);
+        UTL_YAML_READ(ip_addr, clients_end, ipv4_tmp);
+        c_pool.m_ip_end = ipv4v6_addr::ipv4(ipv4_tmp);
+        UTL_YAML_READ(ip_addr, servers_start, ipv4_tmp);
+        s_pool.m_ip_start = ipv4v6_addr::ipv4(ipv4_tmp);
+        UTL_YAML_READ(ip_addr, servers_end, ipv4_tmp);
+        s_pool.m_ip_end = ipv4v6_addr::ipv4(ipv4_tmp);
+
         read_tuple_para(node, c_pool);
         s_pool.m_dual_interface_mask = c_pool.m_dual_interface_mask;
         s_pool.m_is_bundling = false;

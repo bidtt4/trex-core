@@ -20,6 +20,7 @@ limitations under the License.
 */
 #include "astf_json_validator.h"
 #include "inet_pton.h"
+#include "utl_ipv4v6_addr.h"
 
 using std::cerr;
 using std::endl;
@@ -72,10 +73,8 @@ bool CAstfJsonValidator::validate_ip_gen(Json::Value  ip_gen,
     for (const std::string &key : a) {
         std::string s=ip_gen[key].asString();
 
-        int rc;
-        uint32_t ip_num;
-        rc = my_inet_pton4(s.c_str(), (unsigned char *)&ip_num);
-        if (!rc) {
+        ipv4v6_addr addr = {};
+        if (!addr.set_from_str(s.c_str())) {
             std::stringstream ss;
             ss << "Validation failed : Bad IP address " << s <<std::endl;
             err = ss.str();

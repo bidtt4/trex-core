@@ -34,6 +34,7 @@ limitations under the License.
 #include "44bsd/tcp_socket.h"
 #include "rpc-server/trex_rpc_cmd_api.h"
 #include "tuple_gen.h"
+#include "utl_ipv4v6_addr.h"
 
 
     
@@ -220,18 +221,18 @@ class CTcpServerInfo {
         m_tune = tune;
         m_temp_idx = temp_idx;
 
-        m_ip_start = 0;
-        m_ip_end = UINT32_MAX;
+        m_ip_start = ipv4v6_addr::ipv4(0);
+        m_ip_end = ipv4v6_addr::ipv4(UINT32_MAX);
     }
     CEmulAppProgram *get_prog() {return m_prog;}
     CTcpTuneables *get_tuneables() {return m_tune;}
     uint32_t get_temp_idx() {return m_temp_idx;}
     CEmulAddon *get_addon() {return m_prog->get_addon();}
 
-    uint32_t get_ip_start() {return m_ip_start;}
-    uint32_t get_ip_end() {return m_ip_end;}
-    void set_ip_start(uint32_t ip) {m_ip_start = ip;}
-    void set_ip_end(uint32_t ip) {m_ip_end = ip;}
+    ipv4v6_addr get_ip_start() {return m_ip_start;}
+    ipv4v6_addr get_ip_end() {return m_ip_end;}
+    void set_ip_start(ipv4v6_addr ip) {m_ip_start = ip;}
+    void set_ip_end(ipv4v6_addr ip) {m_ip_end = ip;}
 
     void append_payload_params(std::vector<uint8_t>& params) {
         m_payload_params.insert(m_payload_params.end(), params.begin(), params.end());
@@ -253,8 +254,8 @@ class CTcpServerInfo {
     CTcpTuneables *m_tune;
     uint32_t m_temp_idx;
 
-    uint32_t m_ip_start;
-    uint32_t m_ip_end;
+    ipv4v6_addr m_ip_start;
+    ipv4v6_addr m_ip_end;
     std::vector<uint8_t> m_payload_params;
 };
 

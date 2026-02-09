@@ -1975,8 +1975,8 @@ TEST_F(gt_tcp, tst52) {
     ClientCfgDB g_dummy;
 
     g_gen.Create(0,0);
-    g_gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000, g_dummy, 0, 0);
-    g_gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    g_gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x10000001),ipv4v6_addr::ipv4(0x1000000f),64000, g_dummy, 0, 0);
+    g_gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4(0x30000001),ipv4v6_addr::ipv4(0x40000001),64000,false);
 
     CAstfPerTemplateRO template_ro;
     CAstfPerTemplateRO *lp=&template_ro;
@@ -1986,7 +1986,7 @@ TEST_F(gt_tcp, tst52) {
     lp->m_client_pool_idx=0;
     lp->m_server_pool_idx=0;
     lp->m_one_app_server =false;
-    lp->m_server_addr =0;
+    lp->m_server_addr ={};
     lp->m_dual_mask=0x01000000;
     lp->m_w=1;
     lp->m_k_cps=1;
@@ -1999,8 +1999,8 @@ TEST_F(gt_tcp, tst52) {
     tuple.setServerPort(t.get_dest_port()) ;
 
 
-    printf(" %x %x %x %x \n",tuple.getClient(),
-                            tuple.getServer(),
+    printf(" %x %x %x %x \n",tuple.getClient().addr.v4,
+                            tuple.getServer().addr.v4,
                             tuple.getClientPort(),
                             tuple.getServerPort());
 
