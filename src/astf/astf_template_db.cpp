@@ -77,7 +77,12 @@ void CAstfPerTemplateRW::Dump(FILE *fd){
     CTupleBase tuple;
     for (uint16_t idx = 0; idx < 20; idx++) {
         m_tuple_gen.GenerateTuple(tuple);
-        printf("  c:%x(%d) s:%x(%d)\n", tuple.getClient(), tuple.getClientPort(), tuple.getServer(), tuple.getServerPort());
+        printf("  c:%s(%d) s:%s(%d)\n",
+            tuple.getClient().to_hex_str().c_str(),
+            tuple.getClientPort(),
+            tuple.getServer().to_hex_str().c_str(),
+            tuple.getServerPort()
+        );
     }
 }
 

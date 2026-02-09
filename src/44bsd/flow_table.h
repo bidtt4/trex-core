@@ -22,68 +22,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <array>
 #include <common/closehash.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
 #include "flow_stat_parser.h"
 #include "dpdk_port_map.h"
 #include "trex_global.h"
+#include "utl_ipv4v6_addr.h"
 
 #include "tcpip.h"
 #include "os_time.h"
 
 struct flow_key_t {
-  bool operator==(const flow_key_t &k) const {
-    return as_uint64[0] == k.as_uint64[0] && as_uint64[1] == k.as_uint64[1];
-  };
-
-  union {
-    struct {
-      uint64_t m_src_ip : 32, m_dst_ip : 32;
-      uint64_t m_sport : 16, m_dport : 16, m_proto : 8, m_ipv4 : 1, m_spare : 7;
+    bool operator==(const flow_key_t &k) const {
+        return memcmp(this, &k, sizeof(flow_key_t)) == 0;
     };
-    uint64_t as_uint64[2];
-  };
+
+    ipv4v6_addr m_src_ip;
+    ipv4v6_addr m_dst_ip;
+    uint16_t m_sport;
+    uint16_t m_dport;
+    uint8_t m_proto;
+    std::array<uint8_t, 3>  m_pad;
 };
-
-static inline uint32_t ft_hash_rot(uint32_t v,uint16_t r ){
-    return ( (v<<r) | ( v>>(32-(r))) );
-}
-
-
-static inline uint32_t ft_hash1(uint64_t u ){
-  uint64_t v = u * 3935559000370003845 + 2691343689449507681;
-
-  v ^= v >> 21;
-  v ^= v << 37;
-  v ^= v >>  4;
-
-  v *= 4768777513237032717;
-
-  v ^= v << 20;
-  v ^= v >> 41;
-  v ^= v <<  5;
-
-  return (uint32_t)v;
-}
-
-static inline uint32_t ft_hash2(uint64_t in){
-    uint64_t in1=in*2654435761;
-    /* convert to 32bit */
-    uint32_t x= (in1>>32) ^ (in1 & 0xffffffff);
-    return (x);
-}
-
+static_assert(std::is_trivially_constructible<flow_key_t>::value, "flow_key_t must be a trivial object");
+static_assert(std::is_trivially_copyable<flow_key_t>::value, "flow_key_t must be a trivial object");
+static_assert(sizeof(flow_key_t) % 8 == 0, "flow_key_t size must be mutiple of 8");
+static_assert(sizeof(flow_key_t) == offsetof(flow_key_t, m_pad) + sizeof(flow_key_t::m_pad), "Incorrect padding value");
 
 class CFlowKeyTuple {
 public:
-    CFlowKeyTuple(){
-	memset(&m_bf, 0, sizeof(m_bf));
-    }
+    CFlowKeyTuple() : m_bf({}) {}
 
-    void set_src_ip(uint32_t ip){
+    void set_src_ip(ipv4v6_addr ip){
         m_bf.m_src_ip = ip;
     }
 
-    void set_dst_ip(uint32_t ip){
+    void set_dst_ip(ipv4v6_addr ip){
         m_bf.m_dst_ip = ip;
     }
 
@@ -99,15 +77,11 @@ public:
         m_bf.m_proto = proto;
     }
 
-    void set_ipv4(bool ipv4){
-        m_bf.m_ipv4 = ipv4?1:0;
-    }
-
-    uint32_t get_src_ip(){
+    ipv4v6_addr get_src_ip(){
         return(m_bf.m_src_ip);
     }
 
-    uint32_t get_dst_ip(){
+    ipv4v6_addr get_dst_ip(){
         return(m_bf.m_dst_ip);
     }
 
@@ -122,22 +96,23 @@ public:
         return(m_bf.m_proto);
     }
 
-    bool get_is_ipv4(){
-        return(m_bf.m_ipv4?true:false);
-    }
-
     flow_key_t get_flow_key(){
-	return m_bf;
-    }
-
-    uint32_t get_hash_worse(){
-        uint16_t p = get_sport() ^ get_dport();
-        uint32_t res = ft_hash_rot(get_src_ip() ^ get_dst_ip(),((p %16)+1)) ^ (p + get_proto()) ;
-        return (res);
+	    return m_bf;
     }
 
     uint32_t get_hash(){
-        return ( ft_hash2(m_bf.as_uint64[0]) ^ m_bf.as_uint64[1]);
+        std::array<uint64_t, sizeof(flow_key_t)/sizeof(uint64_t)> key_bytes = {};
+        memcpy(key_bytes.data(), &m_bf, sizeof(flow_key_t));
+
+        // Fxhash
+        constexpr uint32_t rotate = 5;
+        constexpr uint64_t seed64 = 0x517cc1b727220a95LU;
+        uint64_t hash = 0;
+        for (auto word64 : key_bytes) {
+            hash = (hash << rotate) | (hash >> (64 - rotate)); // rotate hash
+            hash = (hash ^ word64) * seed64;
+        }
+        return static_cast<uint32_t>(hash >> 32); // high bits are usually of better quality
     }
 
     void dump(FILE *fd);
@@ -406,8 +381,8 @@ public:
 public:
 
     void generate_rst_pkt(CPerProfileCtx * pctx,
-                      uint32_t src,
-                      uint32_t dst,
+                      ipv4v6_addr src,
+                      ipv4v6_addr dst,
                       uint16_t src_port,
                       uint16_t dst_port,
                       tunnel_cfg_data_t tunnel_data,
@@ -420,8 +395,8 @@ public:
 
 
     CTcpFlow * alloc_flow(CPerProfileCtx * pctx,
-                          uint32_t src,
-                          uint32_t dst,
+                          ipv4v6_addr src,
+                          ipv4v6_addr dst,
                           uint16_t src_port,
                           uint16_t dst_port,
                           tunnel_cfg_data_t tunnel_data,
@@ -431,8 +406,8 @@ public:
                           uint16_t template_id=0);
 
     CUdpFlow * alloc_flow_udp(CPerProfileCtx * pctx,
-                              uint32_t src,
-                              uint32_t dst,
+                              ipv4v6_addr src,
+                              ipv4v6_addr dst,
                               uint16_t src_port,
                               uint16_t dst_port,
                              tunnel_cfg_data_t tunnel_data,

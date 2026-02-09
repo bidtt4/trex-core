@@ -24,6 +24,7 @@ limitations under the License.
 #include <common/basic_utils.h>
 #include "h_timer.h"
 #include <cmath>
+#include "utl_ipv4v6_addr.h"
 #include "utl_mbuf.h"
 #include "44bsd/tcp.h"
 #include "44bsd/tcp_var.h"
@@ -466,11 +467,19 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
         }
     }
 
-    /* priorty to global */
-    bool is_ipv6 = CGlobalInfo::is_ipv6_enable() || 
+    /* priority to global */
+    bool ipv6_addresses_provided = tuple.getClient().version == ipv4v6_addr::Version::V6 &&
+        tuple.getServer().version == ipv4v6_addr::Version::V6;
+    bool is_ipv6 = CGlobalInfo::is_ipv6_enable() ||
                    c_rw->get_c_tuneables()->is_valid_field(CTcpTuneables::ipv6_enable) ||
-                   cur->get_c_tune()->is_valid_field(CTcpTuneables::ipv6_enable);
+                   cur->get_c_tune()->is_valid_field(CTcpTuneables::ipv6_enable) ||
+                   ipv6_addresses_provided;
 
+    if (is_ipv6 && !ipv6_addresses_provided) {
+        // This is IPv4 sent as IPv6. The tuple must contain V6 addresses, so that flow matching works.
+        tuple.setServer(ipv4v6_addr::ipv6_compatible(tuple.getServer()));
+        tuple.setClient(ipv4v6_addr::ipv6_compatible(tuple.getClient()));
+    }
 
     bool is_udp = cur->is_udp();
 
@@ -545,7 +554,6 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
     }else{
         c_tuple.set_proto(IPHeader::Protocol::TCP);
     }
-    c_tuple.set_ipv4(is_ipv6?false:true);
 
     m_stats.m_total_open_flows += 1;
 

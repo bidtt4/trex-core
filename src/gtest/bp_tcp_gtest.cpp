@@ -1385,7 +1385,6 @@ int hash_func_test(uint32_t mask,int clients,int ports,chash_result & res){
             key.set_ip(0x16000001+c);
             key.set_port(i);
             key.set_proto(06);
-            key.set_ipv4(true);
             uint32_t mkey = key.get_hash()&mask;
             uint32_t val=0;
 
@@ -1446,7 +1445,6 @@ TEST_F(gt_tcp, tst35) {
             key.set_ip(0x16000001+c);
             key.set_port(i);
             key.set_proto(06);
-            key.set_ipv4(true);
             uint32_t mkey = key.get_hash()&mask;
             p+=mkey;
         }
@@ -1476,7 +1474,6 @@ TEST_F(gt_tcp, tst36) {
     tuple.set_ip(0x16000001);
     tuple.set_port(1025);
     tuple.set_proto(6);
-    tuple.set_ipv4(true);
 
     ht.Create(32);
 
@@ -1521,7 +1518,6 @@ TEST_F(gt_tcp, tst37) {
     tuple.set_ip(0x16000001);
     tuple.set_port(1025);
     tuple.set_proto(6);
-    tuple.set_ipv4(true);
 
     ht.Create(32);
 
@@ -1975,8 +1971,8 @@ TEST_F(gt_tcp, tst52) {
     ClientCfgDB g_dummy;
 
     g_gen.Create(0,0);
-    g_gen.add_client_pool(cdSEQ_DIST,0x10000001,0x1000000f,64000, g_dummy, 0, 0);
-    g_gen.add_server_pool(cdSEQ_DIST,0x30000001,0x40000001,64000,false);
+    g_gen.add_client_pool(cdSEQ_DIST,ipv4v6_addr::ipv4_le(0x10000001),ipv4v6_addr::ipv4_le(0x1000000f),64000, g_dummy, 0, 0);
+    g_gen.add_server_pool(cdSEQ_DIST,ipv4v6_addr::ipv4_le(0x30000001),ipv4v6_addr::ipv4_le(0x40000001),64000,false);
 
     CAstfPerTemplateRO template_ro;
     CAstfPerTemplateRO *lp=&template_ro;
@@ -1986,7 +1982,7 @@ TEST_F(gt_tcp, tst52) {
     lp->m_client_pool_idx=0;
     lp->m_server_pool_idx=0;
     lp->m_one_app_server =false;
-    lp->m_server_addr =0;
+    lp->m_server_addr ={};
     lp->m_dual_mask=0x01000000;
     lp->m_w=1;
     lp->m_k_cps=1;
@@ -1999,8 +1995,8 @@ TEST_F(gt_tcp, tst52) {
     tuple.setServerPort(t.get_dest_port()) ;
 
 
-    printf(" %x %x %x %x \n",tuple.getClient(),
-                            tuple.getServer(),
+    printf(" %x %x %x %x \n",tuple.getClient().addr.v4,
+                            tuple.getServer().addr.v4,
                             tuple.getClientPort(),
                             tuple.getServerPort());
 

@@ -27,6 +27,7 @@ limitations under the License.
 #include "trex_global.h"
 #include "trex_capture.h"
 #include "trex_port.h"
+#include "utl_ipv4v6_addr.h"
 #include <common/Network/Packet/MPLSHeader.h>
 
 void CSttFlowTableStats::Clear(){
@@ -66,12 +67,11 @@ void CSttFlowTableStats::Dump(FILE *fd){
 
 
 void CFlowKeyTuple::dump(FILE *fd){
-    fprintf(fd,"m_src_ip   : %lu \n",(ulong)get_src_ip());
+    fprintf(fd,"m_src_ip   : %s \n",get_src_ip().to_str().c_str());
     fprintf(fd,"m_sport    : %lu \n",(ulong)get_sport());
-    fprintf(fd,"m_dst_ip   : %lu \n",(ulong)get_dst_ip());
+    fprintf(fd,"m_dst_ip   : %s \n",get_dst_ip().to_str().c_str());
     fprintf(fd,"m_dport    : %lu \n",(ulong)get_dport());
     fprintf(fd,"m_proto    : %lu \n",(ulong)get_proto());
-    fprintf(fd,"m_ipv4     : %lu \n",(ulong)get_is_ipv4());
     fprintf(fd,"hash       : %u \n",get_hash());
 }
 
@@ -178,14 +178,14 @@ void CFlowTable::parse_packet(struct rte_mbuf * mbuf,
         IPHeader *   ipv4= parser.m_ipv4;
         TCPUDPHeaderBase    * lpL4 = (TCPUDPHeaderBase *)parser.m_l4;
         if ( m_client_side ) {
-            tuple.set_src_ip(ipv4->getDestIp());
+            tuple.set_src_ip(ipv4v6_addr::ipv4_le(ipv4->getDestIp()));
             tuple.set_sport(lpL4->getDestPort());
-            tuple.set_dst_ip(ipv4->getSourceIp());
+            tuple.set_dst_ip(ipv4v6_addr::ipv4_le(ipv4->getSourceIp()));
             tuple.set_dport(lpL4->getSourcePort());
         }else{
-            tuple.set_dst_ip(ipv4->getDestIp());
+            tuple.set_dst_ip(ipv4v6_addr::ipv4_le(ipv4->getDestIp()));
             tuple.set_dport(lpL4->getDestPort());
-            tuple.set_src_ip(ipv4->getSourceIp());
+            tuple.set_src_ip(ipv4v6_addr::ipv4_le(ipv4->getSourceIp()));
             tuple.set_sport(lpL4->getSourcePort());
         }
         if (ipv4->getTotalLength()<IPV4_HDR_LEN) {
@@ -206,14 +206,14 @@ void CFlowTable::parse_packet(struct rte_mbuf * mbuf,
         TCPUDPHeaderBase    * lpL4 = (TCPUDPHeaderBase *)parser.m_l4;
 
         if ( m_client_side ) {
-            tuple.set_src_ip(ipv6->getDestIpv6LSB());
+            tuple.set_src_ip(ipv4v6_addr::ipv6_be(ipv6->myDestination));
             tuple.set_sport(lpL4->getDestPort());
-            tuple.set_dst_ip(ipv6->getSourceIpv6LSB());
+            tuple.set_dst_ip(ipv4v6_addr::ipv6_be(ipv6->mySource));
             tuple.set_dport(lpL4->getSourcePort());
         }else{
-            tuple.set_src_ip(ipv6->getSourceIpv6LSB());
+            tuple.set_src_ip(ipv4v6_addr::ipv6_be(ipv6->mySource));
             tuple.set_sport(lpL4->getSourcePort());
-            tuple.set_dst_ip(ipv6->getDestIpv6LSB());
+            tuple.set_dst_ip(ipv4v6_addr::ipv6_be(ipv6->myDestination));
             tuple.set_dport(lpL4->getDestPort());
         }
         /* TBD need to find the last IPv6 header and skip  */
@@ -262,7 +262,6 @@ void CFlowTable::parse_packet(struct rte_mbuf * mbuf,
 
     action=tPROCESS;
     tuple.set_proto(lpf->m_proto);
-    tuple.set_ipv4(lpf->m_ipv4);
 }
 
 void CFlowTable::check_service_filter(CSimplePacketParser & parser, tcp_rx_pkt_action_t & action) {
@@ -462,8 +461,8 @@ void HOT_FUNC CFlowTable::process_tcp_packet(CTcpPerThreadCtx * ctx,
 }
 
 void       CFlowTable::generate_rst_pkt(CPerProfileCtx * pctx,
-                                         uint32_t src,
-                                         uint32_t dst,
+                                         ipv4v6_addr src,
+                                         ipv4v6_addr dst,
                                          uint16_t src_port,
                                          uint16_t dst_port,
                                          tunnel_cfg_data_t tunnel_data,
@@ -511,8 +510,8 @@ void       CFlowTable::generate_rst_pkt(CPerProfileCtx * pctx,
 }
 
 CUdpFlow * CFlowTable::alloc_flow_udp(CPerProfileCtx * pctx,
-                                  uint32_t src,
-                                  uint32_t dst,
+                                  ipv4v6_addr src,
+                                  ipv4v6_addr dst,
                                   uint16_t src_port,
                                   uint16_t dst_port,
                                   tunnel_cfg_data_t tunnel_data,
@@ -535,8 +534,8 @@ CUdpFlow * CFlowTable::alloc_flow_udp(CPerProfileCtx * pctx,
 }
 
 CTcpFlow * CFlowTable::alloc_flow(CPerProfileCtx * pctx,
-                                  uint32_t src,
-                                  uint32_t dst,
+                                  ipv4v6_addr src,
+                                  ipv4v6_addr dst,
                                   uint16_t src_port,
                                   uint16_t dst_port,
                                   tunnel_cfg_data_t tunnel_data,
@@ -696,14 +695,14 @@ bool CFlowTable::rx_handle_packet_udp_no_flow(CTcpPerThreadCtx * ctx,
     }
 
     /* Patch */
-    uint32_t dest_ip;
+    ipv4v6_addr dest_ip;
     bool is_ipv6=false;
     if (parser.m_ipv4){
         IPHeader *  ipv4 = (IPHeader *)parser.m_ipv4;    
-        dest_ip=ipv4->getDestIp();
+        dest_ip= ipv4v6_addr::ipv4_le(ipv4->getDestIp());
     }else{
         IPv6Header *   ipv6= parser.m_ipv6;
-        dest_ip =ipv6->getDestIpv6LSB();
+        dest_ip = ipv4v6_addr::ipv6_be(ipv6->myDestination);
         is_ipv6=true;
     }
 
@@ -824,14 +823,14 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
     /* server with SYN packet, it is OK 
       we need to build the flow and add it to the table */
     /* Patch */
-    uint32_t dest_ip;
+    ipv4v6_addr dest_ip;
     bool is_ipv6=false;
     if (parser.m_ipv4){
         IPHeader *  ipv4 = (IPHeader *)parser.m_ipv4;    
-        dest_ip=ipv4->getDestIp();
+        dest_ip= ipv4v6_addr::ipv4_le(ipv4->getDestIp());
     }else{
         IPv6Header *   ipv6= parser.m_ipv6;
-        dest_ip =ipv6->getDestIpv6LSB();
+        dest_ip = ipv4v6_addr::ipv6_be(ipv6->myDestination);
         is_ipv6=true;
     }
 
@@ -871,13 +870,13 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
         }
         if (pctx->m_tunable_ctx.tcp_blackhole == 0 && !ignore) {
 
-            uint32_t source_ip;
+            ipv4v6_addr source_ip;
             if (parser.m_ipv4){
                 IPHeader *  ipv4 = (IPHeader *)parser.m_ipv4;    
-                source_ip=ipv4->getSourceIp();
+                source_ip= ipv4v6_addr::ipv4_le(ipv4->getSourceIp());
             }else{
                 IPv6Header *   ipv6= parser.m_ipv6;
-                source_ip =ipv6->getSourceIpv6LSB();
+                source_ip = ipv4v6_addr::ipv6_be(ipv6->mySource);
             }
 
             generate_rst_pkt(pctx,

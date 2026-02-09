@@ -28,6 +28,7 @@ limitations under the License.
 #include "common/Network/Packet/MacAddress.h"
 #include "mbuf.h"
 #include "tunnels/tunnel_db.h"
+#include "utl_ipv4v6_addr.h"
 
 class YAMLParserWrapper;
 struct CTupleGenYamlInfo;
@@ -301,7 +302,7 @@ public:
     
     void set_resolved_macs(CManyIPInfo *pretest_result);
     
-    bool contains(uint32_t ip) const {
+    bool contains(const ipv4v6_addr& ip) const {
         return ( (ip >= m_ip_start) && (ip <= m_ip_end) );
     }
 
@@ -313,11 +314,11 @@ public:
      *
      * @param info
      */
-    void assign(ClientCfgBase &info, uint32_t ip) const {
+    void assign(ClientCfgBase &info, ipv4v6_addr ip) const {
         assert(contains(ip));
 
         /* fold the offset */
-        uint32_t index = (ip - m_ip_start) % m_count;
+        uint32_t index = ipv4v6_addr::distance(ip, m_ip_start) % m_count;
         
         info.m_initiator = m_cfg.m_initiator;
         info.m_responder = m_cfg.m_responder;
@@ -327,15 +328,15 @@ public:
 
 
 public:
-    uint32_t    m_ip_start;
-    uint32_t    m_ip_end;
+    ipv4v6_addr m_ip_start;
+    ipv4v6_addr m_ip_end;
 
     ClientCfgExt m_cfg;
 
     uint32_t    m_count;
 
 private:
-    void set_params(uint32_t start, uint32_t end, uint32_t count) { // for tests
+    void set_params(ipv4v6_addr start, ipv4v6_addr end, uint32_t count) { // for tests
         m_ip_start = start;
         m_ip_end = end;
         m_count = count;
@@ -387,7 +388,7 @@ class ClientCfgDB {
      * a group that contains this IP
      *
      */
-    ClientCfgEntry * lookup(uint32_t ip);
+    ClientCfgEntry * lookup(const ipv4v6_addr &ip);
     ClientCfgEntry * lookup(const std::string &ip);
     void set_tuple_gen_info(CTupleGenYamlInfo *tg) {m_tg = tg;}
     CTunnelsDB* get_tunnel_db() {return m_tunnel_db;}
@@ -396,7 +397,7 @@ private:
     void parse_single_group(YAMLParserWrapper &parser, const YAML::Node &node);
     void parse_dir(YAMLParserWrapper &parser, const YAML::Node &node, ClientCfgDirExt &dir);
     void set_vlan(bool val) {m_under_vlan = val;} // for tests
-    void add_group(uint32_t ip, ClientCfgEntry cfg) { // for tests
+    void add_group(ipv4v6_addr ip, ClientCfgEntry cfg) { // for tests
         m_groups.insert(std::make_pair(ip, cfg));
     }
     /**
@@ -406,7 +407,7 @@ private:
     void verify(std::string &err) const;
 
     /* maps the IP start value to client groups */
-    std::map<uint32_t, ClientCfgEntry> m_groups;
+    std::map<ipv4v6_addr, ClientCfgEntry> m_groups;
     bool                               m_under_vlan;
     CTupleGenYamlInfo                 *m_tg;
     ClientCfgEntry                    *m_cache_group;

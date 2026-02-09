@@ -26,6 +26,7 @@ limitations under the License.
 #include <stdint.h>
 #include <vector>
 #include <yaml-cpp/yaml.h>
+#include "utl_ipv4v6_addr.h"
 
 
 /* static methods - please prefer the wrapper over those */
@@ -35,6 +36,9 @@ bool utl_yaml_read_ip_addr(const YAML::Node& node,
 bool utl_yaml_read_ipv6_addr(const YAML::Node& node,
                              const std::string &name,
                              std::array<uint16_t, 8>& val);
+bool utl_yaml_read_ipv4v6_addr(const YAML::Node& node,
+                               const std::string &name,
+                               ipv4v6_addr &val);
 bool utl_yaml_read_uint32(const YAML::Node& node,
                           const std::string &name,
                           uint32_t & val, uint32_t min, uint32_t max);

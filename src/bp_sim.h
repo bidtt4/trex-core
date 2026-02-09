@@ -51,6 +51,7 @@ limitations under the License.
 #include "time_histogram.h"
 #include "utl_cpuu.h"
 #include "tuple_gen.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_jitter.h"
 #include "msg_manager.h"
 #include "nat_check.h"
@@ -3295,10 +3296,10 @@ public:
     TrexMonitor                      m_monitor;
 
 private:
-    std::map<uint32_t, CIpInfoBase*> m_ip_info;
+    std::unordered_map<ipv4v6_addr, CIpInfoBase*> m_ip_info;
 public:
-    CIpInfoBase* get_ip_info(uint32_t ip);
-    CIpInfoBase* client_lookup(uint32_t ip);
+    CIpInfoBase* get_ip_info(ipv4v6_addr ip);
+    CIpInfoBase* client_lookup(ipv4v6_addr ip);
     void set_tunnel_handler(void* tunnel_handler, void* tunnel_ctx_del_cb);
     void allocate_ip_info(CIpInfoBase* ip_info);
     void release_ip_info(CIpInfoBase* ip_info);

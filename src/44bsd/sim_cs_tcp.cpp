@@ -24,6 +24,7 @@ limitations under the License.
 #include <astf/astf_template_db.h>
 #include "trex_global.h"
 #include "stt_cp.h"
+#include "utl_ipv4v6_addr.h"
 
 #define CLIENT_SIDE_PORT        1025
 #define DEFAULT_WIN 32768
@@ -349,8 +350,8 @@ void CClientServerTcp::set_assoc_table(uint16_t port, CEmulAppProgram *prog, CTc
     /* We work under the assumption that when you call this we don't need to resize. */
 
     CTcpServerInfo* server_info = m_tcp_data_ro.get_server_info_by_port(port, true);
-    server_info->set_ip_start(0);
-    server_info->set_ip_end(UINT32_MAX);   // for all ip range
+    server_info->set_ip_start(ipv4v6_addr::ipv4_le(0));
+    server_info->set_ip_end(ipv4v6_addr::ipv4_le(UINT32_MAX));   // for all ip range
     m_s_ctx.append_server_ports(0);
 }
 
@@ -601,14 +602,13 @@ int CClientServerTcp::test2(){
     tunnel_cfg_data_t tunnel_data;
     tunnel_data.m_vlan = m_vlan;
 
-    c_flow = m_c_ctx.m_ft.alloc_flow(c_pctx,0x10000001,0x30000001,1025,80,tunnel_data,false,NULL);
+    c_flow = m_c_ctx.m_ft.alloc_flow(c_pctx,ipv4v6_addr::ipv4_le(0x10000001),ipv4v6_addr::ipv4_le(0x30000001),1025,80,tunnel_data,false,NULL);
     CFlowKeyTuple   c_tuple;
-    c_tuple.set_src_ip(0x10000001);
-    c_tuple.set_dst_ip(0x30000001);
+    c_tuple.set_src_ip(ipv4v6_addr::ipv4_le(0x10000001));
+    c_tuple.set_dst_ip(ipv4v6_addr::ipv4_le(0x30000001));
     c_tuple.set_dport(80);
     c_tuple.set_sport(1025);
     c_tuple.set_proto(6);
-    c_tuple.set_ipv4(true);
 
 
     assert(m_c_ctx.m_ft.insert_new_flow(c_flow,c_tuple)==true);
@@ -1105,14 +1105,13 @@ int CClientServerTcp::simple_http_generic(method_program_cb_t cb){
     tunnel_cfg_data_t tunnel_data;
     tunnel_data.m_vlan = m_vlan;
 
-    c_flow = m_c_ctx.m_ft.alloc_flow(c_pctx,0x10000001,0x30000001,1025,80,tunnel_data,m_ipv6,m_tunnel_info);
+    c_flow = m_c_ctx.m_ft.alloc_flow(c_pctx,ipv4v6_addr::ipv4_le(0x10000001),ipv4v6_addr::ipv4_le(0x30000001),1025,80,tunnel_data,m_ipv6,m_tunnel_info);
     CFlowKeyTuple   c_tuple;
-    c_tuple.set_src_ip(0x10000001);
+    c_tuple.set_src_ip(ipv4v6_addr::ipv4_le(0x10000001));
     c_tuple.set_sport(1025);
-    c_tuple.set_dst_ip(0x30000001);
+    c_tuple.set_dst_ip(ipv4v6_addr::ipv4_le(0x30000001));
     c_tuple.set_dport(80);
     c_tuple.set_proto(6);
-    c_tuple.set_ipv4(m_ipv6?false:true);
 
     if (m_debug) {
         /* enable client debug */
@@ -1232,8 +1231,8 @@ int CClientServerTcp::fill_from_file() {
     c_pctx->update_tuneables(rw_db->get_c_tuneables());
     s_pctx->update_tuneables(rw_db->get_s_tuneables());
 
-    uint32_t dst_ip = 0x30000001;
-    uint32_t src_ip = 0x10000001;
+    auto dst_ip = ipv4v6_addr::ipv4_le(0x30000001);
+    auto src_ip = ipv4v6_addr::ipv4_le(0x10000001);
     uint16_t dst_port = ro_db->get_dport(0);
     uint16_t src_port = CLIENT_SIDE_PORT;
     if (src_port == dst_port) {
@@ -1256,7 +1255,6 @@ int CClientServerTcp::fill_from_file() {
     c_tuple.set_dport(dst_port);
 
     c_tuple.set_proto(6);
-    c_tuple.set_ipv4(true);
 
     if (m_debug) {
         /* enable client debug */

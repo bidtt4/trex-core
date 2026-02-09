@@ -24,6 +24,7 @@ limitations under the License.
 #include <common/gtest.h>
 #include <common/basic_utils.h>
 #include "bp_gtest.h"
+#include "utl_ipv4v6_addr.h"
 
 class client_cfg : public trexStfTest {
     protected:
@@ -45,8 +46,8 @@ class basic_client_cfg : public trexStfTest {
 
 // testing IP resolution relevant classes
 TEST_F(basic_client_cfg, test1) {
-    uint32_t ip_start = 0x10010101;
-    uint32_t ip_end = 0x100101ff;
+    auto ip_start = ipv4v6_addr::ipv4_le(0x10010101);
+    auto ip_end = ipv4v6_addr::ipv4_le(0x100101ff);
     uint32_t next_hop_init = 0x01010101;
     uint32_t next_hop_resp = 0x02020202;
     uint16_t vlan_init = 5;

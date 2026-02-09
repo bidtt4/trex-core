@@ -215,9 +215,10 @@ ClientCfgDB::dump(FILE *fd) {
     fprintf(fd, "vlan: %s\n", m_under_vlan ? "true" : "false");
     fprintf(fd, "groups:\n");
 
-    for (std::map<uint32_t, ClientCfgEntry>::iterator it = m_groups.begin(); it != m_groups.end(); ++it) {
-        fprintf(fd, "# ****%s:****\n", ip_to_str(it->first).c_str());
-        ((ClientCfgEntry)it->second).dump(fd);
+    //or (std::map<ipv4v6_addr, ClientCfgEntry>::iterator it = m_groups.begin(); it != m_groups.end(); ++it) {
+    for (const auto& it : m_groups) {
+        fprintf(fd, "# ****%s:****\n", ip_to_str(it.first).c_str());
+        it.second.dump(fd);
     }
     //fprintf(fd, "#**********Client config end*********\n");
 }
@@ -236,7 +237,7 @@ void ClientCfgDB::get_entry_list(std::vector<ClientCfgCompactEntry *> &ret) {
     uint8_t port;
     bool result;
 
-    for (std::map<uint32_t, ClientCfgEntry>::iterator it = m_groups.begin(); it != m_groups.end(); ++it) {
+    for (std::map<ipv4v6_addr, ClientCfgEntry>::iterator it = m_groups.begin(); it != m_groups.end(); ++it) {
         ClientCfgEntry &cfg = it->second;
         if (cfg.m_cfg.m_initiator.need_resolve() || cfg.m_cfg.m_responder.need_resolve()) {
             assert(m_tg != NULL);
@@ -320,15 +321,13 @@ void ClientCfgDB::load_from_topo(const TopoMngr *topomngr) {
         for (auto &iter_pair : topo_per_port[trex_port]) {
             const TopoVIF &vif = iter_pair.second;
             for (auto gw : vif.m_gws) {
-                ClientCfgEntry group;
+                ClientCfgEntry group = {};
 
-                rc = utl_ipv4_to_uint32(gw.get_start().c_str(), group.m_ip_start);
-                if ( !rc ) {
+                if ( !group.m_ip_start.set_from_str(gw.get_start().c_str()) ) {
                     build_err("GW has invalid start of IP range: " + gw.get_start());
                 }
 
-                rc = utl_ipv4_to_uint32(gw.get_end().c_str(), group.m_ip_end);
-                if ( !rc ) {
+                if ( !group.m_ip_end.set_from_str(gw.get_end().c_str()) ) {
                     build_err("GW has invalid end of IP range: " + gw.get_end());
                 }
 
@@ -386,10 +385,10 @@ ClientCfgDB::parse_single_group(YAMLParserWrapper &parser, const YAML::Node &nod
     ClientCfgEntry group;
 
     /* ip_start */
-    group.m_ip_start = parser.parse_ip(node, "ip_start");
+    group.m_ip_start = ipv4v6_addr::ipv4_le(parser.parse_ip(node, "ip_start"));
 
     /* ip_end */
-    group.m_ip_end = parser.parse_ip(node, "ip_end");
+    group.m_ip_end = ipv4v6_addr::ipv4_le(parser.parse_ip(node, "ip_end"));
 
     /* sanity check */
     if (group.m_ip_end < group.m_ip_start) {
@@ -465,7 +464,7 @@ ClientCfgDB::parse_dir(YAMLParserWrapper &parser, const YAML::Node &node, Client
  */
 void
 ClientCfgDB::verify(std::string &err) const {
-    uint32_t monotonic = 0;
+    ipv4v6_addr monotonic = {};
 
     /* check that no interval overlaps */
 
@@ -473,7 +472,7 @@ ClientCfgDB::verify(std::string &err) const {
     for (const auto &p : m_groups) {
         const ClientCfgEntry &group = p.second;
 
-        if ( (monotonic > 0 ) && (group.m_ip_start <= monotonic) ) {
+        if ( (monotonic != ipv4v6_addr{} ) && (group.m_ip_start <= monotonic) ) {
             err = "IP '" + ip_to_str(group.m_ip_start) + "' - '" + ip_to_str(group.m_ip_end) + "' overlaps with other groups";
             return;
         }
@@ -488,7 +487,7 @@ ClientCfgDB::verify(std::string &err) const {
  *
  */
 ClientCfgEntry *
-ClientCfgDB::lookup(uint32_t ip) {
+ClientCfgDB::lookup(const ipv4v6_addr &ip) {
 
     /* a cache to avoid constant search (usually its a range of IPs) */
     if ( (m_cache_group) && (m_cache_group->contains(ip)) ) {
@@ -498,7 +497,7 @@ ClientCfgDB::lookup(uint32_t ip) {
     /* clear the cache pointer */
     m_cache_group = NULL;
 
-    std::map<uint32_t ,ClientCfgEntry>::iterator it;
+    std::map<ipv4v6_addr ,ClientCfgEntry>::iterator it;
 
     /* upper bound fetchs the first greater element */
     it = m_groups.upper_bound(ip);
@@ -547,8 +546,5 @@ ClientCfgDB::lookup(uint32_t ip) {
  */
 ClientCfgEntry *
 ClientCfgDB::lookup(const std::string &ip) {
-    uint32_t addr = (uint32_t)inet_addr(ip.c_str());
-    addr = PKT_NTOHL(addr);
-
-    return lookup(addr);
+    return lookup(ipv4v6_addr::from_str(ip.c_str()));
 }

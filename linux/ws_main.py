@@ -248,7 +248,8 @@ bp_sim_gtest = SrcGroup(dir='src',
              'gtest/trex_stateless_gtest.cpp',
              'gtest/bp_tunnel_gtest.cpp',
              'gtest/bp_dyn_sts_gtest.cpp',
-             'gtest/bp_tunnel_topo_gtest.cpp'
+             'gtest/bp_tunnel_topo_gtest.cpp',
+             'gtest/utl_ipv4v6_addr_gtest.cpp',
              ])
 
 main_src = SrcGroup(dir='src',
@@ -315,6 +316,7 @@ main_src = SrcGroup(dir='src',
             'utils/utl_cpuu.cpp',
             'utils/utl_dbl_human.cpp',
             'utils/utl_ip.cpp',
+            'utils/utl_ipv4v6_addr.cpp',
             'utils/utl_ipv6_hextets.cpp',
             'utils/utl_json.cpp',
             'utils/utl_mbuf.cpp',

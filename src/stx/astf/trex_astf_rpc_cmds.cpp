@@ -565,8 +565,8 @@ TrexRpcCmdAstfGetTrafficDist::_run(const Json::Value &params, Json::Value &resul
                 CIpPortion portion;
                 db->get_thread_ip_range(thread_id, max_threads, dual_id, start_ip, end_ip, dual_ip, seq_split, portion);
                 Json::Value core_range;
-                core_range["start"] = utl_uint32_to_ipv4(portion.m_ip_start);
-                core_range["end"] = utl_uint32_to_ipv4(portion.m_ip_end);
+                core_range["start"] = portion.m_ip_start.to_str();
+                core_range["end"] = portion.m_ip_end.to_str();
                 cores_ranges[to_string(thread_id)] = core_range;
             }
             res[to_string(port.first)] = cores_ranges;

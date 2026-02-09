@@ -57,6 +57,7 @@
 #include <cmath>
 #include "utl_counter.h"
 #include "tunnels/tunnel_factory.h"
+#include "utl_ipv4v6_addr.h"
 #include <common/Network/Packet/MPLSHeader.h>
 
 //extern    struct inpcb *tcp_last_inpcb;
@@ -374,7 +375,7 @@ bool CTcpFlow::is_activated() {
 
 bool CTcpFlow::check_template_assoc_by_l7_data(uint8_t* l7_data, uint16_t l7_len) {
     uint16_t server_port = m_template.get_src_port();
-    uint32_t server_ip = m_template.get_src_ipv4();
+    ipv4v6_addr server_ip = m_template.get_src_ip();
 
     auto temp = m_pctx->m_ctx->get_template_info(server_port,true,server_ip, l7_data,l7_len);
 
@@ -519,9 +520,9 @@ void CTcpFlow::Delete(){
 const std::string CTcpFlow::get_flow_id() const {
     std::stringstream ss;
 
-    ss << utl_uint32_to_ipv4(m_template.get_src_ipv4()) << ":" << m_template.get_src_port();
+    ss << m_template.get_src_ip().to_str() << ":" << m_template.get_src_port();
     ss << "-";
-    ss << utl_uint32_to_ipv4(m_template.get_dst_ipv4()) << ":" << m_template.get_dst_port();
+    ss << m_template.get_dst_ip().to_str() << ":" << m_template.get_dst_port();
 
     return ss.str();
 }
@@ -1021,7 +1022,7 @@ bool CServerTemplateInfo::has_payload_params() {
     return m_server_info->is_payload_params();
 }
 
-CServerIpPayloadInfo::CServerIpPayloadInfo(uint32_t start, uint32_t end, CServerTemplateInfo& temp) : CServerIpInfo(start,end) {
+CServerIpPayloadInfo::CServerIpPayloadInfo(ipv4v6_addr start, ipv4v6_addr end, CServerTemplateInfo& temp) : CServerIpInfo(start,end) {
     auto payload_params = temp.get_server_info()->get_payload_params();
     if (temp.get_server_info()->get_addon()) {
         assert(payload_params.size() == sizeof(payload_value_t));
@@ -1173,7 +1174,7 @@ bool CServerIpPayloadInfo::remove_template_info(CPerProfileCtx* pctx) {
 }
 
 
-CServerTemplateInfo* CServerPortInfo::get_template_info_by_ip(uint32_t ip) {
+CServerTemplateInfo* CServerPortInfo::get_template_info_by_ip(ipv4v6_addr ip) {
     auto it = m_ip_map.lower_bound(ip);
     if (it != m_ip_map.end() && it->second.is_ip_in(ip)) {
         return it->second.get_template_info();
@@ -1181,7 +1182,7 @@ CServerTemplateInfo* CServerPortInfo::get_template_info_by_ip(uint32_t ip) {
     return nullptr;
 }
 
-CServerTemplateInfo* CServerPortInfo::get_template_info_by_payload(uint32_t ip, uint8_t* data, uint16_t len) {
+CServerTemplateInfo* CServerPortInfo::get_template_info_by_payload(ipv4v6_addr ip, uint8_t* data, uint16_t len) {
     auto it = m_ip_map_payload.lower_bound(ip);
     if (it != m_ip_map_payload.end() && it->second.is_ip_in(ip)) {
         if (data && len) {
@@ -1193,7 +1194,7 @@ CServerTemplateInfo* CServerPortInfo::get_template_info_by_payload(uint32_t ip, 
     return nullptr;
 }
 
-CServerTemplateInfo* CServerPortInfo::get_template_info(uint32_t ip, uint8_t* data, uint16_t len) {
+CServerTemplateInfo* CServerPortInfo::get_template_info(ipv4v6_addr ip, uint8_t* data, uint16_t len) {
     CServerTemplateInfo* temp = nullptr;
     if (!m_ip_map_payload.empty()) {
         temp = get_template_info_by_payload(ip, data, len);
@@ -1204,7 +1205,7 @@ CServerTemplateInfo* CServerPortInfo::get_template_info(uint32_t ip, uint8_t* da
     return temp;
 }
 
-CServerIpPayloadInfo* CServerPortInfo::get_ip_payload_info(uint32_t ip) {
+CServerIpPayloadInfo* CServerPortInfo::get_ip_payload_info(ipv4v6_addr ip) {
     if (!m_ip_map_payload.empty()) {
         auto it = m_ip_map_payload.lower_bound(ip);
         if (it != m_ip_map_payload.end() && it->second.is_ip_in(ip)) {
@@ -1266,8 +1267,7 @@ bool CServerPortInfo::insert_template_payload(CTcpServerInfo* server, CPerProfil
         auto& payload = it->second;
         if (payload.is_ip_equal(in_payload)) {
             if (!payload.is_rule_equal(in_payload)) {
-                ss << std::hex;
-                ss << "new rule is different in [" << payload.ip_start() << ", " << payload.ip_end() << "]";
+                ss << "new rule is different in [" << payload.ip_start().to_hex_str() << ", " << payload.ip_end().to_hex_str() << "]";
                 msg = ss.str();
                 return false;
             }
@@ -1277,17 +1277,15 @@ bool CServerPortInfo::insert_template_payload(CTcpServerInfo* server, CPerProfil
                 return false;
             }
             else if (!payload.insert_template_info(in_payload)) {
-                ss << std::hex;
-                ss << "already registered in [" << payload.ip_start() << ", " << payload.ip_end() << "]";
+                ss << "already registered in [" << payload.ip_start().to_hex_str() << ", " << payload.ip_end().to_hex_str() << "]";
                 msg = ss.str();
                 return false;
             }
             return true;
         }
         else if (payload.is_ip_overlap(in_payload)) {
-            ss << std::hex;
-            ss << "new IP range [" << ip_start << ", " << ip_end << "]";
-            ss << " is different from [" << payload.ip_start() << ", " << payload.ip_end() << "]";
+            ss << "new IP range [" << ip_start.to_hex_str() << ", " << ip_end.to_hex_str() << "]";
+            ss << " is different from [" << payload.ip_start().to_hex_str() << ", " << payload.ip_end().to_hex_str() << "]";
             ss << " for the same rule.";
             msg = ss.str();
             return false;
@@ -1323,9 +1321,8 @@ bool CServerPortInfo::insert_template_info(CTcpServerInfo* server, CPerProfileCt
     if (it != m_ip_map.end()) {
         auto& temp = it->second;
         if (temp.is_ip_overlap(ip_start, ip_end)) {
-            ss << std::hex;
-            ss << "new IP range [" << ip_start << ", " << ip_end << "]";
-            ss << " overlaps [" << temp.ip_start() << ", " << temp.ip_end() << "]";
+            ss << "new IP range [" << ip_start.to_hex_str() << ", " << ip_end.to_hex_str() << "]";
+            ss << " overlaps [" << temp.ip_start().to_hex_str() << ", " << temp.ip_end().to_hex_str() << "]";
             msg = ss.str();
             return false;
         }
@@ -1333,7 +1330,7 @@ bool CServerPortInfo::insert_template_info(CTcpServerInfo* server, CPerProfileCt
     CServerTemplateInfo temp{ server, pctx };
     m_ip_map[ip_end] = CServerIpTemplateInfo(ip_start, ip_end, temp);
     // update template cache for the fast lookup
-    if (ip_start == 0 && ip_end == UINT32_MAX) {
+    if (ip_start == ipv4v6_addr::ipv4_le(0) && ip_end == ipv4v6_addr::ipv4_le(UINT32_MAX)) {
         assert(m_template_cache == nullptr);
         if (m_ip_map_payload.empty()) {
             m_template_cache = m_ip_map[ip_end].get_template_info();
@@ -1391,7 +1388,7 @@ void CServerPortInfo::remove_template_info_by_profile(CPerProfileCtx* pctx) {
 
     if (!m_template_cache && m_ip_map_payload.empty() && (m_ip_map.size() == 1)) {
         auto it = m_ip_map.begin();
-        if (it->second.ip_start() == 0 && it->second.ip_end() == UINT32_MAX) {
+        if (it->second.ip_start() == ipv4v6_addr::ipv4_le(0) && it->second.ip_end() == ipv4v6_addr::ipv4_le(UINT32_MAX)) {
             m_template_cache = it->second.get_template_info();
         }
     }
@@ -1492,7 +1489,7 @@ CServerTemplateInfo * CTcpPerThreadCtx::get_template_info_by_port(uint16_t port,
     return nullptr;
 }
 
-CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool stream, uint32_t ip, uint8_t* data, uint16_t len) {
+CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool stream, ipv4v6_addr ip, uint8_t* data, uint16_t len) {
     uint32_t params = PortParams(port, stream);
 
     if (m_server_ports.find(params) != m_server_ports.end()) {
@@ -1501,7 +1498,7 @@ CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool st
     return nullptr;
 }
 
-CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool stream, uint32_t ip, CServerIpPayloadInfo** payload_info_p) {
+CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool stream, ipv4v6_addr ip, CServerIpPayloadInfo** payload_info_p) {
     uint32_t params = PortParams(port, stream);
 
     if (m_server_ports.find(params) != m_server_ports.end()) {
@@ -1518,7 +1515,7 @@ CServerTemplateInfo * CTcpPerThreadCtx::get_template_info(uint16_t port, bool st
 }
 
 
-CTcpServerInfo * CTcpPerThreadCtx::get_server_info(uint16_t port, bool stream, uint32_t ip, uint8_t* data, uint16_t len) {
+CTcpServerInfo * CTcpPerThreadCtx::get_server_info(uint16_t port, bool stream, ipv4v6_addr ip, uint8_t* data, uint16_t len) {
     CServerTemplateInfo* temp = get_template_info(port, stream, ip, data, len);
     return temp ? temp->get_server_info(): nullptr;
 }
@@ -1772,8 +1769,8 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
         IPHeader *lpIpv4=(IPHeader *)(p+m_offset_ip);
         lpIpv4->setTotalLength(20); /* important for PH calculation */
         tcp_template_ipv4_update(lpIpv4,pctx,template_idx);
-        lpIpv4->setDestIp(m_dst_ipv4);
-        lpIpv4->setSourceIp(m_src_ipv4);
+        lpIpv4->setDestIp(m_dst_ip.addr.v4);
+        lpIpv4->setSourceIp(m_src_ip.addr.v4);
         lpIpv4->setProtocol(m_proto);
         lpIpv4->ClearCheckSum();
     }else{
@@ -1833,8 +1830,18 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
         /* set default value */
         IPv6Header *ipv6=(IPv6Header *)(p+m_offset_ip);
         tcp_template_ipv6_update(ipv6,pctx,template_idx);
-        ipv6->updateLSBIpv6Dst(m_dst_ipv4);
-        ipv6->updateLSBIpv6Src(m_src_ipv4);
+        if (m_dst_ip.version == ipv4v6_addr::Version::V4) {
+            // IPv6 compatible IPv4 address
+            ipv6->updateLSBIpv6Dst(m_dst_ip.addr.v4);
+        } else {
+            // Standard IPv6
+            ipv6->updateIpv6Dst(m_dst_ip.addr.v6.data());
+        }
+        if (m_src_ip.version == ipv4v6_addr::Version::V4) {
+            ipv6->updateLSBIpv6Src(m_src_ip.addr.v4);
+        } else {
+            ipv6->updateIpv6Src(m_src_ip.addr.v6.data());
+        }
         ipv6->setNextHdr(m_proto);
         ipv6->setPayloadLen(0);  /* important for PH calculation */
     }

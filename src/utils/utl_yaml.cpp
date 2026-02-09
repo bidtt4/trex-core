@@ -72,6 +72,18 @@ bool utl_yaml_read_ipv6_addr(const YAML::Node& node,
     return true;
 }
 
+bool utl_yaml_read_ipv4v6_addr(const YAML::Node& node,
+                           const std::string &name,
+                           ipv4v6_addr & val) {
+    if (!node.FindValue(name)) {
+        return false;
+    }
+    std::string addr_str;
+    node[name] >> addr_str ;
+    val = ipv4v6_addr::from_str(addr_str.c_str());
+    return true;
+}
+
 bool utl_yaml_read_uint32(const YAML::Node& node,
                           const std::string &name,
                           uint32_t & val, uint32_t min, uint32_t max) {
