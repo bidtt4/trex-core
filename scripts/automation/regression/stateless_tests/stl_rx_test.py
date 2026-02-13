@@ -386,7 +386,7 @@ class STLRX_Test(CStlGeneral_Test):
             self.c.wait_on_traffic(ports = [self.tx_port], timeout = duration+10, rx_delay_ms = 100)
         else:
             self.c.start(ports = [self.tx_port])
-            self.c.wait_on_traffic(ports = [self.tx_port])
+            self.c.wait_on_traffic(ports = [self.tx_port], rx_delay_ms = 1000)
 
         stats = self.get_stats()
         xstats = self.c.get_xstats(self.rx_port)
