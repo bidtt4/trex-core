@@ -335,12 +335,19 @@ void CStackBase::attr_to_json(Json::Value &res) {
     if ( m_port_node->is_ip6_enabled() ) {
         cfg["ipv6"]["enabled"] = true;
         string ipv6_src = m_port_node->get_src_ip6();
-        if ( ipv6_src.size() ) {
+        if (!ipv6_src.empty()) {
             char buf[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, ipv6_src.c_str(), buf, INET6_ADDRSTRLEN);
             ipv6_src = buf;
         }
         cfg["ipv6"]["src"] = ipv6_src;
+        string ipv6_dst = m_port_node->get_dst_ip6();
+        if (!ipv6_dst.empty()) {
+            char buf[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, ipv6_dst.c_str(), buf, INET6_ADDRSTRLEN);
+            ipv6_dst = buf;
+        }
+        cfg["ipv6"]["dst"] = ipv6_dst;
     } else {
         cfg["ipv6"]["enabled"] = false;
     }
@@ -712,7 +719,6 @@ void CNodeBase::clear_ip4_async() {
     }
 }
 
-
 void CNodeBase::conf_ip6_async(bool enabled, const string &ip6_buf) {
     assert(ip6_buf.size()==16 || ip6_buf.size()==0);
     debug("conf ip6");
@@ -728,6 +734,13 @@ void CNodeBase::clear_ip6_async() {
     }
 }
 
+void CNodeBase::set_ip6_addr_async(const string &ip6_buf, const string &gw6_buf) {
+    assert(ip6_buf.size()==16 || ip6_buf.size()==0);
+    debug("set ip6");
+    if ( ip6_buf != m_ip6 || gw6_buf != m_gw6 ) {
+        m_tasks.push_back(bind(&CNodeBase::set_ip6_addr_internal, this, ip6_buf, gw6_buf));
+    }
+}
 
 void CNodeBase::to_json_node(Json::Value &cfg){
 
@@ -764,6 +777,13 @@ void CNodeBase::to_json_node(Json::Value &cfg){
             ipv6_src = buf;
         }
         cfg["ipv6"]["src"] = ipv6_src;
+        string ipv6_dst = get_dst_ip6();
+        if ( ipv6_dst.size() ) {
+            char buf[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, ipv6_dst.c_str(), buf, INET6_ADDRSTRLEN);
+            ipv6_dst = buf;
+        }
+        cfg["ipv6"]["dst"] = ipv6_dst;
     } else {
         cfg["ipv6"]["enabled"] = false;
     }
@@ -808,6 +828,13 @@ void CNodeBase::to_json(Json::Value &cfg){
             ipv6_src = buf;
         }
         cfg["ipv6"]["src"] = ipv6_src;
+        string ipv6_dst = get_dst_ip6();
+        if ( ipv6_dst.size() ) {
+            char buf[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, ipv6_dst.c_str(), buf, INET6_ADDRSTRLEN);
+            ipv6_dst = buf;
+        }
+        cfg["ipv6"]["dst"] = ipv6_dst;
     } else {
         cfg["ipv6"]["enabled"] = false;
     }
@@ -850,6 +877,10 @@ void CNodeBase::conf_ip6_internal(bool enabled, const string &ip6_buf) {
 void CNodeBase::clear_ip6_internal() {
     m_ip6_enabled = false;
     m_ip6.clear();
+}
+
+void CNodeBase::set_ip6_addr_internal(const string &ip6_buf, const string &gw6_buf) {
+    throw TrexException("IPv6 is not supported with current stack");
 }
 
 // getters
@@ -907,6 +938,10 @@ const string &CNodeBase::get_dst_ip4() {
 
 const string &CNodeBase::get_src_ip6() {
     return m_ip6;
+}
+
+const string &CNodeBase::get_dst_ip6() {
+    return m_gw6;
 }
 
 

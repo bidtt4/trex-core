@@ -210,6 +210,12 @@ public:
     void set_l3_mode_async(const std::string &src_ipv4, const std::string &dst_ipv4, const std::string *dst_mac);
 
     /**
+     * Sets src and dst IPv6 address on the port
+     * 
+     */
+    void set_ipv6_addr_async(const std::string &src_ipv6, const std::string &dst_ipv6);
+
+    /**
      * configures IPv6 of port
      * 
      */

@@ -3662,6 +3662,8 @@ COLD_FUNC void CGlobalTRex::apply_pretest_results_to_stack(void) {
         }
         uint32_t src_ipv4 = CGlobalInfo::m_options.m_ip_cfg[port_id].get_ip();
         uint32_t dg = CGlobalInfo::m_options.m_ip_cfg[port_id].get_def_gw();
+        auto src_ipv6 = CGlobalInfo::m_options.m_ip_cfg[port_id].get_ipv6();
+        auto gwv6 = CGlobalInfo::m_options.m_ip_cfg[port_id].get_def_gwv6();
         std::string dst_mac((char*)CGlobalInfo::m_options.m_mac_addr[port_id].u.m_mac.dest, 6);
 
         /* L3 mode */
@@ -3670,6 +3672,9 @@ COLD_FUNC void CGlobalTRex::apply_pretest_results_to_stack(void) {
                 port->set_l3_mode_async(utl_uint32_to_ipv4_buf(src_ipv4), utl_uint32_to_ipv4_buf(dg), nullptr);
             } else {
                 port->set_l3_mode_async(utl_uint32_to_ipv4_buf(src_ipv4), utl_uint32_to_ipv4_buf(dg), &dst_mac);
+            }
+            if (src_ipv6 != IPV6_UNSPECIFIED && gwv6 != IPV6_UNSPECIFIED) {
+                port->set_ipv6_addr_async(utl_hextets_to_ipv6_buf(src_ipv6), utl_hextets_to_ipv6_buf(gwv6));
             }
 
         /* L2 mode */

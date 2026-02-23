@@ -403,6 +403,12 @@ void TrexPort::set_l3_mode_async(const std::string &src_ipv4, const std::string 
     send_message_to_rx( (TrexCpToRxMsgBase *)msg );
 }
 
+void TrexPort::set_ipv6_addr_async(const std::string &src_ipv6, const std::string &dst_ipv6) {
+    verify_state(PORT_STATE_IDLE | PORT_STATE_STREAMS | PORT_STATE_ASTF_LOADED, "set_ipv6_mode");
+    TrexRxSetIpv6Addr *msg = new TrexRxSetIpv6Addr(m_port_id, src_ipv6, dst_ipv6);
+    send_message_to_rx( (TrexCpToRxMsgBase *)msg );
+}
+
 /**
  * configures IPv6 of port
  * 

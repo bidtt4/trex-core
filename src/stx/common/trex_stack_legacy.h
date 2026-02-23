@@ -38,6 +38,7 @@ public:
     ~CLegacyNode();
     void conf_vlan_internal(const vlan_list_t &vlans, const vlan_list_t &tpids);
     void conf_ip4_internal(const string &ip4_buf, const string &gw4_buf);
+    void set_ip6_addr_internal(const string &ip6_buf, const string &gw6_buf);
 
 private:
     void set_mac(const string &addr);

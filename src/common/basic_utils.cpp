@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "pal_utl.h"
 #include "inet_pton.h"
+#include "utl_ipv6_hextets.h"
 
 
 bool utl_is_file_exists (const std::string& name) {
@@ -371,6 +372,11 @@ std::string utl_uint32_to_ipv4(uint32_t ipv4_addr) {
 std::string utl_uint32_to_ipv4_buf(uint32_t ipv4_addr) {
     ipv4_addr = PAL_NTOHL(ipv4_addr);
     return std::string((char *) &ipv4_addr, 4);
+}
+
+std::string utl_hextets_to_ipv6_buf(const ipv6_hextets& hextets) {
+    auto addr_be = ipv6_to_be(hextets);
+    return std::string((char*)addr_be.data(), 16);
 }
 
 float clear_nan_inf(const float var) {

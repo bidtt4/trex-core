@@ -52,6 +52,7 @@ public:
     void clear_ip4_async();
     void conf_ip6_async(bool enabled, const std::string &ip6_buf);
     void clear_ip6_async();
+    void set_ip6_addr_async(const string &ip6_buf, const string &gw6_buf);
 
     void set_l2_mode(bool enable){
         m_l2_mode =  enable;
@@ -85,6 +86,7 @@ public:
     const std::string &get_src_ip4();
     const std::string &get_dst_ip4();
     const std::string &get_src_ip6();
+    const std::string &get_dst_ip6();
 
     task_list_t         m_tasks;
 
@@ -103,6 +105,7 @@ protected:
     virtual void conf_vlan_internal(const vlan_list_t &vlans, const vlan_list_t &tpids);
     virtual void conf_ip6_internal(bool enabled, const std::string &ip6_buf);
     virtual void clear_ip6_internal();
+    virtual void set_ip6_addr_internal(const string &ip6_buf, const string &gw6_buf);
 
     // binary values as it would be in packet
     bool                m_dst_mac_valid;
@@ -114,6 +117,7 @@ protected:
     std::string         m_ip4;
     std::string         m_gw4;
     std::string         m_ip6;
+    std::string         m_gw6;
     bool                m_l2_mode;
     bool                m_ip6_enabled;
 };

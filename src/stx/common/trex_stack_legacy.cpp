@@ -286,3 +286,8 @@ void CLegacyNode::conf_ip4_internal(const string &ip4_buf, const string &gw4_buf
     m_gw4 = gw4_buf;
 }
 
+void CLegacyNode::set_ip6_addr_internal(const string &ip6_buf, const string &gw6_buf) {
+    m_ip6_enabled = true;
+    m_ip6 = ip6_buf;
+    m_gw6 = gw6_buf;
+}

@@ -730,12 +730,11 @@ class Port(object):
             assert 0, ipv4['state']
 
         if ipv6 and ipv6['enabled']:
-            if ipv6['src']:
-                info['ipv6'] = ipv6['src']
-            else:
-                info['ipv6'] = 'auto'
+            info['ipv6'] = ipv6.get('src') or 'auto'
+            info['dst_ipv6'] = ipv6.get('dst') or '-'
         else:
             info['ipv6'] = 'off'
+            info['dst_ipv6'] = 'off'
 
         # RX info
         rx_info = self.status['rx_info']

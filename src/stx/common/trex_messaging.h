@@ -651,6 +651,25 @@ private:
 };
 
 /**
+ * Configure source and destination IPv6 for port
+ */
+class TrexRxSetIpv6Addr : public TrexCpToRxMsgBase {
+public:
+    TrexRxSetIpv6Addr(uint8_t port_id, const std::string &src_ipv6, const std::string &dst_ipv6) {
+        m_port_id       = port_id;
+        m_src_ipv6      = src_ipv6;
+        m_dst_ipv6      = dst_ipv6;
+    }
+
+    virtual bool handle(CRxCore *rx_core);
+
+private:
+    uint8_t             m_port_id;
+    std::string         m_src_ipv6;
+    std::string         m_dst_ipv6;
+};
+
+/**
  * Configure IPv6 of port
  */
 class TrexRxConfIPv6 : public TrexCpToRxMsgBase {
