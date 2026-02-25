@@ -709,28 +709,20 @@ struct CGenNode : public CGenNodeBase  {
 
 public:
 
-    uint32_t        m_src_ip;  /* client ip */
-    uint32_t        m_dest_ip; /* server ip */
+    ipv4v6_addr         m_src_ip;  /* client ip */
+    ipv4v6_addr         m_dest_ip; /* server ip */
 
     uint64_t            m_flow_id; /* id that goes up for each flow */
 
-    /*c2*/
+/* cache line -2 */
     CFlowPktInfo *      m_pkt_info;
-
     CCapFileFlowInfo *  m_flow_info;
     CFlowYamlInfo    *  m_template_info;
-
     void *              m_plugin_info;
-
-/* cache line -2 */
     CHTimerObj           m_tmr;
-    uint64_t             m_tmr_pad[4];
 
 /* cache line -3 */
-
-
     CTupleGeneratorSmart *m_tuple_gen;
-    // cache line 1 - 64bytes waste of space !
     uint32_t            m_nat_external_ipv4; // NAT client IP
     uint32_t            m_nat_tcp_seq_diff_client; // support for firewalls that do TCP seq num randomization
     uint32_t            m_nat_tcp_seq_diff_server; // And some do seq num randomization for server->client also
@@ -775,7 +767,10 @@ public:
 
 
     inline bool is_eligible_from_server_side(){
-        return ( ( (m_src_ip&1) == 1)?true:false);
+        if (m_src_ip.version == ipv4v6_addr::Version::V4) {
+            return m_src_ip.addr.v4 & 1;
+        }
+        return m_src_ip.addr.v6.back() & 1;
     }
 
     inline void set_dest_mac_broadcast(bool enable) {
@@ -947,7 +942,11 @@ public:
 
     bool is_external_is_eq_to_internal_ip(){
         /* this API is used to check TRex itself */
-        if ( (get_nat_ipv4_addr() == m_src_ip ) &&
+        if (m_src_ip.version != ipv4v6_addr::Version::V4) {
+            // No NAT for IPv6 in trex
+            return false;
+        }
+        if ( (get_nat_ipv4_addr() == m_src_ip.addr.v4 ) &&
              (get_nat_ipv4_port()==m_src_port)) {
             return (true);
         }else{
@@ -1509,6 +1508,7 @@ inline bool CFlowKey::operator ==(const CFlowKey& rhs) const{
 #define KEEP_SRC_IP 1
 #define KEEP_SRC_PORT 2
 #define SWAP_FLOW_DIR 3
+#define BITPOS_LATENCY_PKT 4
 
 /***********************************************************/
 
@@ -1734,6 +1734,14 @@ public:
         btSetMaskBit32(m_flags2, SWAP_FLOW_DIR, SWAP_FLOW_DIR, is_valid ? 1 : 0);
     }
 
+    inline bool IsLatencyPkt() {
+        return btGetMaskBit32(m_flags2, BITPOS_LATENCY_PKT, BITPOS_LATENCY_PKT);
+    }
+
+    inline void SetIsLatencyPkt(bool is_valid) {
+        btSetMaskBit32(m_flags2, BITPOS_LATENCY_PKT, BITPOS_LATENCY_PKT, is_valid ? 1 : 0);
+    }
+
     // there could be couple of flows per template in case of plugin
     inline void SetMaxPktsPerFlow(uint32_t pkts){
         assert(pkts<65000);
@@ -1907,12 +1915,18 @@ public:
         return (uint32_t)((uintptr_t) (((char *)m_ether)- getBasePtr()) );
     }
     uint32_t getIpOffset(){
-        if (l3.m_ipv4 != NULL) {
-            return (uint32_t)((uintptr_t)( ((char *)l3.m_ipv4)-getBasePtr()) );
-        }else{
-            BP_ASSERT(0);
-            return (0);
+        if (is_ipv6()) {
+            if (!l3.m_ipv6) {
+                BP_ASSERT(0);
+                return 0;
+            }
+            return  (uint32_t)((uintptr_t) (((char *)l3.m_ipv6)-getBasePtr()) );
         }
+        if (!l3.m_ipv4) {
+            BP_ASSERT(0);
+            return 0;
+        }
+        return (uint32_t)((uintptr_t)( ((char *)l3.m_ipv4)-getBasePtr()) );
     }
 
 
@@ -2156,8 +2170,8 @@ private:
 
 class CFlowInfo {
 public:
-    uint32_t client_ip;
-    uint32_t server_ip;
+    ipv4v6_addr client_ip;
+    ipv4v6_addr server_ip;
     uint32_t client_port;
     uint32_t server_port;
     bool     is_init_ip_dir;
@@ -2264,30 +2278,33 @@ inline void CFlowPktInfo::update_pkt_info2(char *p,
             ipv6->setPayloadLen(ipv6->getPayloadLen() + update_len);
         }
 
-        if ( flow_info->is_init_ip_dir  ) {
-            ipv6->updateLSBIpv6Src(flow_info->client_ip);
-            ipv6->updateLSBIpv6Dst(flow_info->server_ip);
+        auto src_ip = flow_info->is_init_ip_dir ? flow_info->client_ip : flow_info->server_ip;
+        auto dst_ip = flow_info->is_init_ip_dir ? flow_info->server_ip : flow_info->client_ip;
+        if ( src_ip.version == ipv4v6_addr::Version::V4  ) {
+            ipv6->updateLSBIpv6Src(src_ip.addr.v4);
+            ipv6->updateLSBIpv6Dst(dst_ip.addr.v4);
         }else{
-            ipv6->updateLSBIpv6Src(flow_info->server_ip);
-            ipv6->updateLSBIpv6Dst(flow_info->client_ip);
+            ipv6->updateIpv6Src(src_ip.addr.v6.data());
+            ipv6->updateIpv6Dst(dst_ip.addr.v6.data());
         }
 
     } else {
-
+        assert(flow_info->client_ip.version == ipv4v6_addr::Version::V4);
+        assert(flow_info->server_ip.version == ipv4v6_addr::Version::V4);
         if ( update_len ){
             ipv4->setTotalLength((ipv4->getTotalLength() + update_len));
         }
 
         bool keep_src_ip = m_pkt_indication.m_desc.isKeepSrcIP();
         bool keep_dst_ip = m_pkt_indication.m_desc.isKeepDstIP();
-        uint32_t new_ip;
+        ipv4v6_addr new_ip;
         if ( likely(!keep_src_ip) ) {
             new_ip = flow_info->is_init_ip_dir ? flow_info->client_ip : flow_info->server_ip;
-            ipv4->setSourceIp(new_ip);
+            ipv4->setSourceIp(new_ip.addr.v4);
         }
         if ( likely(!keep_dst_ip) ) {
             new_ip = flow_info->is_init_ip_dir ? flow_info->server_ip : flow_info->client_ip;
-            ipv4->setDestIp(new_ip);
+            ipv4->setDestIp(new_ip.addr.v4);
         }
 
         if (CGlobalInfo::m_options.preview.getChecksumOffloadEnable()) {
@@ -2417,7 +2434,7 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
     
     if (m_pkt_indication.m_tunnel_ip_offset != 0) {
         // Update tunnel IPs
-        uint32_t ip_addr_offset = node->m_src_ip % m_pkt_indication.m_desc.GetMaxIpTunnels();
+        uint32_t ip_addr_offset = ipv4v6_addr::modulo(node->m_src_ip, m_pkt_indication.m_desc.GetMaxIpTunnels());
         if (unlikely(m_pkt_indication.m_is_ipv6_tunnel)) {
             IPv6Header* tunnel_ip = (IPv6Header*)(p + m_pkt_indication.m_tunnel_ip_offset);
             tunnel_ip->updateLSBIpv6Src(PKT_NTOHL(*(uint32_t*)&tunnel_ip->mySource[6]) + ip_addr_offset);
@@ -2436,15 +2453,17 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
         // Update the IPv6 address
         IPv6Header *ipv6= (IPv6Header *)ipv4;
 
-        if ( ip_dir ==  CLIENT_SIDE  ) {
-            ipv6->updateLSBIpv6Src(node->m_src_ip);
-            ipv6->updateLSBIpv6Dst(node->m_dest_ip);
+        auto src_ip = ip_dir == CLIENT_SIDE ? node->m_src_ip : node->m_dest_ip;
+        auto dst_ip = ip_dir == CLIENT_SIDE ? node->m_dest_ip : node->m_src_ip;
+        if (src_ip.version == ipv4v6_addr::Version::V4) {
+            ipv6->updateLSBIpv6Src(src_ip.addr.v4);
+            ipv6->updateLSBIpv6Dst(dst_ip.addr.v4);
         }else{
-            ipv6->updateLSBIpv6Src(node->m_dest_ip);
-            ipv6->updateLSBIpv6Dst(node->m_src_ip);
+            ipv6->updateIpv6Src(src_ip.addr.v6.data());
+            ipv6->updateIpv6Dst(dst_ip.addr.v6.data());
         }
     } else {
-
+        assert(node->m_src_ip.version == ipv4v6_addr::Version::V4);
         if ( unlikely ( CGlobalInfo::is_learn_mode()  ) ) {
             if (m_pkt_indication.m_desc.IsLearn()) {
                 /* might be done twice */
@@ -2485,8 +2504,8 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
 #endif
 
                 tcp_seq_diff_server = node->get_nat_tcp_seq_diff_server();
-                ipv4->updateIpSrc(node->m_src_ip);
-                ipv4->updateIpDst(node->m_dest_ip);
+                ipv4->updateIpSrc(node->m_src_ip.addr.v4);
+                ipv4->updateIpDst(node->m_dest_ip.addr.v4);
             } else {
 #ifdef NAT_TRACE_
                 if (node->m_flags != CGenNode::NODE_FLAGS_LATENCY ) {
@@ -2496,7 +2515,7 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
 #endif
                 src_port = node->get_nat_ipv4_port();
                 tcp_seq_diff_client = node->get_nat_tcp_seq_diff_client();
-                ipv4->updateIpSrc(node->m_dest_ip);
+                ipv4->updateIpSrc(node->m_dest_ip.addr.v4);
                 ipv4->updateIpDst(node->get_nat_ipv4_addr());
             }
 
@@ -2515,16 +2534,16 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
         } else {
             bool keep_src_ip = m_pkt_indication.m_desc.isKeepSrcIP();
             bool keep_dst_ip = m_pkt_indication.m_desc.isKeepDstIP();
-            uint32_t new_ip;
+            ipv4v6_addr new_ip;
             bool is_client_dir = (ip_dir ==  CLIENT_SIDE);
 
             if ( likely(!keep_src_ip) ) {
                 new_ip = is_client_dir ? node->m_src_ip : node->m_dest_ip;
-                ipv4->updateIpSrc(new_ip);
+                ipv4->updateIpSrc(new_ip.addr.v4);
             }
             if ( likely(!keep_dst_ip) ) {
                 new_ip = is_client_dir ? node->m_dest_ip : node->m_src_ip;
-                ipv4->updateIpDst(new_ip);
+                ipv4->updateIpDst(new_ip.addr.v4);
             }
 
 #ifdef NAT_TRACE_

@@ -31,10 +31,13 @@ limitations under the License.
 #include "trex_astf_rx_core.h"
 #include "../common/trex_port.h"
 #include "stt_cp.h"
+#include <cstdint>
 #include <set>
 #include "trex_astf_dp_core.h"
 #include "trex_astf_messaging.h"
 #include "dyn_sts.h"
+#include "utl_ipv4v6_addr.h"
+#include "utl_ipv6_hextets.h"
 
 using namespace std;
 
@@ -401,8 +404,8 @@ TrexRpcCmdAstfServiceMode::_run(const Json::Value &params, Json::Value &result) 
 
 trex_rpc_cmd_rc_e
 TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result) {
-    const string src_ipv4_str  = parse_string(params, "src_addr", result);
-    const string dst_ipv4_str  = parse_string(params, "dst_addr", result);
+    const string src_ip_str  = parse_string(params, "src_addr", result);
+    const string dst_ip_str  = parse_string(params, "dst_addr", result);
     const string port_c_offset_str  = parse_string(params, "dual_port_addr", result);
     std::string port_s_offset_str;
     if (params.isMember("port_s_offset")) {
@@ -411,19 +414,19 @@ TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result)
          port_s_offset_str = port_c_offset_str;
     }
 
-    uint32_t src_ip;
-    uint32_t dst_ip;
+    ipv4v6_addr src_ip;
+    ipv4v6_addr dst_ip;
     uint32_t c_ip_offset;
     uint32_t s_ip_offset;
-    if (!utl_ipv4_to_uint32(src_ipv4_str.c_str(), src_ip)){
+    if (!src_ip.set_from_str(src_ip_str.c_str())){
         stringstream ss;
-        ss << "invalid source IPv4 address: '" << src_ipv4_str << "'";
+        ss << "invalid source IP address: '" << src_ip_str << "'";
         generate_parse_err(result, ss.str());
     }
 
-    if (!utl_ipv4_to_uint32(dst_ipv4_str.c_str(), dst_ip)){
+    if (!dst_ip.set_from_str(dst_ip_str.c_str())){
         stringstream ss;
-        ss << "invalid destination IPv4 address: '" << dst_ipv4_str << "'";
+        ss << "invalid destination IP address: '" << dst_ip_str << "'";
         generate_parse_err(result, ss.str());
     }
 
@@ -445,7 +448,6 @@ TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result)
     }
 
     CNodeBase port_node;
-    char ip_str[INET_ADDRSTRLEN];
     for (auto &port : get_astf_object()->get_port_map()) {
         try {
             port.second->get_port_node(port_node);
@@ -453,13 +455,26 @@ TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result)
             generate_execute_err(result, ex.what());
         }
 
-        string ip4_buf = port_node.get_src_ip4();
-        inet_ntop(AF_INET, ip4_buf.c_str(), ip_str, INET_ADDRSTRLEN);
-        uint32_t port_ip_num;
-        utl_ipv4_to_uint32(ip_str, port_ip_num);
-
+        ipv4v6_addr port_ip_num = {};
+        if (src_ip.version == ipv4v6_addr::Version::V6) {
+            auto ip_buffer = port_node.get_src_ip6();
+            if (ip_buffer.size() < 16) {
+                generate_execute_err(result, "Port does not have IPv6 address configured");
+            }
+            ipv6_hextets hextets = {};
+            memcpy(hextets.data(), ip_buffer.data(), 16);
+            port_ip_num = ipv4v6_addr::ipv6_be(hextets.data());
+        } else {
+            auto ip_buffer = port_node.get_src_ip4();
+            if (ip_buffer.size() < 4) {
+                generate_execute_err(result, "Port does not have IPv4 address configured");
+            }
+            uint32_t ip = 0;
+            memcpy(&ip, ip_buffer.data(), 4);
+            port_ip_num = ipv4v6_addr::ipv4_be(ip);
+        }
         for ( uint8_t dual_port_id=0; dual_port_id<=(max_port_id/2); dual_port_id++ ) {
-            uint32_t tmp_dst_ip;
+            ipv4v6_addr tmp_dst_ip;
             pkt_dir_t dir = port_id_to_dir(port.first);
             if (dir == SERVER_SIDE) {
                 //server side
@@ -469,7 +484,7 @@ TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result)
                 tmp_dst_ip = dst_ip + dual_port_id*s_ip_offset;
             }
             if ( port_ip_num == tmp_dst_ip) {
-                string err = "Latency dst IP and dual_port might reach port " + to_string(port.first) + " with IP " + ip_str;
+                string err = "Latency dst IP and dual_port might reach port " + to_string(port.first) + " with IP " + port_ip_num.to_str();
                 generate_execute_err(result, err);
             }
         }
@@ -479,8 +494,8 @@ TrexRpcCmdAstfStartLatency::_run(const Json::Value &params, Json::Value &result)
 
     args.cps = parse_double(params, "mult", result);
     args.ports_mask  = parse_uint32(params, "mask", result);
-    args.client_ip.v4 = src_ip;
-    args.server_ip.v4 = dst_ip;
+    args.client_ip = src_ip;
+    args.server_ip = dst_ip;
     args.c_ip_offset = c_ip_offset;
     args.s_ip_offset = s_ip_offset;
 

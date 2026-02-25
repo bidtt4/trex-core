@@ -21,7 +21,7 @@ limitations under the License.
 #ifndef __TREX_ASTF_DEFS_H__
 #define __TREX_ASTF_DEFS_H__
 
-#include "utl_ip.h"
+#include "utl_ipv4v6_addr.h"
 
 typedef struct {
     double      duration;
@@ -39,8 +39,8 @@ typedef struct {
 typedef struct {
     double      cps;
     uint32_t    ports_mask;
-    ipaddr_t    client_ip;
-    ipaddr_t    server_ip;
+    ipv4v6_addr client_ip;
+    ipv4v6_addr server_ip;
     uint32_t    c_ip_offset;
     uint32_t    s_ip_offset;
 } lat_start_params_t;

@@ -426,13 +426,13 @@ class CTcpLatency {
     friend class CAstfDB;
 
  public:
-    uint32_t get_c_ip() {return m_c_ip;}
-    uint32_t get_s_ip() {return m_s_ip;}
+    ipv4v6_addr get_c_ip() {return m_c_ip;}
+    ipv4v6_addr get_s_ip() {return m_s_ip;}
     uint32_t get_mask() {return m_dual_mask;}
 
  private:
-    uint32_t m_c_ip;
-    uint32_t m_s_ip;
+    ipv4v6_addr m_c_ip;
+    ipv4v6_addr m_s_ip;
     uint32_t m_dual_mask;
 };
 
@@ -538,8 +538,8 @@ class CAstfDB  : public CTRexDummyCommand  {
 
     /* Update for client cluster mode. Should be deprecated */
     void get_tuple_info(CTupleGenYamlInfo & tuple_info);
-    bool get_latency_info(uint32_t & src_ipv4,
-                          uint32_t & dst_ipv4,
+    bool get_latency_info(ipv4v6_addr & src_ip,
+                          ipv4v6_addr & dst_ip,
                           uint32_t & c_ip_info,
                           uint32_t & s_ip_info);
 

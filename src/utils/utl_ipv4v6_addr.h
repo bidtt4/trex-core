@@ -41,6 +41,7 @@ struct ipv4v6_addr {
     std::string to_hex_str() const;
     bool set_from_str(const char* str);
 
+    static uint32_t modulo(const ipv4v6_addr& lhs, uint32_t rhs);
     static uint32_t distance(const ipv4v6_addr& lhs, const ipv4v6_addr& rhs);
     static uint32_t range_size(const ipv4v6_addr& lhs, const ipv4v6_addr& rhs);
     static ipv4v6_addr from_str(const char* str);

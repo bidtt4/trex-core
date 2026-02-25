@@ -1149,8 +1149,8 @@ ClientCfgDB  *CAstfDB::get_client_cfg_db() {
 }
 
 
-bool CAstfDB::get_latency_info(uint32_t & src_ipv4,
-                               uint32_t & dst_ipv4,
+bool CAstfDB::get_latency_info(ipv4v6_addr & src_ip,
+                               ipv4v6_addr & dst_ip,
                                uint32_t & c_ip_offset,
                                uint32_t & s_ip_offset){
 
@@ -1170,14 +1170,14 @@ bool CAstfDB::get_latency_info(uint32_t & src_ipv4,
             s = g["ip_offset"].asString();
             c_ip_offset = ip_from_str(s.c_str());
             s = g["ip_start"].asString();
-            src_ipv4 = ip_from_str(s.c_str());
+            src_ip = ipv4v6_addr::from_str(s.c_str());
             valid|=1;
         }
         if (g["dir"] == "s") {
             s = g["ip_offset"].asString();
             s_ip_offset = ip_from_str(s.c_str());
             s= g["ip_start"].asString();
-            dst_ipv4 = ip_from_str(s.c_str());
+            dst_ip = ipv4v6_addr::from_str(s.c_str());
             valid|=2;
         }
     }
@@ -1885,14 +1885,14 @@ void CAstfDB::get_latency_params(CTcpLatency &lat) {
         if ((ip_gen_list[i]["dir"] == "c") && ! client_set) {
             client_set = true;
             s = ip_gen_list[i]["ip_start"].asString();
-            lat.m_c_ip = ip_from_str(s.c_str());
+            lat.m_c_ip = ipv4v6_addr::from_str(s.c_str());
             s = ip_gen_list[i]["ip_offset"].asString();
             lat.m_dual_mask = ip_from_str(s.c_str());
         }
         if ((ip_gen_list[i]["dir"] == "s") && ! server_set) {
             server_set = true;
             s = ip_gen_list[i]["ip_start"].asString();
-            lat.m_s_ip = ip_from_str(s.c_str());
+            lat.m_s_ip = ipv4v6_addr::from_str(s.c_str());
         }
 
         if (server_set && client_set)

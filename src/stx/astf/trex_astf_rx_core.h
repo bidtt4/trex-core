@@ -26,6 +26,7 @@ limitations under the License.
 #include "common/trex_messaging.h"
 #include "trex_astf_defs.h"
 #include "tunnels/tunnel_db.h"
+#include "utl_ipv4v6_addr.h"
 
 
 class TrexRxStartLatency : public TrexCpToRxMsgBase {
@@ -186,7 +187,7 @@ protected:
                                  uint8_t port_id);
 
 private:
-    void create_latency_context();
+    void create_latency_context(ipv4v6_addr::Version ip_version);
     void delete_latency_context();
 
 private:

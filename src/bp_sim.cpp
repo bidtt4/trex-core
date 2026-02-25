@@ -267,6 +267,9 @@ void CPacketIndication::UpdateMbufSize(){
             offset+=8;
         }
     }
+    if (m_desc.IsLatencyPkt()) {
+        offset += sizeof(latency_header);
+    }
 
     if (offset<=64) {
         m_rw_mbuf_size=64;
@@ -300,7 +303,10 @@ void CPacketIndication::UpdateOffsets(){
 }
 
 void CPacketIndication::UpdatePacketPadding(){
-    m_packet_padding = m_packet->getTotalLen() - (l3.m_ipv4->getTotalLength()+ getIpOffset());
+    auto ip_length = is_ipv6()
+        ? l3.m_ipv6->getPayloadLen() + l3.m_ipv6->getHeaderLength()
+        : l3.m_ipv4->getTotalLength();
+    m_packet_padding = m_packet->getTotalLen() - (ip_length + getIpOffset());
 }
 
 
@@ -309,7 +315,11 @@ void CPacketIndication::RefreshPointers(){
     char *pobase=getBasePtr();
 
     m_ether = (EthernetHeader *) (pobase + m_ether_offset);
-    l3.m_ipv4  = (IPHeader       *) (pobase + m_ip_offset);
+    if (is_ipv6()) {
+        l3.m_ipv6 = (IPv6Header *) (pobase + m_ip_offset);
+    } else {
+        l3.m_ipv4  = (IPHeader  *) (pobase + m_ip_offset);
+    }
     l4.m_tcp=  (TCPHeader *)(pobase + m_udp_tcp_offset);
     if ( m_payload_offset ){
         m_payload =(uint8_t *)(pobase + m_payload_offset);
@@ -327,7 +337,11 @@ void CPacketIndication::Clone(CPacketIndication * obj,CCapPktRaw * pkt){
     m_flow = obj->m_flow;
 
     m_ether = (EthernetHeader *) (pobase + obj->getEtherOffset());
-    l3.m_ipv4  = (IPHeader       *) (pobase + obj->getIpOffset());
+    if (obj->is_ipv6()) {
+        l3.m_ipv6 = (IPv6Header *) (pobase + obj->getIpOffset());
+    } else {
+        l3.m_ipv4  = (IPHeader  *) (pobase + obj->getIpOffset());
+    }
     m_is_ipv6 = obj->m_is_ipv6;
     m_is_ipv6_converted = obj->m_is_ipv6_converted;
 
@@ -370,7 +384,11 @@ void CPacketIndication::Dump(FILE *fd,int verbose){
 
     if ( m_desc.IsValidPkt() ) {
         fprintf(fd," ipv4 \n");
-        l3.m_ipv4->dump(fd);
+        if (is_ipv6()) {
+            fprintf(fd, "\nIPv6 header dump is unimplemented\n");
+        } else {
+            l3.m_ipv4->dump(fd);
+        }
         if ( m_desc.IsUdp() ) {
             l4.m_udp->dump(fd);
         }else{
@@ -1252,10 +1270,8 @@ void CCapFileFlowInfo::generate_flow(CTupleTemplateGeneratorSmart   * tuple_gen,
     node->m_flags=0;
     node->m_template_info =template_info;
     node->m_tuple_gen = tuple_gen->get_gen();
-    assert(tuple.getClient().version == ipv4v6_addr::Version::V4);
-    assert(tuple.getServer().version == ipv4v6_addr::Version::V4);
-    node->m_src_ip= tuple.getClient().addr.v4;
-    node->m_dest_ip = tuple.getServer().addr.v4;
+    node->m_src_ip = tuple.getClient();
+    node->m_dest_ip = tuple.getServer();
     node->m_src_idx = tuple.getClientId();
     node->m_dest_idx = tuple.getServerId();
     node->m_src_port = tuple.getClientPort();
@@ -2798,7 +2814,7 @@ void CGenNode::free_gen_node(){
 
 
 void CGenNode::Dump(FILE *fd){
-    fprintf(fd,"%.6f,%llx,%p,%llu,%d,%d,%d,%d,%d,%d,%x,%x,%d\n",
+    fprintf(fd,"%.6f,%llx,%p,%llu,%d,%d,%d,%d,%d,%d,%s,%s,%d\n",
             m_time,
             (unsigned long long)m_flow_id,
             m_pkt_info,
@@ -2809,8 +2825,8 @@ void CGenNode::Dump(FILE *fd){
             m_pkt_info->m_pkt_indication.m_desc.IsLastPkt(),
             m_type,
             m_thread_id,
-            m_src_ip,
-            m_dest_ip,
+            m_src_ip.to_hex_str().c_str(),
+            m_dest_ip.to_hex_str().c_str(),
             m_src_port);
 
 }
@@ -5116,7 +5132,8 @@ int CErfIF::send_node(CGenNode *node){
 
         // for simulation, VLAN_MODE_NORMAL is not relevant, since it uses vlan_id set in platform config file
     } else if (CGlobalInfo::m_options.preview.get_vlan_mode() == CPreviewMode::VLAN_MODE_LOAD_BALANCE) {
-        uint8_t vlan_port = (node->m_src_ip & 1);
+        uint32_t last_bytes = node->m_src_ip.version == ipv4v6_addr::Version::V4 ? node->m_src_ip.addr.v4 : node->m_src_ip.addr.v6.back();
+        uint8_t vlan_port = (last_bytes & 1);
         uint16_t vlan_id = CGlobalInfo::m_options.m_vlan_port[vlan_port];
 
         add_vlan(vlan_id);
@@ -5333,8 +5350,8 @@ rte_mbuf_t * CPluginCallbackSimple::http_plugin(uint8_t plugin_id,
         // For this packet we know the IP addr string length is 8 bytes.
         replace_cmd.m_start_0 = 10+16;
         replace_cmd.m_stop_1  = replace_cmd.m_start_0 + 8;
-
-        replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+        assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+        replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
         eop_cmd.m_cmd = VM_EOP;
 
@@ -5368,7 +5385,7 @@ rte_mbuf_t * CPluginCallbackSimple::dhcp_plugin(uint8_t       plugin_id,
     int16_t s_size = 0;
 
     // IPv6 packets are not supported
-    if (CGlobalInfo::is_ipv6_enable() ) {
+    if (CGlobalInfo::is_ipv6_enable() || node->m_src_ip.version == ipv4v6_addr::Version::V6) {
          fprintf (stderr," IPv6 is not supported for the DHCP Request-Acknowledge plugin.\n");
          exit(-1);
     }
@@ -5391,7 +5408,7 @@ rte_mbuf_t * CPluginCallbackSimple::dhcp_plugin(uint8_t       plugin_id,
         node->set_initiator_start_from_server(true);
         node->set_dest_mac_broadcast(false);
         /* Set Client IP address in L7 DHCP payload */
-        dhcp_cmd.m_client_ip.v4 = PKT_NTOHL(node->m_src_ip);;
+        dhcp_cmd.m_client_ip.v4 = PKT_NTOHL(node->m_src_ip.addr.v4);;
     } else {
         fprintf (stderr," Too many flows for this plugin.\n");
         exit(-1);
@@ -5402,7 +5419,7 @@ rte_mbuf_t * CPluginCallbackSimple::dhcp_plugin(uint8_t       plugin_id,
     dhcp_cmd.m_client_mac.set(CGlobalInfo::m_options.get_src_mac_addr(0)); 
     /* Override the last 4 bytes of the MAC address with the Client IP after changing the Endianness */
     uint8_t* mac_add_ptr = dhcp_cmd.m_client_mac.GetBuffer();
-    *(uint32_t*)(mac_add_ptr + 2) = PKT_NTOHL(node->m_src_ip);
+    *(uint32_t*)(mac_add_ptr + 2) = PKT_NTOHL(node->m_src_ip.addr.v4);
 
     dhcp_cmd.m_cmd     = VM_DHCP_PAYLOAD;
     eop_cmd.m_cmd      = VM_EOP;
@@ -5433,7 +5450,7 @@ rte_mbuf_t * CPluginCallbackSimple::dyn_pyload_plugin(uint8_t plugin_id,
     int16_t s_size=0;
 
     // IPv6 packets are not supported
-    if (CGlobalInfo::is_ipv6_enable() ) {
+    if (CGlobalInfo::is_ipv6_enable() || node->m_src_ip.version == ipv4v6_addr::Version::V6 ) {
          fprintf (stderr," IPv6 is not supported for dynamic pyload change\n");
          exit(-1);
     }
@@ -5459,7 +5476,7 @@ rte_mbuf_t * CPluginCallbackSimple::dyn_pyload_plugin(uint8_t plugin_id,
                     dyn_cmd.m_ptr= &lpt->m_program[i];
                     dyn_cmd.m_flags   = 0;
                     dyn_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 8;
-                    dyn_cmd.m_ip.v4=node->m_src_ip;
+                    dyn_cmd.m_ip.v4=node->m_src_ip.addr.v4;
 
                     eop_cmd.m_cmd = VM_EOP;
                     program[0] = &dyn_cmd;
@@ -5484,6 +5501,10 @@ rte_mbuf_t * CPluginCallbackSimple::dyn_pyload_plugin(uint8_t plugin_id,
 }
 
 rte_mbuf_t * CPluginCallbackSimple::sip_voice_plugin(uint8_t plugin_id,CGenNode *     node,CFlowPktInfo * pkt_info){
+    if (node->m_src_ip.version == ipv4v6_addr::Version::V6 || node->m_dest_ip.version == ipv4v6_addr::Version::V6) {
+         fprintf (stderr," IPv6 is not supported for voice plugin\n");
+         exit(-1);
+    }
     CMiniVMCmdBase * program[2];
 
     CMiniVMReplaceIP_PORT_IP_IP_Port  via_replace_cmd;
@@ -5539,7 +5560,7 @@ rte_mbuf_t * CPluginCallbackSimple::sip_voice_plugin(uint8_t plugin_id,CGenNode 
                     via_replace_cmd.m_add_pkt_len = ((INET_ADDRSTRLEN - 9)  * 3) +
                          ((INET_PORTSTRLEN * 2) - 9);
                 }
-                via_replace_cmd.m_ip.v4      =node->m_src_ip;
+                via_replace_cmd.m_ip.v4      =node->m_src_ip.addr.v4;
                 via_replace_cmd.m_ip0_start  = 377;
                 via_replace_cmd.m_ip0_stop   = 377+9;
 
@@ -5551,7 +5572,7 @@ rte_mbuf_t * CPluginCallbackSimple::sip_voice_plugin(uint8_t plugin_id,CGenNode 
                 via_replace_cmd.m_port_start = 435;
                 via_replace_cmd.m_port_stop  = 435+5;
 
-                via_replace_cmd.m_ip_via.v4     =  node->m_src_ip;
+                via_replace_cmd.m_ip_via.v4     =  node->m_src_ip.addr.v4;
                 via_replace_cmd.m_port_via   =  node->m_src_port;
 
                 via_replace_cmd.m_ip_via_start = 208;
@@ -5595,7 +5616,7 @@ rte_mbuf_t * CPluginCallbackSimple::sip_voice_plugin(uint8_t plugin_id,CGenNode 
                          ((INET_PORTSTRLEN * 2) - 9);
                 }
 
-                via_replace_cmd.m_ip.v4      =node->m_dest_ip;
+                via_replace_cmd.m_ip.v4      =node->m_dest_ip.addr.v4;
                 via_replace_cmd.m_ip0_start  = 370;
                 via_replace_cmd.m_ip0_stop   = 370+8;
 
@@ -5608,7 +5629,7 @@ rte_mbuf_t * CPluginCallbackSimple::sip_voice_plugin(uint8_t plugin_id,CGenNode 
                 via_replace_cmd.m_port_stop  = 426+5;
 
 
-                via_replace_cmd.m_ip_via.v4  =  node->m_src_ip;
+                via_replace_cmd.m_ip_via.v4  =  node->m_src_ip.addr.v4;
                 via_replace_cmd.m_port_via   =  node->m_src_port;
 
                 via_replace_cmd.m_ip_via_start = 207;
@@ -5708,7 +5729,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 
@@ -5740,7 +5762,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 
@@ -5778,7 +5801,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                     replace_port_cmd.m_add_pkt_len = (INET_ADDRSTRLEN - 9) +
                          ((INET_PORTSTRLEN * 2) - 8);
                 }
-                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
                 replace_port_cmd.m_start_port =  164;
                 replace_port_cmd.m_stop_port  =  164+(4*2)+1;
                 replace_port_cmd.m_client_port = lpP->rtp_client_0;
@@ -5807,7 +5831,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 // strings (16 bytes) that needs to be replaced.
                 replace_port_cmd.m_add_pkt_len = ((INET_PORTSTRLEN * 4) - 16);
 
-                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
                 replace_port_cmd.m_start_port =  247;
                 replace_port_cmd.m_stop_port  = 247+(4*4)+2+13;
                 replace_port_cmd.m_client_port = lpP->rtp_client_0;
@@ -5851,7 +5876,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                     replace_port_cmd.m_add_pkt_len = (INET_ADDRSTRLEN - 9) +
                          ((INET_PORTSTRLEN * 2) - 8);
                 }
-                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
                 replace_port_cmd.m_start_port =  164;
                 replace_port_cmd.m_stop_port  =  164+(4*2)+1;
                 replace_port_cmd.m_client_port = lpP->rtp_client_1;
@@ -5880,8 +5906,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 // handle the largest port addresses. There are 4 port address
                 // strings (16 bytes) that needs to be replaced.
                 replace_port_cmd.m_add_pkt_len = ((INET_PORTSTRLEN * 4) - 16);
-
-                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_port_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
                 replace_port_cmd.m_start_port =  247;
                 replace_port_cmd.m_stop_port  = 247+(4*4)+2+13;
                 replace_port_cmd.m_client_port = lpP->rtp_client_1;
@@ -5921,7 +5947,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 
@@ -5956,7 +5983,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 
@@ -5991,7 +6019,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 
@@ -6025,7 +6054,8 @@ rte_mbuf_t * CPluginCallbackSimple::rtsp_plugin(uint8_t plugin_id,CGenNode *    
                 } else {
                     replace_cmd.m_add_pkt_len = INET_ADDRSTRLEN - 9;
                 }
-                replace_cmd.m_server_ip.v4 = flow_info.server_ip;
+                assert(flow_info.server_ip.version == ipv4v6_addr::Version::V4);
+                replace_cmd.m_server_ip.v4 = flow_info.server_ip.addr.v4;
 
                 eop_cmd.m_cmd = VM_EOP;
 

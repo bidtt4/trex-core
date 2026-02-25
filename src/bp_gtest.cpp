@@ -28,6 +28,7 @@ limitations under the License.
 #include "timer_wheel_pq.h"
 #include "rx_check.h"
 #include "time_histogram.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_jitter.h"
 #include "CRing.h"
 #include "msg_manager.h"
@@ -543,7 +544,7 @@ create_latency_test_pkt(uint8_t l_pkt_mode, uint16_t &pkt_size, uint8_t port_id,
     mgr.c_l_pkt_mode = c_l_pkt_mode;
     info.Create(c_l_pkt_mode);
     port0.Create(0, info.get_payload_offset(), info.get_l4_offset(), info.get_pkt_size(), 0,c_l_pkt_mode,mgr.get_nat_manager());
-    info.set_ip(l_pkt_test_s_ip ,l_pkt_test_d_ip, 0x01000000);
+    info.set_ip(ipv4v6_addr::ipv4_le(l_pkt_test_s_ip) ,ipv4v6_addr::ipv4_le(l_pkt_test_d_ip), 0x01000000);
     m=info.generate_pkt(0,0);
     while (pkt_num > 0) {
         pkt_num--;

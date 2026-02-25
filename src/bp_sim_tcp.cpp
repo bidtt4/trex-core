@@ -476,7 +476,9 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
                    ipv6_addresses_provided;
 
     if (is_ipv6 && !ipv6_addresses_provided) {
-        // This is IPv4 sent as IPv6. The tuple must contain V6 addresses, so that flow matching works.
+        // User provided IPv4 address, but wants to run IPv6 traffic. In this case we should use
+        // IPv6 header with IPv4 address being in LSB bits of IPv6 address. Convert IPv4 addresses
+        // to IPv6, so that flow matcher can match it against address from received IPv6 packet.
         tuple.setServer(ipv4v6_addr::ipv6_compatible(tuple.getServer()));
         tuple.setClient(ipv4v6_addr::ipv6_compatible(tuple.getClient()));
     }

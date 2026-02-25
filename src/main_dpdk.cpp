@@ -2467,20 +2467,22 @@ void CCoreEthIF::handle_slowpath_features(CGenNode *node, rte_mbuf_t *m, uint8_t
 
     uint8_t mac_ip_overide_mode = CGlobalInfo::m_options.preview.get_mac_ip_overide_mode();
     if ( unlikely( mac_ip_overide_mode ) ) {
+        assert(node->m_src_ip.version == ipv4v6_addr::Version::V4);
+        assert(node->m_dest_ip.version == ipv4v6_addr::Version::V4);
         switch ( mac_ip_overide_mode ) {
             case 1: /* MAC override, only src at client side */
                 /* client side */
                 if ( dir == CLIENT_SIDE ) {
-                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_src_ip);
+                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_src_ip.addr.v4);
                 }
                 break;
             case 2: /* MAC override, all directions */
                 if ( dir == CLIENT_SIDE ) {
-                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_src_ip);
-                    *((uint32_t*)(p+2)) = PKT_NTOHL(node->m_dest_ip);
+                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_src_ip.addr.v4);
+                    *((uint32_t*)(p+2)) = PKT_NTOHL(node->m_dest_ip.addr.v4);
                 } else {
-                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_dest_ip);
-                    *((uint32_t*)(p+2)) = PKT_NTOHL(node->m_src_ip);
+                    *((uint32_t*)(p+8)) = PKT_NTOHL(node->m_dest_ip.addr.v4);
+                    *((uint32_t*)(p+2)) = PKT_NTOHL(node->m_src_ip.addr.v4);
                 }
                 /* Only in case we override all directions we want to see if the dest mac is broadcast */
                 if (node->get_is_dest_mac_broadcast()) {
@@ -5723,20 +5725,18 @@ COLD_FUNC int CGlobalTRex::start_master_statefull() {
 
     auto client_addr = tg->m_client_pool[0].get_ip_start();
     auto server_addr = tg->m_server_pool[0].get_ip_start();
-    assert(client_addr.version == ipv4v6_addr::Version::V4);
-    assert(server_addr.version == ipv4v6_addr::Version::V4);
 
     /* for client cluster configuration - pass the IP start entry */
     if (CGlobalInfo::m_options.preview.get_is_client_cfg_enable()) {
 
-        m_mg.set_ip( client_addr.addr.v4,
-                     server_addr.addr.v4,
+        m_mg.set_ip( client_addr,
+                     server_addr,
                      tg->m_client_pool[0].getDualMask(),
                      m_fl.m_client_config_info);
     } else {
 
-        m_mg.set_ip( client_addr.addr.v4,
-                     server_addr.addr.v4,
+        m_mg.set_ip( client_addr,
+                     server_addr,
                      tg->m_client_pool[0].getDualMask());
     }
 
@@ -7937,7 +7937,8 @@ HOT_FUNC  int CCoreEthIF::send_node(CGenNode * node) {
         if (CGlobalInfo::m_options.preview.get_vlan_mode()
             == CPreviewMode::VLAN_MODE_LOAD_BALANCE) {
             /* which vlan to choose 0 or 1*/
-            uint8_t vlan_port = (node->m_src_ip & 1);
+            uint32_t last_ip_bytes = node->m_src_ip.version == ipv4v6_addr::Version::V4 ? node->m_src_ip.addr.v4 : node->m_src_ip.addr.v6.back();
+            uint8_t vlan_port = (last_ip_bytes & 1);
             vlan_id = CGlobalInfo::m_options.m_vlan_port[vlan_port];
             if (likely( vlan_id > 0 ) ) {
                 dir = dir ^ vlan_port;

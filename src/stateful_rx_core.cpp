@@ -20,6 +20,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include "bp_sim.h"
+#include "common/Network/Packet/IPv6Header.h"
 #include "utl_ipv4v6_addr.h"
 #include "utl_json.h"
 #include "trex_watchdog.h"
@@ -27,6 +28,8 @@ limitations under the License.
 #include "common/basic_utils.h"
 #include "stateful_rx_core.h"
 #include "astf/trex_astf_rx_core.h"
+#include <netinet/icmp6.h>
+#include <netinet/ip6.h>
 
 const uint8_t sctp_pkt[]={
 
@@ -77,6 +80,34 @@ const uint8_t icmp_pkt[]={
 
 };
 
+const uint8_t icmpv6_pkt[]={
+    // Ethernet header
+    0x00,0x04,0x96,0x08,0xe0,0x40, // dst MAC
+    0x00,0x0e,0x2e,0x24,0x37,0x5f, // src MAC
+    0x86,0xdd, // ether type
+
+    // IPv6 header
+    0x60,0x00,0x00,0x00, // ip version, traffic class, flow id
+    0x00,0x1c,0x3a,0xff, // length, next header, hop limit
+    0x00,0x00,0xbd,0x00, 0x00,0x00,0xbd,0x00,
+    0x00,0x00,0xbd,0x00, 0xff,0x01,0xbd,0x04, // src IP
+    0x00,0x00,0xbd,0x00, 0x00,0x00,0xbd,0x00,
+    0x00,0x00,0x18,0x00, 0xcb,0xff,0xfc,0xc2, // dst IP
+
+    // ICMPv6 header
+    0x80, 0x00,  // type, code
+    0x00, 0x00,  // checksum
+    0xaa, 0xbb,  // id
+    0x00, 0x00,  // sequence number
+
+    // Latency header
+    0x11,0x22,0x33,0x44,
+    0x00,0x00,0x00,0x00, // timestamp
+    0x00,0x00,0x00,0x00, // magic
+    0x00,0x01,0xa0,0x00, // sequence number
+    0x00,0x00,0x00,0x00, // garbage
+};
+
 
 void CLatencyPktInfo::Create(class CLatencyPktMode *m_l_pkt_info){
     uint8_t pkt_size = m_l_pkt_info->getPacketLen();
@@ -91,20 +122,25 @@ void CLatencyPktInfo::Create(class CLatencyPktMode *m_l_pkt_info){
     m_pkt_indication.m_packet  =m_packet;
 
     m_pkt_indication.m_ether = (EthernetHeader *)m_packet->raw;
-    m_pkt_indication.l3.m_ipv4=(IPHeader       *)(m_packet->raw+14);
-    m_pkt_indication.m_is_ipv6 = false;
+    m_pkt_indication.m_ether_offset = 0;
+    m_pkt_indication.m_ip_offset = ETH_HDR_LEN;
+    m_pkt_indication.m_is_ipv6 = m_l_pkt_info->isIpv6();
+    if (m_pkt_indication.m_is_ipv6) {
+        constexpr int icmpv6_hdr_size = 8;
+        m_pkt_indication.l3.m_ipv6=(IPv6Header*)(m_packet->raw + m_pkt_indication.m_ip_offset);
+        m_pkt_indication.m_udp_tcp_offset = m_pkt_indication.m_ip_offset + IPV6_HDR_LEN;
+        m_pkt_indication.m_payload_offset = m_pkt_indication.m_udp_tcp_offset + icmpv6_hdr_size;
+    } else {
+        constexpr int icmp_hdr_size = 8;
+        m_pkt_indication.l3.m_ipv4=(IPHeader*)(m_packet->raw + m_pkt_indication.m_ip_offset);
+        m_pkt_indication.m_udp_tcp_offset = m_pkt_indication.m_ip_offset + IPV4_HDR_LEN;
+        m_pkt_indication.l4.m_icmp=(ICMPHeader*)(m_packet->raw + m_pkt_indication.m_udp_tcp_offset);
+        m_pkt_indication.m_payload_offset = m_pkt_indication.m_udp_tcp_offset + icmp_hdr_size;
+    }
     m_pkt_indication.m_is_ipv6_converted = false;
-
-    m_pkt_indication.l4.m_icmp=(ICMPHeader *)m_packet->raw+14+20;
-    m_pkt_indication.m_payload=(uint8_t *)m_packet->raw+14+20+16;
-    m_pkt_indication.m_payload_len=0;
-    m_pkt_indication.m_packet_padding=4;
-
-
-    m_pkt_indication.m_ether_offset =0;
-    m_pkt_indication.m_ip_offset =14;
-    m_pkt_indication.m_udp_tcp_offset = 34;
-    m_pkt_indication.m_payload_offset = 34+8;
+    m_pkt_indication.m_payload_len = 0;
+    m_pkt_indication.m_packet_padding = 4;
+    m_pkt_indication.m_payload=(uint8_t*)m_packet->raw + m_pkt_indication.m_payload_offset;
 
     CPacketDescriptor * lpd=&m_pkt_indication.m_desc;
     lpd->Clear();
@@ -112,6 +148,7 @@ void CLatencyPktInfo::Create(class CLatencyPktMode *m_l_pkt_info){
     lpd->SetSwapTuple(false);
     lpd->SetIsValidPkt(true);
     lpd->SetIsIcmp(true);
+    lpd->SetIsLatencyPkt(true);
     lpd->SetIsLastPkt(true);
     m_pkt_info.Create(&m_pkt_indication);
 
@@ -121,8 +158,8 @@ void CLatencyPktInfo::Create(class CLatencyPktMode *m_l_pkt_info){
 
     m_dummy_node.m_time =0.1;
     m_dummy_node.m_pkt_info = &m_pkt_info;
-    m_dummy_node.m_dest_ip  = 0;
-    m_dummy_node.m_src_ip   = 0;
+    m_dummy_node.m_dest_ip  = {};
+    m_dummy_node.m_src_ip   = {};
     m_dummy_node.m_src_port =  0x11;
     m_dummy_node.m_flow_id =0;
     m_dummy_node.m_flags =CGenNode::NODE_FLAGS_LATENCY;
@@ -139,21 +176,21 @@ rte_mbuf_t * CLatencyPktInfo::generate_pkt(int port_id,
     } else {
         mask = dual_port_index * m_s_ip_offset;
     }
-    uint32_t c = m_client_ip.v4;
-    uint32_t s = m_server_ip.v4;
+    ipv4v6_addr c = m_client_ip;
+    ipv4v6_addr s = m_server_ip;
 
     if (is_client_to_server) {
         if ( extern_ip ) {
-            m_dummy_node.m_src_ip = extern_ip;
-            m_dummy_node.m_dest_ip = extern_dest_ip;
+            m_dummy_node.m_src_ip = ipv4v6_addr::ipv4_le(extern_ip);
+            m_dummy_node.m_dest_ip = ipv4v6_addr::ipv4_le(extern_dest_ip);
         } else {
             m_dummy_node.m_src_ip = c + mask;
             m_dummy_node.m_dest_ip = s + mask;
         }
     } else {
         if ( extern_ip ) {
-            m_dummy_node.m_dest_ip = extern_ip;
-            m_dummy_node.m_src_ip = extern_dest_ip;
+            m_dummy_node.m_dest_ip = ipv4v6_addr::ipv4_le(extern_ip);
+            m_dummy_node.m_src_ip = ipv4v6_addr::ipv4_le(extern_dest_ip);
         } else {
             m_dummy_node.m_dest_ip = c + mask;
             m_dummy_node.m_src_ip = s + mask;
@@ -169,12 +206,12 @@ rte_mbuf_t * CLatencyPktInfo::generate_pkt(int port_id,
     return m;
 }
 
-void CLatencyPktInfo::set_ip(uint32_t                src,
-                             uint32_t                dst,
+void CLatencyPktInfo::set_ip(ipv4v6_addr             src,
+                             ipv4v6_addr             dst,
                              uint32_t                c_ip_offset,
                              uint32_t                s_ip_offset) {
-    m_client_ip.v4   = src;
-    m_server_ip.v4   = dst;
+    m_client_ip   = src;
+    m_server_ip   = dst;
     m_c_ip_offset = c_ip_offset;
     m_s_ip_offset = s_ip_offset;
     
@@ -187,14 +224,14 @@ void CLatencyPktInfo::set_ip(uint32_t                src,
 }
 
 
-void CLatencyPktInfo::set_ip(uint32_t        src,
-                             uint32_t        dst,
+void CLatencyPktInfo::set_ip(ipv4v6_addr     src,
+                             ipv4v6_addr     dst,
                              uint32_t        c_ip_offset,
                              uint32_t        s_ip_offset,
                              uint8_t         port_cnt,
                              ClientCfgDB    &client_cfg_db) {
-    m_client_ip.v4   = src;
-    m_server_ip.v4   = dst;
+    m_client_ip   = src;
+    m_server_ip   = dst;
     m_c_ip_offset = c_ip_offset;
     m_s_ip_offset = s_ip_offset;
     
@@ -208,9 +245,9 @@ void CLatencyPktInfo::set_ip(uint32_t        src,
     
     /* for each IP - lookup the client cluster */
     for (int i = 0; i < dual_port_cnt; i++) {
-        uint32_t ip = src + (c_ip_offset * i);
+        ipv4v6_addr ip = src + (c_ip_offset * i);
         
-        ClientCfgEntry *entry = client_cfg_db.lookup(ipv4v6_addr::ipv4_le(ip));
+        ClientCfgEntry *entry = client_cfg_db.lookup(ip);
         if (!entry) {
             std::stringstream ss;
             ss << "client configuration error: could not map IP '" << ip_to_str(ip) << "' to a group\n";
@@ -218,7 +255,7 @@ void CLatencyPktInfo::set_ip(uint32_t        src,
             exit(-1);
         }
         
-        entry->assign(m_client_cfg[i], ipv4v6_addr::ipv4_le(ip));
+        entry->assign(m_client_cfg[i], ip);
     }
 }
 
@@ -512,9 +549,12 @@ bool CCPortLatency::check_packet(rte_mbuf_t * m,CRx_check_header * & rx_p) {
 
     rx_p = (CRx_check_header *)0;
 
-    bool is_lateancy_pkt =  c_l_pkt_mode->IsLatencyPkt(parser.m_ipv4) & IsLatencyPkt(parser.m_l4 + c_l_pkt_mode->l4_header_len(),m_epoc);
+    auto* possible_latency_hdr_pos = parser.m_l4 + c_l_pkt_mode->l4_header_len();
+    bool is_latency_pkt = parser.m_ipv6
+        ? c_l_pkt_mode->IsLatencyPkt(parser.m_ipv6) && IsLatencyPkt(possible_latency_hdr_pos, m_epoc)
+        : c_l_pkt_mode->IsLatencyPkt(parser.m_ipv4) && IsLatencyPkt(possible_latency_hdr_pos, m_epoc);
 
-    if (!is_lateancy_pkt) {
+    if (!is_latency_pkt) {
         if (!m_handle_none_latency) {
             /* nothing todo */
             return true;
@@ -589,7 +629,7 @@ bool CCPortLatency::check_packet(rte_mbuf_t * m,CRx_check_header * & rx_p) {
         return (true);
     } // End of check for non-latency packet
     // learn for latency packets. We only have one flow for latency, so translation is for it.
-    if ( CGlobalInfo::is_learn_mode() && (m_nat_learn ==false) ) {
+    if ( CGlobalInfo::is_learn_mode() && (m_nat_learn ==false) && parser.m_ipv4 ) {
         do_learn(parser.m_ipv4->getSourceIp(),parser.m_ipv4->getDestIp());
     }
 
@@ -650,9 +690,15 @@ bool CLatencyManager::Create(CLatencyManagerCfg *cfg){
         break;
     case 1:
     case 2:
-    case 3:
-        c_l_pkt_mode =  (CLatencyPktModeICMP *) new CLatencyPktModeICMP(CGlobalInfo::m_options.get_l_pkt_mode());
+    case 3: {
+        bool is_ipv6 = cfg->m_client_ip.version == ipv4v6_addr::Version::V6 && cfg->m_server_ip.version == ipv4v6_addr::Version::V6;
+        if (is_ipv6) {
+            c_l_pkt_mode =  (CLatencyPktModeICMPv6 *) new CLatencyPktModeICMPv6(CGlobalInfo::m_options.get_l_pkt_mode());
+        } else {
+            c_l_pkt_mode =  (CLatencyPktModeICMP *) new CLatencyPktModeICMP(CGlobalInfo::m_options.get_l_pkt_mode());
+        }
         break;
+    }
     }
 
     m_max_ports=cfg->m_max_ports;
@@ -692,8 +738,8 @@ bool CLatencyManager::Create(CLatencyManagerCfg *cfg){
      }
 
 
-    m_pkt_gen.set_ip(cfg->m_client_ip.v4,
-                     cfg->m_server_ip.v4,
+    m_pkt_gen.set_ip(cfg->m_client_ip,
+                     cfg->m_server_ip,
                      cfg->m_dual_port_mask);
     
     m_cpu_cp_u.Create(&m_cpu_dp_u);
@@ -1285,6 +1331,10 @@ bool CLatencyPktModeICMP::IsLatencyPkt(IPHeader *ip) {
     return true;
 };
 
+bool CLatencyPktModeICMP::IsLatencyPkt(IPv6Header *ip) {
+    return false;
+};
+
 void CLatencyPktModeICMP::update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq) {
     ICMPHeader *m_icmp = (ICMPHeader *)(pkt);
     *r_seq = m_icmp->getSeqNum();
@@ -1312,4 +1362,80 @@ bool CLatencyPktModeSCTP::IsLatencyPkt(IPHeader *ip) {
     }
     return true;
 };
+bool CLatencyPktModeSCTP::IsLatencyPkt(IPv6Header *ip) {
+    return false;
+};
 void CLatencyPktModeSCTP::update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq) {}
+
+uint8_t CLatencyPktModeICMPv6::getPacketLen() {return sizeof(icmpv6_pkt);}
+const uint8_t *CLatencyPktModeICMPv6::getPacketData() {return icmpv6_pkt;}
+void CLatencyPktModeICMPv6::rcv_debug_print(uint8_t *pkt) {
+    icmp6_hdr hdr = {};
+    memcpy(&hdr, pkt, sizeof(hdr));
+    printf("Received latency ICMPv6 packet code:%d\n", (int)hdr.icmp6_type);
+};
+
+void CLatencyPktModeICMPv6::send_debug_print(uint8_t *pkt) {
+    icmp6_hdr *m_icmp = (icmp6_hdr *)pkt;
+    printf ("Sending latency ICMPv6 packet code:%d\n", (int)m_icmp->icmp6_type);
+}
+
+static uint16_t icmpv6_checksum(uint8_t* ipv6_header_pos, uint8_t* icmpv6_header_pos, uint16_t icmpv6_header_length) {
+    ip6_hdr* ipv6_header = (ip6_hdr*)ipv6_header_pos;
+    IPv6PseudoHeader ipv6_pseudo_hdr;
+    memcpy(ipv6_pseudo_hdr.m_mySource, ipv6_header->ip6_src.s6_addr, IPV6_ADDR_LEN);
+    memcpy(ipv6_pseudo_hdr.m_myDestination, ipv6_header->ip6_dst.s6_addr, IPV6_ADDR_LEN);
+    uint32_t ipv6_payload_len_32bit = ipv6_header->ip6_plen;
+    memcpy(&ipv6_pseudo_hdr.m_length, &ipv6_payload_len_32bit, 4);
+    memset(&ipv6_pseudo_hdr.m_zero, 0, 3);
+    memcpy(&ipv6_pseudo_hdr.m_protocol, &ipv6_header->ip6_nxt, 1);
+
+    return pkt_InetChecksum(
+        ipv6_pseudo_hdr.getPointer(),
+        ipv6_pseudo_hdr.getSize(),
+        icmpv6_header_pos,
+        icmpv6_header_length
+    );
+}
+
+void CLatencyPktModeICMPv6::update_pkt(uint8_t *pkt, bool is_client_to_server, uint16_t l4_len, uint16_t *tx_seq) {
+    icmp6_hdr * m_icmp =(icmp6_hdr *)(pkt);
+
+    uint16_t seq_to_write = 0;
+    if (m_submode == L_PKT_SUBMODE_0_SEQ) {
+        seq_to_write = 0;
+    } else {
+        seq_to_write = *tx_seq;
+        (*tx_seq)++;
+    }
+    m_icmp->icmp6_data16[1] = htons(seq_to_write);
+
+    if ((!is_client_to_server) && (m_submode == L_PKT_SUBMODE_REPLY)) {
+      m_icmp->icmp6_type = ICMP6_ECHO_REPLY;
+    } else {
+      m_icmp->icmp6_type = ICMP6_ECHO_REQUEST;
+    }
+    m_icmp->icmp6_cksum = icmpv6_checksum(pkt - sizeof(ip6_hdr), pkt, l4_len);
+}
+
+bool CLatencyPktModeICMPv6::IsLatencyPkt(IPHeader *ip) {
+    return false;
+};
+
+bool CLatencyPktModeICMPv6::IsLatencyPkt(IPv6Header *ip) {
+    if (!ip)
+        return false;
+    if (ip->getNextHdr() != IPv6Header::IPPROTO_ICMPV6)
+        return false;
+    return true;
+};
+
+void CLatencyPktModeICMPv6::update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq) {
+    icmp6_hdr *m_icmp = (icmp6_hdr *)(pkt);
+    *r_seq = ntohs(m_icmp->icmp6_data16[1]);
+    // Previously, we assumed we can send for sequences smaller than r_seq.
+    // Actually, if the DUT (firewall) dropped an ICMP request, we should not send response for the dropped packet.
+    // We are only sure that we can send reqponse for the request we just got.
+    // This should be OK, since we send requests and responses in the same rate.
+    *t_seq = *r_seq;
+}

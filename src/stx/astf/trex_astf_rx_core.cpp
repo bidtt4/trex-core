@@ -20,6 +20,7 @@ limitations under the License.
 */
 
 #include "trex_astf_rx_core.h"
+#include "utl_ipv4v6_addr.h"
 #include "utl_json.h"
 #include "trex_watchdog.h"
 #include "pkt_gen.h"
@@ -117,7 +118,6 @@ int CRxAstfCore::_do_start(void){
 #endif
 
 
-    create_latency_context();
 
     while (  !m_p_queue.empty() ) {
         node = m_p_queue.top();
@@ -191,7 +191,6 @@ int CRxAstfCore::_do_start(void){
         m_p_queue.pop();
         delete node;
     }
-    delete_latency_context();
     return (0);
 }
 
@@ -251,7 +250,7 @@ uint32_t CRxAstfCore::handle_rx_one_queue(uint8_t thread_id, CNodeRing *r) {
     return got_pkts;
 }
 
-void CRxAstfCore::create_latency_context(){
+void CRxAstfCore::create_latency_context(ipv4v6_addr::Version ip_version){
 
     uint8_t pkt_type = 3;
 
@@ -262,9 +261,14 @@ void CRxAstfCore::create_latency_context(){
         break;
     case 1:
     case 2:
-    case 3:
-        m_l_pkt_mode =  (CLatencyPktModeICMP *) new CLatencyPktModeICMP(L_PKT_SUBMODE_REPLY);
+    case 3: {
+        if (ip_version == ipv4v6_addr::Version::V6) {
+            m_l_pkt_mode =  (CLatencyPktModeICMP *) new CLatencyPktModeICMPv6(L_PKT_SUBMODE_REPLY);
+        } else {
+            m_l_pkt_mode =  (CLatencyPktModeICMP *) new CLatencyPktModeICMP(L_PKT_SUBMODE_REPLY);
+        }
         break;
+    }
     }
 
     m_pkt_gen.Create(m_l_pkt_mode);
@@ -317,9 +321,9 @@ static double _get_d_from_cps(double cps){
 }
 
 void CRxAstfCore::start_latency(const lat_start_params_t &args, CTunnelsTopo* tunnel_topo, CTunnelsDB* tunnel_db){
-
     /* create a node */
     assert(m_latency_active ==false);
+    create_latency_context(args.client_ip.version);
     enable_astf_latency_fia(true);
     m_epoc++;
 
@@ -356,8 +360,8 @@ void CRxAstfCore::start_latency(const lat_start_params_t &args, CTunnelsTopo* tu
     }
 
 
-    m_pkt_gen.set_ip(args.client_ip.v4,
-                     args.server_ip.v4,
+    m_pkt_gen.set_ip(args.client_ip,
+                     args.server_ip,
                      args.s_ip_offset,
                      args.c_ip_offset);
     if (tunnel_topo) {
@@ -394,6 +398,7 @@ void CRxAstfCore::stop_latency(){
     if (m_tunnel_handler) {
         delete_tunnel_ctx();
     }
+    delete_latency_context();
 }
 
 

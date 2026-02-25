@@ -23,7 +23,9 @@ limitations under the License.
 #define __STATEFUL_RX_CORE_H__
 
 #include "bp_sim.h"
+#include "common/Network/Packet/IPv6Header.h"
 #include "utl_ip.h"
+#include "utl_ipv4v6_addr.h"
 
 #define L_PKT_SUBMODE_NO_REPLY 1
 #define L_PKT_SUBMODE_REPLY 2
@@ -46,16 +48,16 @@ public:
     /**
      * regular set IP
      */
-    void set_ip(uint32_t                src,
-                uint32_t                dst,
+    void set_ip(ipv4v6_addr             src,
+                ipv4v6_addr             dst,
                 uint32_t                c_ip_offset,
                 uint32_t                s_ip_offset);
     
     /**
      * set IP with client clustering configuration
      */
-    void set_ip(uint32_t                src,
-                uint32_t                dst,
+    void set_ip(ipv4v6_addr             src,
+                ipv4v6_addr             dst,
                 uint32_t                c_ip_offset,
                 uint32_t                s_ip_offset,
                 uint8_t                 port_cnt,
@@ -63,8 +65,8 @@ public:
     /**
      * regular set IP
      */
-    void set_ip(uint32_t                src,
-                uint32_t                dst,
+    void set_ip(ipv4v6_addr             src,
+                ipv4v6_addr             dst,
                 uint32_t                dual_port_mask) {
         set_ip(src, dst, dual_port_mask, dual_port_mask);
     }
@@ -72,8 +74,8 @@ public:
     /**
      * set IP with client clustering configuration
      */
-    void set_ip(uint32_t                src,
-                uint32_t                dst,
+    void set_ip(ipv4v6_addr             src,
+                ipv4v6_addr             dst,
                 uint32_t                dual_port_mask,
                 uint8_t                 port_cnt,
                 ClientCfgDB            &db) {
@@ -100,8 +102,8 @@ public:
     }
 
 private:
-    ipaddr_t                m_client_ip;
-    ipaddr_t                m_server_ip;
+    ipv4v6_addr             m_client_ip;
+    ipv4v6_addr             m_server_ip;
     uint32_t                m_dual_port_mask;
     uint32_t                m_s_ip_offset;
     uint32_t                m_c_ip_offset;
@@ -335,8 +337,8 @@ class CLatencyManagerCfg {
         m_max_ports=0;
         m_cps=0.0;
         memset(m_ports, 0, sizeof(m_ports));
-        m_client_ip.v4=0x10000000;
-        m_server_ip.v4=0x20000000;
+        m_client_ip=ipv4v6_addr::ipv4_le(0x10000000);
+        m_server_ip=ipv4v6_addr::ipv4_le(0x20000000);
         m_dual_port_mask=0x01000000;
     }
 
@@ -344,8 +346,8 @@ class CLatencyManagerCfg {
     uint32_t             m_max_ports;
     double               m_cps;// CPS
     CPortLatencyHWBase * m_ports[TREX_MAX_PORTS];
-    ipaddr_t             m_client_ip;
-    ipaddr_t             m_server_ip;
+    ipv4v6_addr          m_client_ip;
+    ipv4v6_addr          m_server_ip;
     uint32_t             m_dual_port_mask;
 };
 
@@ -366,9 +368,11 @@ class CLatencyPktMode {
     virtual void send_debug_print(uint8_t *pkt) = 0;
     virtual void update_pkt(uint8_t *pkt, bool is_client_to_server, uint16_t l4_len, uint16_t *tx_seq) = 0;
     virtual bool IsLatencyPkt(IPHeader *ip) = 0;
+    virtual bool IsLatencyPkt(IPv6Header *ip) = 0;
     uint8_t l4_header_len() {return 8;}
     virtual void update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq) = 0;
     virtual uint8_t getProtocol() = 0;
+    virtual bool isIpv6() const = 0;
     virtual ~CLatencyPktMode() {}
 };
 
@@ -381,8 +385,10 @@ class CLatencyPktModeICMP: public CLatencyPktMode {
     void send_debug_print(uint8_t *);
     void update_pkt(uint8_t *pkt, bool is_client_to_server, uint16_t l4_len, uint16_t *tx_seq);
     bool IsLatencyPkt(IPHeader *ip);
+    bool IsLatencyPkt(IPv6Header *ip);
     void update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq);
     uint8_t getProtocol() {return 0x1;}
+    bool isIpv6() const { return false; }
 };
 
 class CLatencyPktModeSCTP: public CLatencyPktMode {
@@ -394,8 +400,25 @@ class CLatencyPktModeSCTP: public CLatencyPktMode {
     void send_debug_print(uint8_t *);
     void update_pkt(uint8_t *pkt, bool is_client_to_server, uint16_t l4_len, uint16_t *tx_seq);
     bool IsLatencyPkt(IPHeader *ip);
+    bool IsLatencyPkt(IPv6Header *ip);
     void update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq);
     uint8_t getProtocol() {return 0x84;}
+    bool isIpv6() const { return false; }
+};
+
+class CLatencyPktModeICMPv6: public CLatencyPktMode {
+ public:
+    CLatencyPktModeICMPv6(uint8_t submode) : CLatencyPktMode(submode) {}
+    uint8_t getPacketLen();
+    const uint8_t *getPacketData();
+    void rcv_debug_print(uint8_t *);
+    void send_debug_print(uint8_t *);
+    void update_pkt(uint8_t *pkt, bool is_client_to_server, uint16_t l4_len, uint16_t *tx_seq);
+    bool IsLatencyPkt(IPHeader *ip);
+    bool IsLatencyPkt(IPv6Header *ip);
+    void update_recv(uint8_t *pkt, uint16_t *r_seq, uint16_t *t_seq);
+    uint8_t getProtocol() {return 0x3a;}
+    bool isIpv6() const { return true; }
 };
 
 class CLatencyManager : public TrexRxCore {
@@ -409,16 +432,16 @@ public:
     bool  is_active();
 
     
-    void set_ip(uint32_t client_ip,
-                uint32_t server_ip,
+    void set_ip(ipv4v6_addr client_ip,
+                ipv4v6_addr server_ip,
                 uint32_t mask_dual_port) {
         
         m_pkt_gen.set_ip(client_ip, server_ip, mask_dual_port);
     }
     
     
-    void set_ip(uint32_t        client_ip,
-                uint32_t        server_ip,
+    void set_ip(ipv4v6_addr     client_ip,
+                ipv4v6_addr     server_ip,
                 uint32_t        mask_dual_port,
                 ClientCfgDB    &client_cfg_db) {
         

@@ -597,8 +597,8 @@ string TrexAstf::handle_start_latency(int32_t dp_profile_id) {
                     throw TrexException("In Tunnel mode with latency the tunnel_topology must be loaded with latency clients");
                 }
             }
-            if ( !db->get_latency_info(args.client_ip.v4,
-                                       args.server_ip.v4,
+            if ( !db->get_latency_info(args.client_ip,
+                                       args.server_ip,
                                        args.c_ip_offset,
                                        args.s_ip_offset) ) {
                 throw TrexException("No valid ip range for latency");

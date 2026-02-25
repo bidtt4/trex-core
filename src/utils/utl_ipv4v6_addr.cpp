@@ -148,6 +148,14 @@ uint32_t ipv4v6_addr::range_size(const ipv4v6_addr& lhs, const ipv4v6_addr& rhs)
     return dist < UINT32_MAX ? dist + 1 : UINT32_MAX;
 }
 
+uint32_t ipv4v6_addr::modulo(const ipv4v6_addr& lhs, uint32_t rhs) {
+    if (lhs.version == ipv4v6_addr::Version::V4) {
+        return lhs.addr.v4 % rhs;
+    } else {
+        return hextets_to_uint128(lhs.addr.v6) % rhs;
+    }
+}
+
 ipv4v6_addr ipv4v6_addr::from_str(const char* str) {
     ipv4v6_addr result = {};
     if (!result.set_from_str(str)) {
