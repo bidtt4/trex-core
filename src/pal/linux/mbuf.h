@@ -88,6 +88,8 @@ struct rte_mbuf {
     uint16_t l2_len;
     uint16_t l3_len;
     uint16_t l4_len;
+    uint16_t outer_l2_len;
+    uint16_t outer_l3_len;
     uint16_t vlan_tci;
     uint8_t  m_core_locality;
     union {
@@ -180,6 +182,46 @@ uint16_t rte_ipv6_phdr_cksum(const struct rte_ipv6_hdr *ipv6_hdr, uint64_t ol_fl
  * the inner headers.
  */
 #define RTE_MBUF_F_TX_IPV6          (1ULL << 56)
+
+/**
+ * Offload the IP checksum of an external header in the hardware. The
+ * flag RTE_MBUF_F_TX_OUTER_IPV4 should also be set by the application, although
+ * a PMD will only check RTE_MBUF_F_TX_OUTER_IP_CKSUM.
+ *  - fill the mbuf offload information: outer_l2_len, outer_l3_len
+ */
+#define RTE_MBUF_F_TX_OUTER_IP_CKSUM   (1ULL << 58)
+
+/**
+ * Packet outer header is IPv4. This flag must be set when using any
+ * outer offload feature (L3 or L4 checksum) to tell the NIC that the
+ * outer header of the tunneled packet is an IPv4 packet.
+ */
+#define RTE_MBUF_F_TX_OUTER_IPV4   (1ULL << 59)
+
+/**
+ * Packet outer header is IPv6. This flag must be set when using any
+ * outer offload feature (L4 checksum) to tell the NIC that the outer
+ * header of the tunneled packet is an IPv6 packet.
+ */
+#define RTE_MBUF_F_TX_OUTER_IPV6    (1ULL << 60)
+
+/**
+ * Outer UDP checksum offload flag. This flag is used for enabling
+ * outer UDP checksum in PMD. To use outer UDP checksum, the user needs to
+ * 1) Enable the following in mbuf,
+ * a) Fill outer_l2_len and outer_l3_len in mbuf.
+ * b) Set the RTE_MBUF_F_TX_OUTER_UDP_CKSUM flag.
+ * c) Set the RTE_MBUF_F_TX_OUTER_IPV4 or RTE_MBUF_F_TX_OUTER_IPV6 flag.
+ * 2) Configure RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM offload flag.
+ */
+#define RTE_MBUF_F_TX_OUTER_UDP_CKSUM     (1ULL << 41)
+
+/**
+ * Packet is sent through GTP tunnel. This flag must be set to let the NIC
+ * know that packet contains inner and outer headers. It changes the meaning
+ * of layer lengths reported in mbuf metadata.
+ */
+#define RTE_MBUF_F_TX_TUNNEL_GTP       (0x7ULL << 45)
 
 
 #define RTE_MBUF_F_RX_IP_CKSUM_MASK ((1ULL << 4) | (1ULL << 7))

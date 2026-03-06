@@ -224,7 +224,24 @@ class CTRexVmInsFixHwCs(CTRexVmInsBase):
         self.l4_type = l4_type
         validate_type('l4_type', l4_type, int)
 
+class CTRexVmInsFixGtpHwCs(CTRexVmInsBase):
+    L4_PROTO_UDP = 1
+    L4_PROTO_TCP = 2
 
+    def __init__(self, outer_l3_offset, outer_l4_offset, inner_l3_offset, inner_l4_offset, inner_l4_len, inner_l4_proto):
+        super().__init__("fix_gtp_checksum_hw")
+        validate_type('outer_l3_offset', outer_l3_offset, int)
+        validate_type('outer_l4_offset', outer_l4_offset, int)
+        validate_type('inner_l3_offset', inner_l3_offset, int)
+        validate_type('inner_l4_offset', inner_l4_offset, int)
+        validate_type('inner_l4_len', inner_l4_len, int)
+        validate_type('inner_l4_proto', inner_l4_proto, int)
+        self.outer_l3_offset = outer_l3_offset
+        self.outer_l4_offset = outer_l4_offset
+        self.inner_l3_offset = inner_l3_offset
+        self.inner_l4_offset = inner_l4_offset
+        self.inner_l4_len = inner_l4_len
+        self.inner_l4_proto = inner_l4_proto
 
 class CTRexVmInsFlowVar(CTRexVmInsBase):
     #TBD add more validation tests
@@ -1005,6 +1022,98 @@ class STLVmFixChecksumHw(CTRexVmDescBase):
            else:
                self.l3_len=0
 
+
+class STLVmFixGtpChecksumHw(CTRexVmDescBase):
+    def __init__(self, outer_l3_offset, outer_l4_offset, inner_l3_offset, inner_l4_offset, inner_l4_len, inner_l4_proto):
+        """
+        Fix IP checksum and TCP/UDP checksums for GTP-U packets using hardware assist.
+        Use this if the packet header has changed or data payload has changed as it is necessary to fix the checksums.
+        This instruction works on NICs that support this hardware offload.
+
+        For fixing only outer IPv4 header checksum use STLVmFixIpv4. This instruction should be used if both L4 and L3 need to be fixed.
+
+        supported packets:
+
+        Ether/(IPv4|IPv6)/UDP/GTP-U/(IPv4|IPv6)/(UDP|TCP)
+
+        :parameters:
+             outer_l3_offset : offset in bytes
+                outer **IPv4/IPv6 header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format IP[:[id]]
+
+             outer_l4_offset : offset in bytes
+                outer **UDP header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format UDP[:[id]]
+
+             inner_l3_offset : offset in bytes
+                inner **IPv4/IPv6 header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format IP[:[id]]
+
+             inner_l4_offset : offset in bytes
+                inner **UDP/TCP header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format TCP[:[id]]
+
+             inner_l4_len : length in bytes
+                inner **UDP/TCP header** length
+
+             inner_l4_proto : [CTRexVmInsFixGtpHwCs.L4_PROTO_UDP or CTRexVmInsFixGtpHwCs.L4_PROTO_TCP]
+
+        .. code-block:: python
+
+            # Example
+
+            pkt = Ether()/IP()/UDP()/GTP()/IPv6()/UDP()
+
+            # by offset
+            STLVmFixGtpChecksumHw(
+                outer_l3_offset=14,
+                outer_l4_offset=14+20,
+                inner_l3_offset=14+20+8+8,
+                inner_l4_offset=14+20+8+8+40,
+                inner_l4_len=8,
+                l4_type=CTRexVmInsFixGtpHwCs.L4_PROTO_UDP,
+            )
+
+            # in case of scapy packet can be defined by header name
+            STLVmFixGtpChecksumHw(
+                outer_l3_offset="IP",
+                outer_l4_offset="UDP",
+                inner_l3_offset="IPv6",
+                inner_l4_offset="UDP:1",
+                inner_l4_len=8,
+                l4_type=CTRexVmInsFixGtpHwCs.L4_PROTO_UDP,
+            )
+
+        """
+
+        super().__init__()
+        self.outer_l3_offset = outer_l3_offset
+        self.outer_l4_offset = outer_l4_offset
+        self.inner_l3_offset = inner_l3_offset
+        self.inner_l4_offset = inner_l4_offset
+        self.inner_l4_len = inner_l4_len
+        self.inner_l4_proto = inner_l4_proto
+
+
+    def get_obj(self):
+        return CTRexVmInsFixGtpHwCs(
+            self.outer_l3_offset,
+            self.outer_l4_offset,
+            self.inner_l3_offset,
+            self.inner_l4_offset,
+            self.inner_l4_len,
+            self.inner_l4_proto,
+        )
+
+    def compile(self, parent):
+        if type(self.outer_l3_offset) == str:
+            self.outer_l3_offset = parent._pkt_layer_offset(self.outer_l3_offset)
+        if type(self.outer_l4_offset) == str:
+            self.outer_l4_offset = parent._pkt_layer_offset(self.outer_l4_offset)
+        if type(self.inner_l3_offset) == str:
+            self.inner_l3_offset = parent._pkt_layer_offset(self.inner_l3_offset)
+        if type(self.inner_l4_offset) == str:
+            self.inner_l4_offset = parent._pkt_layer_offset(self.inner_l4_offset)
 
 
 class STLVmFixIpv4(CTRexVmDescBase):
@@ -1854,6 +1963,15 @@ class STLPktBuilder(CTrexPktBuilderInterface):
                                          l4_offset  = instr['l2_len'] + instr['l3_len'],
                                          l4_type    = instr['l4_type'])
 
+                # GTP HW checksum fix
+                elif instr['type'] == 'fix_gtp_checksum_hw':
+                    vm_obj.fix_gtp_chksum_hw(outer_l3_offset = instr['outer_l3_offset'],
+                                             outer_l4_offset = instr['outer_l4_offset'],
+                                             inner_l3_offset = instr['inner_l3_offset'],
+                                             inner_l4_offset = instr['inner_l4_offset'],
+                                             inner_l4_len    = instr['inner_l4_len'],
+                                             inner_l4_proto  = instr['inner_l4_proto'])
+
                 elif instr['type'] == 'fix_checksum_icmpv6':
                     vm_obj.fix_chksum_icmpv6(l3_offset  = instr['l2_len'],
                                                l4_offset  = instr['l2_len'] + instr['l3_len'])
@@ -2285,6 +2403,51 @@ class STLVM(STLScVmRaw):
         self.add_cmd(STLVmFixChecksumHw(l3_offset = l3_offset,
                                         l4_offset = l4_offset,
                                         l4_type   = l4_type))
+
+
+    def fix_gtp_chksum_hw(self, outer_l3_offset, outer_l4_offset, inner_l3_offset, inner_l4_offset, inner_l4_len, inner_l4_proto):
+        """
+        Fix IP checksum and TCP/UDP checksums for GTP-U packets using hardware assist.
+        Use this if the packet header has changed or data payload has changed as it is necessary to fix the checksums.
+        This instruction works on NICS that support this hardware offload.
+
+        For fixing only outer IPv4 header checksum use STLVmFixIpv4. This instruction should be used if both L4 and L3 need to be fixed.
+
+        supported packets:
+
+        Ether/(IPv4|IPv6)/UDP/GTP-U/(IPv4|IPv6)/(UDP|TCP)
+
+        :parameters:
+             outer_l3_offset : offset in bytes
+                outer **IPv4/IPv6 header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format IP[:[id]]
+
+             outer_l4_offset : offset in bytes
+                outer **UDP header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format UDP[:[id]]
+
+             inner_l3_offset : offset in bytes
+                inner **IPv4/IPv6 header** offset from packet start. It is **not** the offset of the checksum field itself.
+                inIt could be string in case of scapy packet. format IP[:[id]]
+
+             inner_l4_offset : offset in bytes
+                inner **UDP/TCP header** offset from packet start. It is **not** the offset of the checksum field itself.
+                It could be string in case of scapy packet. format TCP[:[id]]
+
+             inner_l4_len : length in bytes
+                inner **UDP/TCP header** length
+
+             inner_l4_proto : [CTRexVmInsFixGtpHwCs.L4_PROTO_UDP or CTRexVmInsFixGtpHwCs.L4_PROTO_TCP]
+        """
+        self.add_cmd(STLVmFixGtpChecksumHw(
+            outer_l3_offset = outer_l3_offset,
+            outer_l4_offset = outer_l4_offset,
+            inner_l3_offset = inner_l3_offset,
+            inner_l4_offset = inner_l4_offset,
+            inner_l4_len = inner_l4_len,
+            inner_l4_proto = inner_l4_proto,
+        ))
+
 
     def fix_chksum_icmpv6 (self, l3_offset, l4_offset):
         """

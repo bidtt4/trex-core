@@ -76,6 +76,7 @@ void validate_stream(string profile_id, const std::unique_ptr<TrexStream> &strea
 void parse_vm(const Json::Value &vm, std::unique_ptr<TrexStream> &stream, Json::Value &result);
 void parse_vm_instr_checksum(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result);
 void parse_vm_instr_checksum_hw(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result);
+void parse_vm_instr_gtp_checksum_hw(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result);
 void parse_vm_instr_checksum_icmpv6(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result);
 
 void parse_vm_instr_flow_var(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result);
@@ -647,6 +648,24 @@ TrexRpcCmdAddStream::parse_vm_instr_checksum_hw(const Json::Value &inst, std::un
 }
 
 void
+TrexRpcCmdAddStream::parse_vm_instr_gtp_checksum_hw(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result) {
+    uint16_t outer_l3_offset = parse_uint16(inst, "outer_l3_offset", result);
+    uint16_t outer_l4_offset = parse_uint16(inst, "outer_l4_offset", result);
+    uint16_t inner_l3_offset = parse_uint16(inst, "inner_l3_offset", result);
+    uint16_t inner_l4_offset = parse_uint16(inst, "inner_l4_offset", result);
+    uint16_t inner_l4_len = parse_uint16(inst, "inner_l4_len", result);
+
+    uint16_t l4_proto_value = parse_uint16(inst, "inner_l4_proto", result);
+    if (l4_proto_value >= static_cast<int>(StreamVmInstructionFixGtpHwChecksum::L4Proto::NUM_ITEMS)) {
+        generate_parse_err(result, "field 'inner_l4_proto' value out of bounds");
+    }
+    auto inner_l4_proto = static_cast<StreamVmInstructionFixGtpHwChecksum::L4Proto>(l4_proto_value);
+
+    stream->m_vm.add_instruction(new StreamVmInstructionFixGtpHwChecksum(
+        outer_l3_offset, outer_l4_offset, inner_l3_offset, inner_l4_offset, inner_l4_len, inner_l4_proto));
+}
+
+void
 TrexRpcCmdAddStream::parse_vm_instr_checksum_icmpv6(const Json::Value &inst, std::unique_ptr<TrexStream> &stream, Json::Value &result) {
     uint16_t l2_len = parse_uint16(inst, "l2_len", result); 
     uint16_t l3_len = parse_uint16(inst, "l3_len", result); 
@@ -979,7 +998,7 @@ TrexRpcCmdAddStream::parse_vm(const Json::Value &vm, std::unique_ptr<TrexStream>
     for (int i = 0; i < instructions.size(); i++) {
         const Json::Value & inst = parse_object(instructions, i, result);
 
-        auto vm_types = {"fix_checksum_hw", "fix_checksum_ipv4", "fix_checksum_icmpv6", "flow_var", "write_flow_var","tuple_flow_var","trim_pkt_size","write_mask_flow_var","flow_var_rand_limit"};
+        auto vm_types = {"fix_gtp_checksum_hw", "fix_checksum_hw", "fix_checksum_ipv4", "fix_checksum_icmpv6", "flow_var", "write_flow_var","tuple_flow_var","trim_pkt_size","write_mask_flow_var","flow_var_rand_limit"};
         std::string vm_type = parse_choice(inst, "type", vm_types, result);
 
         // checksum instruction
@@ -989,7 +1008,8 @@ TrexRpcCmdAddStream::parse_vm(const Json::Value &vm, std::unique_ptr<TrexStream>
         } else if (vm_type == "fix_checksum_hw") {
 
             parse_vm_instr_checksum_hw(inst, stream, result);
-
+        } else if (vm_type == "fix_gtp_checksum_hw") {
+            parse_vm_instr_gtp_checksum_hw(inst, stream, result);
         } else if (vm_type == "fix_checksum_icmpv6") {
             parse_vm_instr_checksum_icmpv6(inst, stream, result);
 

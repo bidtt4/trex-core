@@ -106,6 +106,12 @@ void StreamVmInstructionFixHwChecksum::Dump(FILE *fd){
     fprintf(fd," fix_hw_cs  %lu:%lu \n",(ulong)m_l2_len,(ulong)m_l3_len);
 }
 
+void StreamVmInstructionFixGtpHwChecksum::Dump(FILE *fd){
+    fprintf(fd," fix_gtp_hw_cs  %lu:%lu:%lu:%lu:%lu:%lu \n",
+        (ulong)m_outer_l3_offset, (ulong)m_outer_l4_offset, (ulong)m_inner_l3_offset,
+        (ulong)m_inner_l4_offset, (ulong)m_inner_l4_len, (ulong)m_inner_l4_proto);
+}
+
 void StreamVmInstructionFlowMan::sanity_check_valid_size(uint32_t ins_id,StreamVm *lp){
     uint8_t valid[]={1,2,4,8};
     int i;
@@ -725,6 +731,102 @@ void StreamVm::build_program(){
 
         if (ins_type != StreamVmInstruction::itFLOW_MAN && ins_type != StreamVmInstruction::itFLOW_RAND_LIMIT) {
             skip = 0;
+        }
+
+        if (ins_type == StreamVmInstruction::itFIX_GTP_HW_CS) {
+            StreamVmInstructionFixGtpHwChecksum *lpFix =(StreamVmInstructionFixGtpHwChecksum *)inst;
+
+            if (lpFix->m_outer_l3_offset < 14 ) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs outer L3 offset " << lpFix->m_outer_l3_offset << " is lower than ETH header size ";
+                err(ss.str());
+            }
+
+            const auto minimum_outer_l4_offset = IPV4_HDR_LEN + lpFix->m_outer_l3_offset;
+            if (lpFix->m_outer_l4_offset < minimum_outer_l4_offset) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs outer L4 offset " << lpFix->m_outer_l4_offset  << " is lower than " << minimum_outer_l4_offset << " ";
+                err(ss.str());
+            }
+
+            const auto minimum_inner_l3_offset = lpFix->m_outer_l4_offset + 16; // UDP + GTP-U
+            if (lpFix->m_inner_l3_offset < minimum_inner_l3_offset) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs inner L3 offset " << lpFix->m_inner_l3_offset  << " is lower than " << minimum_inner_l3_offset << " ";
+                err(ss.str());
+            }
+
+            const auto minimum_inner_l4_offset = lpFix->m_inner_l3_offset + IPV4_HDR_LEN;
+            if (lpFix->m_inner_l4_offset < minimum_inner_l4_offset) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs inner L4 offset " << lpFix->m_inner_l4_offset  << " is lower than " << minimum_inner_l4_offset << " ";
+                err(ss.str());
+            }
+
+            const auto minimum_inner_l4_len = 8; // UDP
+            if (lpFix->m_inner_l4_len < minimum_inner_l4_len) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs inner L4 len " << lpFix->m_inner_l4_len  << " is lower than " << minimum_inner_l4_len << " ";
+                err(ss.str());
+            }
+
+            const auto inner_l4_pkt_len = lpFix->m_inner_l4_offset + lpFix->m_inner_l4_len;
+            if (inner_l4_pkt_len > m_pkt_size) {
+                std::stringstream ss;
+                ss << "instruction id '" << i << "' FixGtpHwCs L4 pkt of size  " << inner_l4_pkt_len << " exceeds actual packet size  " << m_pkt_size << " ";
+                err(ss.str());
+            }
+
+            if (m_pkt) {
+                StreamDPOpGtpHwCsFix ipv_fix;
+                ipv_fix.m_outer_l2_len = lpFix->m_outer_l3_offset;
+                ipv_fix.m_outer_l3_len = lpFix->m_outer_l4_offset - lpFix->m_outer_l3_offset;
+                ipv_fix.m_outer_inner_l3_distance = lpFix->m_inner_l3_offset - lpFix->m_outer_l4_offset;
+                ipv_fix.m_inner_l3_len = lpFix->m_inner_l4_offset - lpFix->m_inner_l3_offset;
+                ipv_fix.m_inner_l4_len = lpFix->m_inner_l4_len;
+                ipv_fix.m_op = StreamDPVmInstructions::ditFIX_GTP_HW_CS;
+                ipv_fix.m_ol_flags = RTE_MBUF_F_TX_TUNNEL_GTP | RTE_MBUF_F_TX_OUTER_UDP_CKSUM;
+
+                auto outer_ip_vesion = ((IPHeader*)(m_pkt + lpFix->m_outer_l3_offset))->getVersion();
+                auto inner_ip_vesion = ((IPHeader*)(m_pkt + lpFix->m_inner_l3_offset))->getVersion();
+
+                if (outer_ip_vesion == 4) {
+                    ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_OUTER_IPV4 | RTE_MBUF_F_TX_OUTER_IP_CKSUM;
+                } else if (outer_ip_vesion == 6) {
+                    ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_OUTER_IPV6;
+                } else {
+                    std::stringstream ss;
+                    ss << "instruction id '" << i << "' FixGtpHwCs supports only IPv4 and IPv6 for outer L3 ";
+                    err(ss.str());
+                }
+
+                if (inner_ip_vesion == 4) {
+                    ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM;
+                } else if (inner_ip_vesion == 6) {
+                    // DPDK does not allow RTE_MBUF_F_TX_IP_CKSUM offload for IPv6
+                    ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_IPV6;
+                } else {
+                    std::stringstream ss;
+                    ss << "instruction id '" << i << "' FixGtpHwCs supports only IPv4 and IPv6 for inner L3 ";
+                    err(ss.str());
+                }
+
+                switch (lpFix->m_inner_l4_proto) {
+                    case StreamVmInstructionFixGtpHwChecksum::L4Proto::UDP:
+                        ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_UDP_CKSUM;
+                        break;
+                    case StreamVmInstructionFixGtpHwChecksum::L4Proto::TCP:
+                        ipv_fix.m_ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
+                        break;
+                    case StreamVmInstructionFixGtpHwChecksum::L4Proto::NUM_ITEMS:
+                        __builtin_unreachable();
+                }
+
+                m_instructions.add_command(&ipv_fix,sizeof(ipv_fix));
+
+                /* mark R/W of the packet */
+                add_field_cnt(inner_l4_pkt_len);
+            }
         }
 
         if (ins_type == StreamVmInstruction::itFIX_HW_CS) {
@@ -1559,6 +1661,7 @@ void StreamDPVmInstructions::Dump(FILE *fd){
     StreamDPOpFlowVar32Step *lpv32s;
     StreamDPOpFlowVar64Step *lpv64s;
 
+    StreamDPOpGtpHwCsFix *lpGtpHwFix;
     StreamDPOpHwCsFix   *lpHwFix;
 
     StreamDPOpIpv4Fix   *lpIpv4Fix;
@@ -1606,6 +1709,12 @@ void StreamDPVmInstructions::Dump(FILE *fd){
             lpHwFix =(StreamDPOpHwCsFix *)p;
             lpHwFix->dump(fd,"HwFixCs");
             p+=sizeof(StreamDPOpHwCsFix);
+            break;
+
+        case  ditFIX_GTP_HW_CS :
+            lpGtpHwFix =(StreamDPOpGtpHwCsFix *)p;
+            lpGtpHwFix->dump(fd,"GtpHwFixCs");
+            p+=sizeof(StreamDPOpGtpHwCsFix);
             break;
 
         case  ditFIX_IPV4_CS :
@@ -1782,6 +1891,12 @@ void StreamDPOpPktWrMask::dump(FILE *fd,std::string opt){
 void StreamDPOpHwCsFix::dump(FILE *fd,std::string opt){
     fprintf(fd," %10s  op:%lu, lens: %lu,%lu \n",  opt.c_str(),(ulong)m_op,(ulong)m_l2_len,(ulong)m_l3_len);
 
+}
+
+void StreamDPOpGtpHwCsFix::dump(FILE *fd,std::string opt){
+    fprintf(fd," %10s  op:%lu, lens: %lu,%lu,%lu,%lu,%lu \n",
+        opt.c_str(), (ulong)m_op, (ulong)m_outer_l2_len, (ulong)m_outer_l3_len,
+        (ulong)m_outer_inner_l3_distance, (ulong)m_inner_l3_len, (ulong)m_inner_l4_len);
 }
 
 void StreamDPOpIpv4Fix::dump(FILE *fd,std::string opt){

@@ -841,6 +841,64 @@ public:
 } __attribute__((packed));
 
 
+struct StreamDPOpGtpHwCsFix {
+    uint8_t  m_op;
+    uint16_t m_outer_l2_len;
+    uint16_t m_outer_l3_len;
+    uint16_t m_outer_inner_l3_distance; // outer_l4 + ... + inner_l2
+    uint16_t m_inner_l3_len;
+    uint16_t m_inner_l4_len;
+    uint64_t m_ol_flags;
+
+public:
+    void dump(FILE* fd, std::string opt);
+    void HOT_FUNC run(uint8_t* pkt_base, rte_mbuf_t* m){
+        m->l2_len = m_outer_inner_l3_distance;
+        m->l3_len = m_inner_l3_len;
+        m->l4_len = m_inner_l4_len;
+        m->outer_l2_len = m_outer_l2_len;
+        m->outer_l3_len = m_outer_l3_len;
+        m->ol_flags |= m_ol_flags;
+
+        auto* outer_l3_pos = pkt_base + m_outer_l2_len;
+        auto* outer_l4_pos = outer_l3_pos + m_outer_l3_len;
+        auto* inner_l3_pos = outer_l4_pos + m_outer_inner_l3_distance;
+        auto* inner_l4_pos = inner_l3_pos + m_inner_l3_len;
+        const bool is_inner_tcp = (m_ol_flags & RTE_MBUF_F_TX_L4_MASK) == RTE_MBUF_F_TX_TCP_CKSUM;
+        const bool is_inner_ipv4 = m_ol_flags & RTE_MBUF_F_TX_IPV4;
+        const bool is_outer_ipv4 = m_ol_flags & RTE_MBUF_F_TX_OUTER_IPV4;
+
+        if (is_outer_ipv4) {
+            IPHeader* outer_ipv4 = (IPHeader *)outer_l3_pos;
+            outer_ipv4->ClearCheckSum();
+        }
+
+        if (is_inner_ipv4) {
+            IPHeader* inner_ipv4 = (IPHeader *)inner_l3_pos;
+            inner_ipv4->ClearCheckSum();
+        }
+
+        // GTP-U is UDP only
+        UDPHeader* outer_udp = (UDPHeader*)outer_l4_pos;
+        auto outer_l4_checksum = is_outer_ipv4
+            ? rte_ipv4_phdr_cksum((struct rte_ipv4_hdr *)outer_l3_pos, m_ol_flags)
+            : rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)outer_l3_pos, m_ol_flags);
+        outer_udp->setChecksumRaw(outer_l4_checksum);
+
+        auto inner_l4_checksum = is_inner_ipv4
+            ? rte_ipv4_phdr_cksum((struct rte_ipv4_hdr *)inner_l3_pos, m_ol_flags)
+            : rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)inner_l3_pos, m_ol_flags);
+
+        if (is_inner_tcp) {
+            TCPHeader* inner_tcp = (TCPHeader*)inner_l4_pos;
+            inner_tcp->setChecksumRaw(inner_l4_checksum);
+        } else {
+            UDPHeader* inner_udp = (UDPHeader*)inner_l4_pos;
+            inner_udp->setChecksumRaw(inner_l4_checksum);
+        }
+    }
+} __attribute__((packed));
+
 
 /* flow varible of Client command */
 struct StreamDPFlowClient {
@@ -966,6 +1024,7 @@ public:
         ditFIX_IPV4_CS  ,
         ditFIX_ICMPV6_CS,
         ditFIX_HW_CS  ,
+        ditFIX_GTP_HW_CS,
 
         itPKT_WR8       ,
         itPKT_WR16       ,
@@ -1050,6 +1109,7 @@ private:
 
 typedef union  ua_ {
         StreamDPOpHwCsFix  * lpHwFix;
+        StreamDPOpGtpHwCsFix *lpGtpHwFix;
         StreamDPOpIpv4Fix   *lpIpv4Fix;
         StreamDPOpIcmpv6Fix   *lpIcmpv6Fix;
         StreamDPOpPktWr8     *lpw8;
@@ -1194,6 +1254,12 @@ inline HOT_FUNC void StreamDPVmInstructionsRunner::run(uint32_t * per_thread_ran
             p+=sizeof(StreamDPOpHwCsFix);
             break;
 
+        case  StreamDPVmInstructions::ditFIX_GTP_HW_CS :
+            ua.lpGtpHwFix =(StreamDPOpGtpHwCsFix *)p;
+            ua.lpGtpHwFix->run(pkt,m_m);
+            p+=sizeof(StreamDPOpGtpHwCsFix);
+            break;
+
         case  StreamDPVmInstructions::itPKT_WR8  :
             ua.lpw8 =(StreamDPOpPktWr8 *)p;
             ua.lpw8->wr(flow_var,pkt);
@@ -1251,7 +1317,8 @@ public:
         itPKT_WR_MASK     = 9,
         itFLOW_RAND_LIMIT = 10, /* random with limit & seed */
         itFIX_HW_CS       = 11,
-        itFIX_ICMPV6_CS   = 12,
+        itFIX_GTP_HW_CS   = 12,
+        itFIX_ICMPV6_CS   = 13,
     };
 
     typedef uint8_t instruction_type_t ;
@@ -1401,6 +1468,58 @@ public:
     uint16_t  m_l2_len;
     uint16_t  m_l3_len;
     uint8_t   m_l4_type; /* should be either TCP or UDP - TBD could be fixed and calculated by a scan function */
+};
+
+/**
+ * fix Ipv6/Ipv6 TCP/UDP inner/outer L4 headers using HW ofload for GTP-U packets
+ * 
+ */
+class StreamVmInstructionFixGtpHwChecksum : public StreamVmInstruction {
+public:
+
+    enum class L4Proto {
+        UDP = 1,
+        TCP = 2,
+        NUM_ITEMS
+    };
+
+    StreamVmInstructionFixGtpHwChecksum(uint16_t outer_l3_offset,
+                                     uint16_t outer_l4_offset,
+                                     uint16_t inner_l3_offset,
+                                     uint16_t inner_l4_offset,
+                                     uint16_t inner_l4_len,
+                                     L4Proto inner_l4_proto) {
+        m_outer_l3_offset = outer_l3_offset;
+        m_outer_l4_offset = outer_l4_offset;
+        m_inner_l3_offset = inner_l3_offset;
+        m_inner_l4_offset = inner_l4_offset;
+        m_inner_l4_len = inner_l4_len;
+        m_inner_l4_proto = inner_l4_proto;
+    }
+
+    virtual instruction_type_t get_instruction_type() const {
+        return ( StreamVmInstruction::itFIX_GTP_HW_CS);
+    }
+
+    virtual void Dump(FILE* fd);
+
+    virtual StreamVmInstruction* clone() {
+        return new StreamVmInstructionFixGtpHwChecksum(
+            m_outer_l3_offset,
+            m_outer_l4_offset,
+            m_inner_l3_offset,
+            m_inner_l4_offset,
+            m_inner_l4_len,
+            m_inner_l4_proto);
+    }
+
+public:
+    uint16_t  m_outer_l3_offset;
+    uint16_t  m_outer_l4_offset;
+    uint16_t  m_inner_l3_offset;
+    uint16_t  m_inner_l4_offset;
+    uint16_t  m_inner_l4_len;
+    L4Proto   m_inner_l4_proto;
 };
 
 

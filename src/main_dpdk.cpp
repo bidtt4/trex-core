@@ -6033,6 +6033,9 @@ COLD_FUNC void CPhyEthIF::_conf_queues(uint16_t tx_qs,
     other driver enable this without asking  */
     if (get_mode()->get_opt_mode() != OP_MODE_STL){
         tx_offloads |= RTE_ETH_TX_OFFLOAD_VLAN_INSERT;
+    } else {
+        // In STL mode we need offloads for GTP-U tunnels
+        tx_offloads |= RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM | RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM;
     }
 
     // disable non-supported best-effort offloads
